@@ -18,7 +18,7 @@ BIN = REPO / "bin" / "teddycloud"
 
 
 class Box:
-    def __init__(self, mac, base_dir, host, https_port, user_agent="TB/sim", profile=None):
+    def __init__(self, mac, base_dir, host, https_port, user_agent="TB/sim", profile=None, headers=None):
         if profile is not None:
             mac, user_agent = profile.mac, profile.user_agent
             if profile.generation == 2:
@@ -29,6 +29,7 @@ class Box:
         self.host = host
         self.port = https_port
         self.user_agent = user_agent
+        self.headers = dict(headers or {})  # sent with every request, e.g. X-CFW-Build of the custom firmware
         self._dir = tempfile.TemporaryDirectory(prefix="tcbox_")
         # the sandbox is a copy of the template, so they share the CA: box certificates
         # (slow RSA keygen) are cached in the template and reused by every test run
@@ -80,7 +81,7 @@ class Box:
         s = self.connect(use_cert, session)
         try:
             head = f"{method} {path} HTTP/1.1\r\nHost: {self.host}\r\nUser-Agent: {self.user_agent}\r\nConnection: close\r\n"
-            head += f"Content-Length: {len(body)}\r\n" + "".join(f"{k}: {v}\r\n" for k, v in (headers or {}).items())
+            head += f"Content-Length: {len(body)}\r\n" + "".join(f"{k}: {v}\r\n" for k, v in {**self.headers, **(headers or {})}.items())
             s.sendall(head.encode() + b"\r\n" + body)
             data = b""
             while chunk := s.recv(65536):

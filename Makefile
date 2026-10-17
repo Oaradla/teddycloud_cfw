@@ -475,6 +475,25 @@ CLEAN_FILES += $(PROTO_C_FILES) $(PROTO_H_FILES)
 OBJECTS = $(foreach C,$(SOURCES),$(addprefix $(OBJ_DIR)/,$(C:.c=$(OBJ_EXT))))
 CLEAN_FILES += $(OBJECTS) $(LINK_LO_FILE)
 
+# The version macros come from git, not from a file, so the sources using them are rebuilt
+# whenever the stamp's text changes (another commit, dirty state, tag; the build time only
+# counts for a dirty tree, where it is shown).
+VERSION_SOURCES := $(shell grep -lE '\b(BUILD|WEB)_[A-Z_]+|web_VERSION' src/*.c 2>/dev/null)
+VERSION_STAMP := $(OBJ_DIR)/version.stamp
+VERSION_STAMP_TEXT := $(build_gitSha) $(build_gitDirty) $(build_gitTag) $(web_gitSha) $(web_gitDirty) $(web_gitTag)
+ifneq ($(build_gitDirty)$(web_gitDirty),00)
+VERSION_STAMP_TEXT += $(build_rawDateTime)
+endif
+ifneq ($(VERSION_STAMP_TEXT),$(file <$(VERSION_STAMP)))
+$(if $(wildcard $(OBJ_DIR)/),,$(shell $(MKDIR) $(OBJ_DIR) $(TO_TRASH)))
+$(file >$(VERSION_STAMP),$(VERSION_STAMP_TEXT))
+endif
+$(foreach C,$(VERSION_SOURCES),$(OBJ_DIR)/$(C:.c=$(OBJ_EXT))): $(VERSION_STAMP)
+# "make clean build" (make zip) deletes the stamp written while the Makefile was read
+$(VERSION_STAMP):
+	$(if $(wildcard $(OBJ_DIR)/),,$(shell $(MKDIR) $(OBJ_DIR) $(TO_TRASH)))$(file >$@,$(VERSION_STAMP_TEXT))
+CLEAN_FILES += $(VERSION_STAMP)
+
 ifeq ($(OS),Windows_NT)
 	CYAN=
 	RED=
@@ -563,8 +582,14 @@ endif
 	$(info [DIR] creating $@)
 	$(shell $(MKDIR) $(subst /,$(SEP),$@) $(TO_TRASH))
 
+# The list of objects for the linker is written again only when it changes; the directory is
+# order-only, as its time changes with every link and would link again on each run. The link
+# writes the list once more, as "make clean build" (make zip) deletes it after it was checked.
+ifneq ($(strip $(OBJECTS) $(OBJ_ONLY_FILES)),$(strip $(file <$(LINK_LO_FILE))))
+$(shell $(RM) $(subst /,$(SEP),$(LINK_LO_FILE)) $(TO_TRASH))
+endif
 .SECONDEXPANSION:
-$(LINK_LO_FILE): $$(dir $$@)
+$(LINK_LO_FILE): | $$(dir $$@)
 	$(file >$@, $(OBJECTS) $(OBJ_ONLY_FILES) )
 
 workdirs: certs/server/ certs/server_tb2/ certs/client/ config/ data/www/ data/content/ data/library/ data/www/web/ data/firmware/ data/cache/
@@ -572,8 +597,9 @@ workdirs: certs/server/ certs/server_tb2/ certs/client/ config/ data/www/ data/c
 	$(QUIET)$(CP_R) $(subst /,$(SEP),$(CONTRIB_DIR)/data/www/*) $(subst /,$(SEP),data/www/)
 
 .SECONDEXPANSION:
-$(EXECUTABLE): $(LINK_LO_FILE) $(OBJECTS) $(HEADERS) $(THIS_MAKEFILE) workdirs | $$(dir $$@)
+$(EXECUTABLE): $(LINK_LO_FILE) $(OBJECTS) $(HEADERS) $(THIS_MAKEFILE) | workdirs $$(dir $$@)
 	$(QUIET)$(ECHO) '[ ${YELLOW}LINK${NC} ] ${CYAN}$@${NC}'
+	$(file >$(LINK_LO_FILE), $(OBJECTS) $(OBJ_ONLY_FILES) )
 	$(QUIET)$(LD) $(LFLAGS) $(LINK_LO_OPT) $(LINK_OUT_OPT)
 
 .SECONDEXPANSION:
@@ -811,7 +837,7 @@ TEST_C_SRC := $(wildcard tests/c/*.c)
 test_c:
 	$(QUIET)$(ECHO) "[ ${CYAN}TEST${NC} ] Build and run C unit tests"
 	$(QUIET)mkdir -p $(BIN_DIR)
-	$(QUIET)$(CC) -I include -I src/cyclone/common -I src/cyclone/cyclone_tcp -I cyclone/common -I cyclone/cyclone_tcp -I cyclone/cyclone_ssl -I cyclone/cyclone_crypto -D GPL_LICENSE_TERMS_ACCEPTED -ffunction-sections -Wl,--gc-sections -o $(BIN_DIR)/test_c $(TEST_C_SRC) $(SRC_DIR)/os_ext.c $(SRC_DIR)/str_ext.c $(SRC_DIR)/fs_ext.c $(SRC_DIR)/esp32_port.c $(SRC_DIR)/platform/platform_linux.c $(SRC_DIR)/cyclone/common/os_port_posix.c $(SRC_DIR)/box_cert.c
+	$(QUIET)$(CC) -I include -I src/cyclone/common -I src/cyclone/cyclone_tcp -I cyclone/common -I cyclone/cyclone_tcp -I cyclone/cyclone_ssl -I cyclone/cyclone_crypto -D GPL_LICENSE_TERMS_ACCEPTED -ffunction-sections -Wl,--gc-sections -o $(BIN_DIR)/test_c $(TEST_C_SRC) $(SRC_DIR)/os_ext.c $(SRC_DIR)/str_ext.c $(SRC_DIR)/fs_ext.c $(SRC_DIR)/esp32_port.c $(SRC_DIR)/platform/platform_linux.c $(SRC_DIR)/cyclone/common/os_port_posix.c $(SRC_DIR)/cfw_format.c $(SRC_DIR)/box_cert.c
 	$(QUIET)$(BIN_DIR)/test_c
 
 .PHONY: test

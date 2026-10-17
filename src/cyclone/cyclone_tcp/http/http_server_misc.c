@@ -495,6 +495,11 @@ void httpParseHeaderField(HttpConnection *connection,
       strSafeCopy(connection->request.userAgent, value,
                   sizeof(connection->request.userAgent));
    }
+   //X-CFW-Build header field (custom firmware)?
+   else if (osStrcasecmp(name, "X-CFW-Build") == 0)
+   {
+      connection->request.cfwBuild = (uint32_t)osStrtoul(value, NULL, 10);
+   }
 }
 
 

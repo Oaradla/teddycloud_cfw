@@ -63,6 +63,9 @@ typedef struct
     const char_t *uri;
     const char_t *queryString;
     char_t *user_agent;
+    uint32_t range_start;   /* content: the box's Range start, 0: whole file */
+    const char_t *if_range; /* content: the box's If-Range, NULL or empty: none */
+    const char_t *trusted_ca; /* web_request over https: PEM list the server certificate must chain to; NULL: not checked */
     cloudapi_t api;
     char_t *buffer;
     size_t bufferPos;

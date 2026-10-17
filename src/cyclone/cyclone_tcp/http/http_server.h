@@ -432,6 +432,14 @@ typedef error_t (*HttpUriNotFoundCallback)(HttpConnection *connection,
 
 
 /**
+ * @brief Idle callback function of a binary connection; TRUE keeps the
+ * connection open while the client sends nothing
+ **/
+
+typedef bool_t (*HttpIdleCallback)(HttpConnection *connection);
+
+
+/**
  * @brief HTTP status code
  **/
 
@@ -502,6 +510,7 @@ typedef struct
    char_t queryString[HTTP_SERVER_QUERY_STRING_MAX_LEN + 1]; ///<Query string
    char_t host[HTTP_SERVER_HOST_MAX_LEN + 1];                ///<Host name
    char_t userAgent[128 + 1];
+   uint32_t cfwBuild;                                        ///< X-CFW-Build: build of the custom firmware, 0: none
    char_t ifRange[HTTP_SERVER_IFRANGE_MAX_LEN + 1];          ///< IfRange tag
    HttpRangeHeader Range;                                    ///< Range field
    bool_t keepAlive;
@@ -587,6 +596,7 @@ typedef struct
    HttpCgiCallback cgiCallback;                                  ///<CGI callback function
    HttpRequestCallback requestCallback;                          ///<HTTP request callback function
    HttpUriNotFoundCallback uriNotFoundCallback;                  ///<URI not found callback function
+   HttpIdleCallback idleCallback;                                ///<Idle callback function of a binary connection
    char_t *allowOrigin;
    bool_t isHttps;
 } HttpServerSettings;

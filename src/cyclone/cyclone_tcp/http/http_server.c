@@ -113,6 +113,8 @@ void httpServerGetDefaultSettings(HttpServerSettings *settings)
    settings->cgiCallback = NULL;
    // HTTP request callback function
    settings->requestCallback = NULL;
+   //Idle callback of a binary connection
+   settings->idleCallback = NULL;
    // URI not found callback function
    settings->uriNotFoundCallback = NULL;
 }
@@ -477,20 +479,49 @@ void httpConnectionTask(void *param)
             {
                error = NO_ERROR;
                connection->response.byteCount = 0;
+               socketSetTimeout(connection->socket, HTTP_SERVER_BINARY_TIMEOUT);
+               systime_t lastData = osGetSystemTime();
+               bool_t newData = TRUE;
                while (error == NO_ERROR)
                {
-                  if (connection->response.contentLength > 0)
+                  // Only new data is worth a call; an idle connection is served by the idle callback
+                  if (newData && connection->response.contentLength > 0)
                      error = connection->settings->requestCallback(connection, "*binary");
                   if (error != NO_ERROR)
                      break;
                   size_t length = 0;
                   size_t pos = connection->response.byteCount;
+                  if (pos >= HTTP_SERVER_BUFFER_SIZE)
+                  {
+                     error = ERROR_BUFFER_OVERFLOW;
+                     break;
+                  }
                   error = httpReceive(connection, &connection->buffer[pos],
                                       HTTP_SERVER_BUFFER_SIZE - pos, &length, SOCKET_FLAG_PEEK); // TODO
+                  bool_t timedOut = (error == ERROR_TIMEOUT);
+                  newData = (length > 0);
+                  if (timedOut)
+                     error = NO_ERROR;
+                  else if (length > 0)
+                     lastData = osGetSystemTime();
                   connection->response.contentLength = length + pos;
-                  if (length == 0)
-                     osDelayTask(100);
+                  if (error == NO_ERROR && length == 0)
+                  {
+                     // A client that only logs events can be silent for long; the idle callback
+                     // keeps its connection open as long as it still has a use for it
+                     bool_t keep = FALSE;
+                     if (connection->settings->idleCallback != NULL)
+                        keep = connection->settings->idleCallback(connection);
+                     if (timedOut && !keep && timeCompare(osGetSystemTime(), lastData + HTTP_SERVER_TIMEOUT) >= 0)
+                     {
+                        error = ERROR_TIMEOUT;
+                        break;
+                     }
+                     if (!timedOut)
+                        osDelayTask(100);
+                  }
                }
+               socketSetTimeout(connection->socket, HTTP_SERVER_TIMEOUT);
                continue;
             }
             // Any error to report?

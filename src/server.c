@@ -18,6 +18,7 @@
 #include "handler_cloud.h"        // for handleCloudClaim, handleCloudConte...
 #include "handler_reverse.h"      // for handleReverse
 #include "handler_rtnl.h"         // for handleRtnl
+#include "cfw.h"                  // for cfw_init, handleApiCfw...
 #include "handler_security_mit.h" // for handleSecMitRobotsTxt, checkSecMit...
 #include "handler_sse.h"          // for handleApiSse, sse_init
 #include "handler_web_auth.h"     // for web_auth_init, web_auth_requires_login
@@ -164,6 +165,21 @@ request_type_t request_paths[] = {
     {REQ_GET, "/api/getTagIndex", SERTY_WEB, &handleApiTagIndex},
     {REQ_GET, "/api/getTagInfo", SERTY_WEB, &handleApiTagInfo},
     {REQ_GET, "/api/getBoxes", SERTY_WEB, &handleApiGetBoxes},
+    /* custom firmware (CC3200 CFW) */
+    {REQ_GET, "/api/cfw/boxes", SERTY_WEB, &handleApiCfwBoxes},
+    {REQ_GET, "/api/cfw/tags", SERTY_WEB, &handleApiCfwTags},
+    {REQ_GET, "/api/cfw/tag", SERTY_WEB, &handleApiCfwTagGet},
+    {REQ_POST, "/api/cfw/tag", SERTY_WEB, &handleApiCfwTagSet},
+    {REQ_POST, "/api/cfw/remote", SERTY_WEB, &handleApiCfwRemote},
+    {REQ_GET, "/api/cfw/status", SERTY_WEB, &handleApiCfwStatus},
+    {REQ_GET, "/api/cfw/battery", SERTY_WEB, &handleApiCfwBattery},
+    {REQ_POST, "/api/cfw/firmware/upload", SERTY_WEB, &handleApiCfwFirmwareUpload},
+    {REQ_POST, "/api/cfw/firmware/edit", SERTY_WEB, &handleApiCfwFirmwareEdit},
+    {REQ_POST, "/api/cfw/firmware/delete", SERTY_WEB, &handleApiCfwFirmwareDelete},
+    {REQ_POST, "/api/cfw/firmware/githubDownload", SERTY_WEB, &handleApiCfwFirmwareGithubDownload},
+    {REQ_POST, "/api/cfw/firmware/github", SERTY_WEB, &handleApiCfwFirmwareGithub},
+    {REQ_GET, "/api/cfw/firmware", SERTY_WEB, &handleApiCfwFirmwareList},
+    {REQ_POST, "/api/cfw/deliver", SERTY_WEB, &handleApiCfwDeliver},
     {REQ_POST, "/api/assignUnknown", SERTY_WEB, &handleApiAssignUnknown},
     {REQ_GET, "/api/settings/getIndex", SERTY_WEB, &handleApiGetIndex},
     {REQ_GET, "/api/settings/get/", SERTY_WEB, &handleApiSettingsGet},
@@ -355,6 +371,10 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
 
     TRACE_DEBUG(" >> client requested '%s' via %s \n", uri, connection->request.method);
 
+    /* the request of a box, for the CFW support once the box is accepted */
+    bool cfwSeen = false;
+    uint32_t cfwSeenBuild = 0;
+
     mutex_lock(MUTEX_CLIENT_CTX);
     client_ctx_t *client_ctx = &connection->private.client_ctx;
     osMemset(client_ctx, 0x00, sizeof(client_ctx_t));
@@ -513,6 +533,8 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
                     TRACE_INFO_RESUME(", ESPFW=%s", fwEsp);
                 }
                 TRACE_INFO_RESUME("\r\n");
+                cfwSeen = true;
+                cfwSeenBuild = (uint32_t)fwVersionTime;
 
                 firmware_info->uaVersionFirmware = fwVersionTime;
                 firmware_info->uaVersionServicePack = spVersionTime;
@@ -551,6 +573,13 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
         {
             error = httpServerUriUnauthorizedCallback(connection, uri);
             break;
+        }
+
+        if (cfwSeen)
+        {
+            cfw_box_seen_request(client_ctx->settings, cfwSeenBuild, connection->request.cfwBuild);
+            cfw_box_seen_platform(client_ctx->settings);
+            cfwSeen = false;
         }
 
         if (!connection->private.api_access_only && !osStrcasecmp(connection->request.method, "OPTIONS"))
@@ -957,6 +986,7 @@ void server_init(bool test)
     https_api_settings.port = settings_get_unsigned("core.server.https_api_port");
     https_api_settings.tlsInitCallback = httpServerBoxTlsInitCallback;
     https_api_settings.requestCallback = httpServerAPIRequestCallback;
+    https_api_settings.idleCallback = cfw_rtnl_idle;
 
     error_t err = httpServerInit(&http_context, &http_settings);
     if (err != NO_ERROR)
@@ -1001,6 +1031,7 @@ void server_init(bool test)
     mqtt_server_init();
 
     tonies_init();
+    cfw_init();
     if (get_settings()->core.tonies_json_auto_update || test)
     {
         tonies_update();
@@ -1022,6 +1053,7 @@ void server_init(bool test)
             sanityChecks();
         }
         mutex_manager_loop();
+        cfw_loop();
 
         size_t openConnections = 0;
         for (size_t i = 0; i < APP_HTTP_MAX_CONNECTIONS; i++)
@@ -1101,6 +1133,7 @@ void server_init(bool test)
         }
     }
     mqtt_server_deinit();
+    cfw_deinit();
     tonies_deinit();
     cache_deinit();
     mutex_manager_deinit();

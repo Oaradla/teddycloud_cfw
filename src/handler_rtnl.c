@@ -17,6 +17,7 @@
 #include "server_helpers.h"
 #include "toniebox_state.h"
 #include "str_ext.h"
+#include "cfw.h"
 
 #include "proto/toniebox.pb.rtnl.pb-c.h"
 
@@ -30,6 +31,7 @@ error_t handleRtnl(HttpConnection *connection, const char_t *uri, const char_t *
     mqtt_sendBoxEvent("LastSeen", current_time, client_ctx);
 
     size_t pos = 0;
+    bool received = false;
     do
     {
         /* check for enough data for the length header */
@@ -72,6 +74,7 @@ error_t handleRtnl(HttpConnection *connection, const char_t *uri, const char_t *
         pos += protoLength;
         if (rpc && (rpc->log2 || rpc->log3))
         {
+            received = true;
             rtnlEvent(connection, rpc, client_ctx);
             rtnlEventLog(connection, rpc);
             rtnlEventDump(connection, rpc, client_ctx->settings);
@@ -82,6 +85,8 @@ error_t handleRtnl(HttpConnection *connection, const char_t *uri, const char_t *
     /* move left-over data to the start of the buffer */
     connection->response.byteCount = size - pos;
     osMemmove(buffer, &buffer[pos], connection->response.byteCount);
+
+    cfw_rtnl_poll(connection, received);
 
     return NO_ERROR;
 }
@@ -103,7 +108,8 @@ int32_t read_big_endian32(const uint8_t *buf)
 
 int64_t read_big_endian64(const uint8_t *buf)
 {
-    return ((int64_t)read_big_endian32(buf)) | (((uint64_t)read_big_endian32(&buf[4])) << 32);
+    /* the low half unsigned: a half from 0x80000000 on must not fill the high half with ones */
+    return (int64_t)((uint64_t)(uint32_t)read_big_endian32(buf) | ((uint64_t)(uint32_t)read_big_endian32(&buf[4]) << 32));
 }
 
 /* field6 is a protobuf bytes field: protobuf-c neither pads it to any size nor
@@ -285,6 +291,8 @@ void rtnlEvent(HttpConnection *connection, TonieRtnlRPC *rpc, client_ctx_t *clie
     if (rpc->log2)
     {
         char str_buf[33];
+
+        cfw_rtnl_record(client_ctx, rpc->log2);
 
         if (rpc->log2->function_group == RTNL2_FUGR_TAG && rpc->log2->field6.len >= 8)
         {

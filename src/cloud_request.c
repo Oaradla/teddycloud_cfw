@@ -78,6 +78,13 @@ error_t httpClientTlsInitCallbackNoCA(HttpClientContext *context,
 {
     return httpClientTlsInitCallbackBase(context, tlsContext, NULL, NULL, NULL);
 }
+/* the server certificate checked against the CA list of the request (cbr_ctx_t.trusted_ca) */
+static error_t httpClientTlsInitCallbackTrustedCa(HttpClientContext *context,
+                                                  TlsContext *tlsContext)
+{
+    req_cbr_t *cbr = context->sourceCtx;
+    return httpClientTlsInitCallbackBase(context, tlsContext, ((cbr_ctx_t *)cbr->ctx)->trusted_ca, NULL, NULL);
+}
 error_t httpClientTlsInitCallbackClientAuthTonies(HttpClientContext *context,
                                                   TlsContext *tlsContext)
 {
@@ -210,6 +217,8 @@ error_t web_request(const char *server, int port, bool https, const char *uri, c
         HttpClientTlsInitCallback callback = httpClientTlsInitCallbackNoCA;
         if (isCloud)
             callback = httpClientTlsInitCallbackClientAuthTonies;
+        else if (cbr_ctx->trusted_ca != NULL)
+            callback = httpClientTlsInitCallbackTrustedCa;
         error = httpClientRegisterTlsInitCallback(&httpClientContext, callback);
         if (error)
         {
@@ -326,6 +335,17 @@ error_t web_request(const char *server, int port, bool https, const char *uri, c
                 httpClientAddHeaderField(&httpClientContext, "User-Agent", cbr_ctx->user_agent);
             }
 
+            if (cbr_ctx->range_start != 0)
+            {
+                char range_line[32];
+                osSnprintf(range_line, sizeof(range_line), "bytes=%" PRIu32 "-", cbr_ctx->range_start);
+                httpClientAddHeaderField(&httpClientContext, "Range", range_line);
+                if (cbr_ctx->if_range != NULL && cbr_ctx->if_range[0] != '\0')
+                {
+                    httpClientAddHeaderField(&httpClientContext, "If-Range", cbr_ctx->if_range);
+                }
+            }
+
             // Send HTTP request header
             error = httpClientWriteHeader(&httpClientContext);
             // Any error to report?
@@ -404,9 +424,11 @@ error_t web_request(const char *server, int port, bool https, const char *uri, c
                     // Disconnect HTTP client
                     httpClientDisconnect(&httpClientContext);
 
-                    char uri_base[256], uri_path[256], query_string[256];
+                    char uri_base[2048], uri_path[2048], query_string[2048];
                     // TODO: handling of relative URLs
-                    if (!split_url(location, uri_base, uri_path, query_string, sizeof(uri_base)))
+                    /* path and query may be long (signed download links, e.g. GitHub release assets);
+                       the host keeps the old limit of 255 characters */
+                    if (!split_url(location, uri_base, uri_path, query_string, sizeof(uri_base)) || osStrlen(uri_base) >= 256)
                     {
                         TRACE_ERROR("Failed to parse redirect Location: %s\r\n", location);
                         error = ERROR_INVALID_RESPONSE;

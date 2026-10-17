@@ -98,6 +98,43 @@ state (tag placed/removed, knock, tilt, playback) is tracked in
 `toniebox_state.c` and feeds both MQTT and SSE. `pcap_dump.c`/`pcaplog.c`
 can record raw box traffic to pcap files for debugging.
 
+## Custom firmware (CFW)
+
+Boxes running the community custom firmware (CC3200, and the ESP32 box)
+speak an extension of the protocol. `cfw.enabled` (default off) switches
+the support on.
+
+- **Detection.** The CFW sends the User-Agent and update-check `cv` of the
+  box's original firmware and its own build in the header `X-CFW-Build`
+  (`connection->request.cfwBuild`). That header is the only rule: with it a
+  request comes from the CFW, without it from the original firmware, which
+  never gets a CFW image. `cfw_box_seen_request` records it per box once
+  the request passed the certificate check.
+- **Protocol** (`cfw.c`, data formats in `cfw_format.c`, C-tested): hello
+  and the settings files due in the freshness-check answer, the CFW log
+  records, commands on the log connection (the HTTP server's binary loop
+  calls `idleCallback` while the box is silent). Tag settings live in
+  `config/cfw/tags/`, box state in `config/cfw/boxes/`, box-wide settings
+  are `cfw.box.*`. Battery reports are logged to
+  `config/cfw/battery/<box>.csv` and shown by `/api/cfw/battery`.
+- **Images** (`cfw_firmware.c`): the library `<firmwaredir>/cfw/`, keyed by
+  platform and build (`<build>.*` CC3200, `esp32-<build>.*` ESP32), filled
+  by upload, by release zips (both images and `setup.htm`) or from GitHub
+  (certificate checked against the system CA bundle, the asset's published
+  SHA-256 compared). Item 3 serves the box's channel or assigned image; an
+  ESP32 box on the original firmware gets its assigned image once, and an
+  original ESP32 image assigned to a CFW box returns it to the original
+  firmware.
+- **Setup page** (item 7, requests with `X-CFW-Build` only): the page of the
+  image the box runs (`<build>.htm`), else the default page
+  `<firmwaredir>/cfw/default.htm`, unless the page needs a newer firmware.
+- **Web API**: `cfw_api.c` under `/api/cfw/`.
+- **`cfw.enabled` off**: `/api/cfw/*` answers 404 and nothing is stored; the
+  freshness answer carries no CFW fields, no box state is written and no
+  image is offered. Only the requests no original box sends (item 7 and the
+  ESP32 CFW's own item 3, both with `X-CFW-Build`) are still answered
+  locally, so the vendor's cloud never sees them.
+
 ## MQTT and Home Assistant
 
 `mqtt.c` is the outbound MQTT client that publishes box/server events

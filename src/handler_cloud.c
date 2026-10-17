@@ -8,6 +8,7 @@
 #include "handler.h"
 #include "handler_api.h"
 #include "handler_cloud.h"
+#include "cfw.h"
 #include "http/http_client.h"
 
 #include "mqtt.h"
@@ -181,6 +182,16 @@ error_t handleCloudOTA(HttpConnection *connection, const char_t *uri, const char
     char current_time[64];
     time_format_current(current_time);
     mqtt_sendBoxEvent("LastCloudOtaTime", current_time, client_ctx);
+
+    /* a box running the custom firmware gets its firmware from the CFW image library */
+    if (cfw_ota_request(connection, uri, client_ctx, fileId, (uint32_t)timestamp, &ret))
+    {
+        osFreeMem(biggest_filename);
+        osFreeMem(local_dir);
+        osFreeMem(query);
+        osFreeMem(localUri);
+        return ret;
+    }
     char *queryStringNew = NULL;
 
     if (client_ctx->settings->cloud.cacheOta) // && timestamp < biggest_timestamp)
@@ -637,6 +648,11 @@ error_t handleCloudContentExt(HttpConnection *connection, const char_t *uri, con
     {
         return error;
     }
+    if (cfw_event_content(connection, uri, client_ctx, ruid, &error))
+    {
+        freeTonieInfo(tonieInfo);
+        return error;
+    }
 
     uint8_t *token = connection->private.authentication_token;
 
@@ -885,6 +901,10 @@ error_t handleCloudContentExt(HttpConnection *connection, const char_t *uri, con
             cbr_ctx_t ctx;
             req_cbr_t cbr = getCloudCbr(connection, uri, queryString, api, &ctx, client_ctx);
             ctx.tonieInfo = tonieInfo;
+            /* A box resuming a download asks for the rest of the file; the cloud has to see that, or it
+             * answers 200 with the whole file and the box starts over */
+            ctx.range_start = connection->request.Range.start;
+            ctx.if_range = connection->request.ifRange;
             cloud_request_get(NULL, 0, uri, queryString, token, &cbr);
             error = NO_ERROR;
         }
@@ -1058,7 +1078,9 @@ void process_freshness_check(client_ctx_t *client_ctx, TonieFreshnessCheckReques
             content_json_update_model(&tonieInfo->json, boxAudioId, NULL);
         }
 
-        if (tonieInfo->json.live || tonieInfo->updated || (tonieInfo->json._source_type == CT_SOURCE_STREAM) || (tonieInfo->json._source_type == CT_SOURCE_TAP_STREAM) || isFlex)
+        /* an event tag: the box asks every time, so a cached content is not played (cfw_event_content) */
+        bool cfwEvent = cfw_tag_is_event(settings, bswap_64(freshReq->tonie_infos[i]->uid));
+        if (tonieInfo->json.live || tonieInfo->updated || (tonieInfo->json._source_type == CT_SOURCE_STREAM) || (tonieInfo->json._source_type == CT_SOURCE_TAP_STREAM) || isFlex || cfwEvent)
         {
             freshResp->tonie_marked[freshResp->n_tonie_marked++] = freshReq->tonie_infos[i]->uid;
         }
@@ -1131,6 +1153,7 @@ error_t handleCloudFreshnessCheck(HttpConnection *connection, const char_t *uri,
 
             size_t dataLen = tonie_freshness_check_response__get_packed_size(&freshResp);
             tonie_freshness_check_response__pack(&freshResp, (uint8_t *)data);
+            dataLen = cfw_freshness_finalize(client_ctx, (uint8_t *)data, dataLen, sizeof(data));
             osFreeMem(freshReqCloud.tonie_infos);
             osFreeMem(freshResp.tonie_marked);
             TRACE_INFO("Freshness check response: size=%" PRIuSIZE ", content=%s\n", dataLen, data);

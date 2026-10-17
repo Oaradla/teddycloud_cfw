@@ -60,6 +60,7 @@ typedef struct
 } settings_parked_t;
 static settings_parked_t *settings_parked = NULL;
 static size_t settings_parked_len = 0;
+static size_t settings_parked_size = 0;
 
 static void settings_free_later(void *ptr)
 {
@@ -68,10 +69,21 @@ static void settings_free_later(void *ptr)
         return;
     }
     mutex_lock(MUTEX_SETTINGS_FREE);
-    settings_parked_t *grown = realloc(settings_parked, sizeof(settings_parked_t) * (settings_parked_len + 1));
+    /* grow by doubling: every reload parks each string of every overlay, one realloc per entry
+       made the reloads quadratic in the number of parked entries */
+    settings_parked_t *grown = settings_parked;
+    if (settings_parked_len == settings_parked_size)
+    {
+        size_t size = settings_parked_size ? settings_parked_size * 2 : 256;
+        grown = realloc(settings_parked, sizeof(settings_parked_t) * size);
+        if (grown != NULL)
+        {
+            settings_parked = grown;
+            settings_parked_size = size;
+        }
+    }
     if (grown != NULL)
     {
-        settings_parked = grown;
         settings_parked[settings_parked_len].ptr = ptr;
         settings_parked[settings_parked_len].when = time(NULL);
         settings_parked_len++;
@@ -105,6 +117,7 @@ static void settings_free_parked(bool all)
     {
         free(settings_parked);
         settings_parked = NULL;
+        settings_parked_size = 0;
     }
     mutex_unlock(MUTEX_SETTINGS_FREE);
 }
@@ -165,7 +178,7 @@ static void option_map_init(uint8_t settingsId)
     OPTION_UNSIGNED("core.server.http_client_timeout", &settings->core.http_client_timeout, 2000, 250, 10000, "Connection timeout", "HTTP client connection timeout (default: 500ms)", LEVEL_DETAIL)
     OPTION_UNSIGNED("core.file_upload_timeout_ms", &settings->core.file_upload_timeout_ms, 120000, 15000, 300000, "File upload timeout", "Client-side timeout for file uploads in ms (15s–5min). Default 120s for large audio files.", LEVEL_DETAIL)
     OPTION_TREE_DESC("core.server_cert", "HTTPS server certificates", LEVEL_EXPERT)
-    OPTION_TREE_DESC("core.client_cert.file", "File certificates", LEVEL_EXPERT)
+    OPTION_TREE_DESC("core.server_cert.file", "File certificates", LEVEL_EXPERT)
     OPTION_STRING("core.server_cert.file.ca", &settings->core.server_cert.file.ca, "certs/server/ca-root.pem", "CA certificate", "CA certificate", LEVEL_EXPERT)
     OPTION_STRING("core.server_cert.file.ca_der", &settings->core.server_cert.file.ca_der, "certs/server/ca.der", "CA certificate as DER", "CA certificate as DER", LEVEL_EXPERT)
     OPTION_STRING("core.server_cert.file.ca_key", &settings->core.server_cert.file.ca_key, "certs/server/ca-key.pem", "CA key", "CA key", LEVEL_EXPERT)
@@ -385,14 +398,44 @@ static void option_map_init(uint8_t settingsId)
     OPTION_BOOL("toniebox.overrideCloud", &settings->toniebox.overrideCloud, TRUE, "Override cloud settings", "Override tonies cloud settings for the toniebox with those set here", LEVEL_BASIC)
     OPTION_UNSIGNED("toniebox.boxGeneration", &settings->toniebox.boxGeneration, GENERATION_UNKNOWN, GENERATION_UNKNOWN, GENERATION_TB2, "Box Generation", "Generation of the box (TB1/TB2)", LEVEL_EXPERT)
     // TB1 specific
-    OPTION_UNSIGNED("toniebox.max_vol_spk", &settings->toniebox.max_vol_spk, 3, 0, 3, "Limit speaker volume", "0=25%, 1=50%, 2=75%, 3=100%", LEVEL_BASIC)
-    OPTION_UNSIGNED("toniebox.max_vol_hdp", &settings->toniebox.max_vol_hdp, 3, 0, 3, "Limit headphone volume", "0=25%, 1=50%, 2=75%, 3=100%", LEVEL_BASIC)
+    OPTION_ENUM("toniebox.max_vol_spk", &settings->toniebox.max_vol_spk, 3, 3, "Limit speaker volume", "0=25%, 1=50%, 2=75%, 3=100%", "0=25%|1=50%|2=75%|3=100%", LEVEL_BASIC)
+    OPTION_ENUM("toniebox.max_vol_hdp", &settings->toniebox.max_vol_hdp, 3, 3, "Limit headphone volume", "0=25%, 1=50%, 2=75%, 3=100%", "0=25%|1=50%|2=75%|3=100%", LEVEL_BASIC)
     OPTION_BOOL("toniebox.slap_enabled", &settings->toniebox.slap_enabled, TRUE, "Slap to skip", "Enable track skip via slapping gesture", LEVEL_BASIC)
     OPTION_BOOL("toniebox.slap_back_left", &settings->toniebox.slap_back_left, FALSE, "Slap direction", "Determine slap direction for skipping track: False for left-backward, True for left-forward", LEVEL_BASIC)
-    OPTION_UNSIGNED("toniebox.led", &settings->toniebox.led, 0, 0, 2, "LED brightness", "0=on, 1=off, 2=dimmed", LEVEL_BASIC)
+    OPTION_ENUM("toniebox.led", &settings->toniebox.led, 0, 2, "LED brightness", "0=on, 1=off, 2=dimmed", "0=On|1=Off|2=Dimmed", LEVEL_BASIC)
     OPTION_BOOL("toniebox.overrideFields", &settings->toniebox.overrideFields, FALSE, "Override unknown fields", "Override unknown fields 2 + 6", LEVEL_EXPERT)
     OPTION_UNSIGNED("toniebox.field2", &settings->toniebox.field2, 7, 0, UINT32_MAX, "Field 2", "Unknown Toniebox setting, default 7", LEVEL_EXPERT)
     OPTION_UNSIGNED("toniebox.field6", &settings->toniebox.field6, 1, 0, UINT32_MAX, "Field 6", "Unknown Toniebox setting, default 1", LEVEL_EXPERT)
+
+    OPTION_TREE_DESC("cfw", "Custom firmware", LEVEL_BASIC)
+    OPTION_BOOL("cfw.enabled", &settings->cfw.enabled, FALSE, "CFW support", "Serve boxes with the custom firmware: hello, settings files, remote control, firmware updates and the CFW web API. Off: teddyCloud behaves as without CFW support, except that the requests only the custom firmware sends (setup page, update check of the ESP32 custom firmware) are still answered here and never passed on to the cloud", LEVEL_DETAIL)
+    OPTION_BOOL("cfw.settings_sync", &settings->cfw.settings_sync, TRUE, "Sync tag and box settings", "Send tonie profiles, event tags and box settings to the box and take over changes made on the box", LEVEL_DETAIL)
+    OPTION_BOOL("cfw.remote_control", &settings->cfw.remote_control, TRUE, "Remote control", "Allow remote commands to the box over its log connection", LEVEL_DETAIL)
+    OPTION_BOOL("cfw.show_tag_settings", &settings->cfw.show_tag_settings, FALSE, "Show CFW tonie settings", "Show the settings of the custom firmware (profile, event tag) when editing a tonie. Switched on once when the first box with the custom firmware connects", LEVEL_BASIC)
+    OPTION_BOOL("cfw.show_box_settings", &settings->cfw.show_box_settings, FALSE, "Show CFW box settings", "Show the box settings of the custom firmware. They replace the volume limits in 25 % steps and 'Slap to skip', which boxes without the custom firmware then get derived from them. Switched on once when the first box with the custom firmware connects", LEVEL_BASIC)
+    OPTION_BOOL("cfw.show_battery", &settings->cfw.show_battery, TRUE, "Show battery", "Show the battery voltage the box reported last and whether it stands on the charging station in the box list (custom firmware with the battery report)", LEVEL_BASIC)
+    OPTION_BOOL("cfw.battery_log", &settings->cfw.battery_log, TRUE, "Battery log", "Append every battery report of the box to cfw/battery/<box>.csv in the config directory, for a later charge display", LEVEL_DETAIL)
+    OPTION_BOOL("cfw.setup_page_update", &settings->cfw.setup_page_update, TRUE, "Update the setup page", "Deliver the setup page of the firmware a box runs, or the default setup page, to boxes with the custom firmware; off: the page on the box's card stays as it is", LEVEL_DETAIL)
+    OPTION_STRING("cfw.event_image", &settings->cfw.event_image, "/img_cfw_event.png", "Event tag picture", "Picture shown for a tonie that is an event tag, instead of the picture of its content", LEVEL_BASIC)
+    OPTION_ENUM("cfw.event_notice_language", &settings->cfw.event_notice_language, 0, 2, "Event tag notice language", "An event tag plays no content. A box without the custom firmware hears a notice in this language instead", "0=German|1=English|2=French", LEVEL_BASIC)
+    OPTION_BOOL("cfw.force_box_settings", &settings->cfw.force_box_settings, FALSE, "Show CFW settings for this box", "Show the box settings of the custom firmware for this box although it has not connected with the custom firmware yet", LEVEL_DETAIL)
+    OPTION_TREE_DESC("cfw.box", "Custom firmware functions", LEVEL_BASIC)
+    OPTION_ENUM("cfw.box.speaker_limit", &settings->cfw.box.speaker_limit, 15, 15, "Limit speaker volume", "Highest speaker volume step. The original firmware knows only the steps 6, 9, 12 and 15 (25/50/75/100 %): boxes without the custom firmware get the nearest of them", "0=Step 0|1=Step 1|2=Step 2|3=Step 3|4=Step 4|5=Step 5|6=Step 6 (= 25 % original firmware)|7=Step 7|8=Step 8|9=Step 9 (= 50 % original firmware)|10=Step 10|11=Step 11|12=Step 12 (= 75 % original firmware)|13=Step 13|14=Step 14|15=Step 15 (= 100 % original firmware)", LEVEL_BASIC)
+    OPTION_ENUM("cfw.box.headphone_limit", &settings->cfw.box.headphone_limit, 15, 15, "Limit headphone volume", "Highest headphone volume step. The original firmware knows only the steps 6, 9, 12 and 15 (25/50/75/100 %): boxes without the custom firmware get the nearest of them", "0=Step 0|1=Step 1|2=Step 2|3=Step 3|4=Step 4|5=Step 5|6=Step 6 (= 25 % original firmware)|7=Step 7|8=Step 8|9=Step 9 (= 50 % original firmware)|10=Step 10|11=Step 11|12=Step 12 (= 75 % original firmware)|13=Step 13|14=Step 14|15=Step 15 (= 100 % original firmware)", LEVEL_BASIC)
+    OPTION_BOOL("cfw.box.both_ears_off", &settings->cfw.box.both_ears_off, TRUE, "Switch off with both ears", "Pressing both ears briefly together switches the box off", LEVEL_BASIC)
+    OPTION_BOOL("cfw.box.slap_lock", &settings->cfw.box.slap_lock, FALSE, "Slap lock", "Slaps do nothing. Boxes without the custom firmware get 'Slap to skip' off", LEVEL_BASIC)
+    OPTION_BOOL("cfw.box.tilt_lock", &settings->cfw.box.tilt_lock, FALSE, "Tilt lock", "Tilting does not wind", LEVEL_BASIC)
+    OPTION_BOOL("cfw.box.volume_lock", &settings->cfw.box.volume_lock, FALSE, "Volume lock", "A short ear press does not change the volume", LEVEL_BASIC)
+    OPTION_TREE_DESC("cfw.update", "Firmware update", LEVEL_BASIC)
+    OPTION_BOOL("cfw.update.enabled", &settings->cfw.update.enabled, TRUE, "Firmware update", "Offer custom firmware images to the box", LEVEL_BASIC)
+    OPTION_ENUM("cfw.update.channel", &settings->cfw.update.channel, 1, 3, "Update channel", "Which firmware images the box takes: release only, or beta / alpha as well", "0=None|1=Release|2=Beta|3=Alpha", LEVEL_BASIC)
+    OPTION_ENUM("cfw.update.mode", &settings->cfw.update.mode, 0, 1, "Update delivery", "Manual: an image is delivered only when it is assigned to the box. Automatic: the newest image of the channel is delivered", "0=Manual|1=Automatic", LEVEL_BASIC)
+    OPTION_STRING("cfw.update.target", &settings->cfw.update.target, "", "Assigned image", "Build number of the image assigned to this box (manual delivery); empty: none", LEVEL_EXPERT)
+    OPTION_BOOL("cfw.update.allow_rolled_back", &settings->cfw.update.allow_rolled_back, FALSE, "Offer rolled-back image again", "Offer an image again that the box has rolled back", LEVEL_EXPERT)
+    OPTION_TREE_DESC("cfw.firmware", "Firmware download", LEVEL_DETAIL)
+    OPTION_STRING("cfw.firmware.github_repo", &settings->cfw.firmware.github_repo, "", "GitHub repository", "owner/name of the GitHub repository whose releases hold the box firmware; empty: no download", LEVEL_DETAIL)
+    OPTION_ENUM("cfw.firmware.github_download", &settings->cfw.firmware.github_download, 0, 3, "Automatic download", "Which images are downloaded from GitHub automatically", "0=Off|1=Release|2=Release and beta|3=Release, beta and alpha", LEVEL_DETAIL)
+    OPTION_UNSIGNED("cfw.firmware.github_interval", &settings->cfw.firmware.github_interval, 24, 1, 720, "Check interval (h)", "Hours between two checks for new images on GitHub", LEVEL_DETAIL)
 
     OPTION_TREE_DESC("toniebox2", "Toniebox 2", LEVEL_BASIC)
     OPTION_BOOL("toniebox2.baby_mode", &settings->toniebox2.baby_mode, FALSE, "Baby mode", "Enable baby mode (1 year).", LEVEL_BASIC)

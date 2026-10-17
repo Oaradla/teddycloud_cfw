@@ -13,6 +13,7 @@
 #include "fs_port.h"
 #include "handler.h"
 #include "handler_api.h"
+#include "cfw.h"
 #include "handler_cloud.h"
 #include "settings.h"
 #include "stats.h"
@@ -286,6 +287,39 @@ error_t handleApiAssignUnknown(HttpConnection *connection, const char_t *uri, co
     return httpOkResponse(connection);
 }
 
+/* "0=On|1=Off" -> "values": [{"value": 0, "label": "On"}, ...] */
+static void settings_add_values_json(cJSON *jsonEntry, const char *values)
+{
+    cJSON *jsonValues = cJSON_AddArrayToObject(jsonEntry, "values");
+    char *list = osAllocMem(osStrlen(values) + 1);
+    if (jsonValues == NULL || list == NULL)
+    {
+        osFreeMem(list);
+        return;
+    }
+    osStrcpy(list, values);
+
+    for (char *item = list; item != NULL;)
+    {
+        char *next = osStrchr(item, '|');
+        if (next != NULL)
+        {
+            *next++ = '\0';
+        }
+        char *sep = osStrchr(item, '=');
+        if (sep != NULL)
+        {
+            *sep = '\0';
+            cJSON *jsonValue = cJSON_CreateObject();
+            cJSON_AddNumberToObject(jsonValue, "value", strtol(item, NULL, 10));
+            cJSON_AddStringToObject(jsonValue, "label", sep + 1);
+            cJSON_AddItemToArray(jsonValues, jsonValue);
+        }
+        item = next;
+    }
+    osFreeMem(list);
+}
+
 error_t handleApiGetIndex(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
     cJSON *json = cJSON_CreateObject();
@@ -297,6 +331,8 @@ error_t handleApiGetIndex(HttpConnection *connection, const char_t *uri, const c
     osStrcpy(internal, "");
     char noLevel[6];
     osStrcpy(noLevel, "");
+    char groups[6];
+    osStrcpy(groups, "");
 
     bool showInternal = false;
     bool isNoLevel = false;
@@ -319,14 +355,11 @@ error_t handleApiGetIndex(HttpConnection *connection, const char_t *uri, const c
             isNoLevel = true;
         }
     }
+    /* group titles as entries of type "desc" only on request: older web UIs do not know them */
+    bool withGroups = queryGet(queryString, "groups", groups, sizeof(groups)) && groups[0] == 't';
     for (size_t pos = 0; pos < settings_get_size(); pos++)
     {
         setting_item_t *opt = settings_get_ovl(pos, overlay);
-
-        if (opt->type == TYPE_TREE_DESC)
-        {
-            continue;
-        }
 
         if (opt->internal && !showInternal)
         {
@@ -343,6 +376,25 @@ error_t handleApiGetIndex(HttpConnection *connection, const char_t *uri, const c
         settings_level user_level = get_settings_ovl(overlay)->core.settings_level;
         if (!isNoLevel && opt->level > user_level)
         {
+            continue;
+        }
+
+        if (opt->type == TYPE_TREE_DESC)
+        {
+            if (!withGroups)
+            {
+                continue;
+            }
+            cJSON *jsonEntry = cJSON_CreateObject();
+            cJSON_AddStringToObject(jsonEntry, "ID", opt->option_name);
+            cJSON_AddStringToObject(jsonEntry, "shortname", opt->option_name);
+            cJSON_AddStringToObject(jsonEntry, "description", opt->description ? opt->description : "");
+            cJSON_AddStringToObject(jsonEntry, "label", opt->description ? opt->description : "");
+            cJSON_AddStringToObject(jsonEntry, "type", "desc");
+            cJSON_AddBoolToObject(jsonEntry, "overlayed", false);
+            cJSON_AddBoolToObject(jsonEntry, "internal", opt->internal);
+            cJSON_AddNumberToObject(jsonEntry, "level", opt->level);
+            cJSON_AddItemToArray(jsonArray, jsonEntry);
             continue;
         }
 
@@ -368,6 +420,10 @@ error_t handleApiGetIndex(HttpConnection *connection, const char_t *uri, const c
             cJSON_AddNumberToObject(jsonEntry, "valueInit", opt->init.unsigned_value);
             cJSON_AddNumberToObject(jsonEntry, "min", opt->min.unsigned_value);
             cJSON_AddNumberToObject(jsonEntry, "max", opt->max.unsigned_value);
+            if (opt->values != NULL)
+            {
+                settings_add_values_json(jsonEntry, opt->values);
+            }
             break;
         case TYPE_SIGNED:
             cJSON_AddStringToObject(jsonEntry, "type", "int");
@@ -400,6 +456,23 @@ error_t handleApiGetIndex(HttpConnection *connection, const char_t *uri, const c
             break;
         default:
             break;
+        }
+
+        /* a box without the custom firmware: the value it gets, derived from the CFW box settings */
+        settings_t *box = get_settings_ovl(overlay);
+        if (overlay[0] != '\0' && cfw_is_derived_setting(box, opt->option_name))
+        {
+            uint32_t value = cfw_derived_setting(box, opt->option_name, 0);
+            cJSON_DeleteItemFromObject(jsonEntry, "value");
+            if (opt->type == TYPE_BOOL)
+            {
+                cJSON_AddBoolToObject(jsonEntry, "value", value != 0);
+            }
+            else
+            {
+                cJSON_AddNumberToObject(jsonEntry, "value", value);
+            }
+            cJSON_AddBoolToObject(jsonEntry, "derived", true);
         }
 
         cJSON_AddItemToArray(jsonArray, jsonEntry);
@@ -5000,6 +5073,19 @@ error_t getTagInfoJson(char ruid[17], cJSON *jsonTarget, client_ctx_t *client_ct
                 addToniesJsonInfoJson(item2, contentJson._source_model, jsonSourceInfo);
                 cJSON *tonieInfoCopy = cJSON_DetachItemFromObject(jsonSourceInfo, "tonieInfo");
                 cJSON_AddItemToObject(jsonEntry, "sourceInfo", tonieInfoCopy);
+            }
+            if (cfw_tag_is_event_ruid(client_ctx->settings, ruid))
+            {
+                /* an event tag plays no content: the event tag picture instead of that of the content */
+                cJSON_DeleteItemFromObject(jsonEntry, "sourceInfo");
+                cJSON *jsonSourceInfo = cJSON_CreateObject();
+                addToniesJsonInfoJson(NULL, "", jsonSourceInfo);
+                cJSON *eventInfo = cJSON_DetachItemFromObject(jsonSourceInfo, "tonieInfo");
+                cJSON_Delete(jsonSourceInfo);
+                cJSON_ReplaceItemInObject(eventInfo, "series", cJSON_CreateString("Event-Tag"));
+                cJSON_ReplaceItemInObject(eventInfo, "picture", cJSON_CreateString(client_ctx->settings->cfw.event_image));
+                cJSON_AddItemToObject(jsonEntry, "sourceInfo", eventInfo);
+                cJSON_AddBoolToObject(jsonEntry, "cfwEvent", true);
             }
 
             if (cJSON_IsArray(jsonTarget))

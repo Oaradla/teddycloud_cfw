@@ -1,4 +1,5 @@
 #include "handler.h"
+#include "cfw.h"
 #include "toniesJson.h"
 #include "server_helpers.h"
 #include "fs_ext.h"
@@ -581,6 +582,13 @@ void cbrCloudBodyPassthrough(void *src_ctx, HttpClientContext *cloud_ctx, const 
         {
             TonieFreshnessCheckResponse *freshResp = (TonieFreshnessCheckResponse *)ctx->customData;
             TonieFreshnessCheckResponse *freshRespCloud = tonie_freshness_check_response__unpack(NULL, ctx->bufferLen, (const uint8_t *)ctx->buffer);
+            TonieFreshnessCheckResponse emptyCloud = TONIE_FRESHNESS_CHECK_RESPONSE__INIT;
+            bool cloudValid = freshRespCloud != NULL;
+            if (!cloudValid)
+            {
+                TRACE_WARNING("FreshnessCheck answer of the cloud is not valid, ignored\r\n");
+                freshRespCloud = &emptyCloud;
+            }
 
             if (ctx->client_ctx->settings->toniebox.overrideCloud)
             {
@@ -639,16 +647,21 @@ void cbrCloudBodyPassthrough(void *src_ctx, HttpClientContext *cloud_ctx, const 
                     }
                 }
             }
-            tonie_freshness_check_response__free_unpacked(freshRespCloud, NULL);
+            if (cloudValid)
+            {
+                tonie_freshness_check_response__free_unpacked(freshRespCloud, NULL);
+            }
 
             size_t packSize = tonie_freshness_check_response__get_packed_size(freshResp);
-            if (ctx->bufferLen < packSize)
+            /* room for the CFW hello and settings files (at most 1024 bytes in all) */
+            size_t bufferSize = packSize < 1024 ? 1024 : packSize;
+            if (ctx->bufferLen < bufferSize)
             {
                 osFreeMem(ctx->buffer);
-                ctx->bufferLen = packSize;
-                ctx->buffer = osAllocMem(ctx->bufferLen);
+                ctx->buffer = osAllocMem(bufferSize);
             }
             tonie_freshness_check_response__pack(freshResp, (uint8_t *)ctx->buffer);
+            ctx->bufferLen = cfw_freshness_finalize(ctx->client_ctx, (uint8_t *)ctx->buffer, packSize, bufferSize);
 
             TRACE_INFO("Setting freshnessCache with %" PRIuSIZE " entries\r\n", freshResp->n_tonie_marked);
             settings_set_u64_array_id("internal.freshnessCache", freshResp->tonie_marked, freshResp->n_tonie_marked, ctx->client_ctx->settings->internal.overlayNumber);
@@ -717,9 +730,10 @@ void getContentPathFromUID(uint64_t uid, char **pcontentPath, settings_t *settin
 
 void setTonieboxSettings(TonieFreshnessCheckResponse *freshResp, settings_t *settings)
 {
-    freshResp->max_vol_spk = settings->toniebox.max_vol_spk;
-    freshResp->max_vol_hdp = settings->toniebox.max_vol_hdp;
-    freshResp->slap_en = settings->toniebox.slap_enabled;
+    /* with the CFW box settings shown, these come from them (cfw_derived_setting) */
+    freshResp->max_vol_spk = cfw_derived_setting(settings, "toniebox.max_vol_spk", settings->toniebox.max_vol_spk);
+    freshResp->max_vol_hdp = cfw_derived_setting(settings, "toniebox.max_vol_hdp", settings->toniebox.max_vol_hdp);
+    freshResp->slap_en = cfw_derived_setting(settings, "toniebox.slap_enabled", settings->toniebox.slap_enabled);
     freshResp->slap_dir = settings->toniebox.slap_back_left;
     freshResp->led = settings->toniebox.led;
     if (settings->toniebox.overrideFields)

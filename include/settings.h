@@ -406,6 +406,50 @@ typedef struct
 
 typedef struct
 {
+    bool enabled;
+    uint32_t channel;
+    uint32_t mode;
+    char *target;
+    bool allow_rolled_back;
+} settings_cfw_update_t;
+
+typedef struct
+{
+    char *github_repo;
+    uint32_t github_download;
+    uint32_t github_interval;
+} settings_cfw_firmware_t;
+
+typedef struct
+{
+    uint32_t speaker_limit;
+    uint32_t headphone_limit;
+    bool both_ears_off;
+    bool slap_lock;
+    bool tilt_lock;
+    bool volume_lock;
+} settings_cfw_box_t;
+
+typedef struct
+{
+    bool enabled;
+    bool settings_sync;
+    bool remote_control;
+    bool show_tag_settings;
+    bool show_box_settings;
+    bool show_battery;
+    bool battery_log;
+    bool force_box_settings;
+    bool setup_page_update;
+    char *event_image;
+    uint32_t event_notice_language;
+    settings_cfw_box_t box;
+    settings_cfw_update_t update;
+    settings_cfw_firmware_t firmware;
+} settings_cfw_t;
+
+typedef struct
+{
     uint32_t configVersion;
     char *commonName;
     char *boxName;
@@ -421,6 +465,7 @@ typedef struct
     settings_security_mit_t security_mit;
     settings_toniebox_t toniebox;
     settings_toniebox2_t toniebox2;
+    settings_cfw_t cfw;
     settings_internal_t internal;
     settings_log_t log;
     settings_rtnl_t rtnl;
@@ -501,12 +546,15 @@ typedef struct
     bool internal;
     bool overlayed;
     settings_level level;
+    /* for unsigned options with a fixed set of values: "0=Label|1=Label|..." (shown as a dropdown) */
+    const char *values;
 } setting_item_t;
 
 #define OPTION_START() setting_item_t option_map_array[] = {
 #define OPTION_ADV_BOOL(o, p, d, short, desc, i, ov, lvl) {.option_name = o, .ptr = p, .init = {.bool_value = d}, .type = TYPE_BOOL, .description = desc, .label = short, .internal = i, .overlayed = ov, .level = lvl},
 #define OPTION_ADV_SIGNED(o, p, d, minVal, maxVal, short, desc, i, ov, lvl) {.option_name = o, .ptr = p, .init = {.signed_value = d}, .min = {.signed_value = minVal}, .max = {.signed_value = maxVal}, .type = TYPE_SIGNED, .description = desc, .label = short, .internal = i, .overlayed = ov, .level = lvl},
 #define OPTION_ADV_UNSIGNED(o, p, d, minVal, maxVal, short, desc, i, ov, lvl) {.option_name = o, .ptr = p, .init = {.unsigned_value = d}, .min = {.unsigned_value = minVal}, .max = {.unsigned_value = maxVal}, .type = TYPE_UNSIGNED, .description = desc, .label = short, .internal = i, .overlayed = ov, .level = lvl},
+#define OPTION_ADV_ENUM(o, p, d, maxVal, short, desc, vals, i, ov, lvl) {.option_name = o, .ptr = p, .init = {.unsigned_value = d}, .min = {.unsigned_value = 0}, .max = {.unsigned_value = maxVal}, .type = TYPE_UNSIGNED, .description = desc, .label = short, .internal = i, .overlayed = ov, .level = lvl, .values = vals},
 #define OPTION_ADV_FLOAT(o, p, d, minVal, maxVal, short, desc, i, ov, lvl) {.option_name = o, .ptr = p, .init = {.float_value = d}, .min = {.float_value = minVal}, .max = {.float_value = maxVal}, .type = TYPE_FLOAT, .description = desc, .label = short, .internal = i, .overlayed = ov, .level = lvl},
 #define OPTION_ADV_STRING(o, p, d, short, desc, i, ov, lvl) {.option_name = o, .ptr = p, .init = {.string_value = d}, .type = TYPE_STRING, .description = desc, .label = short, .internal = i, .overlayed = ov, .level = lvl},
 #define OPTION_ADV_U64_ARRAY(o, p, s, short, desc, i, ov, lvl) {.option_name = o, .ptr = p, .size = s, .type = TYPE_U64_ARRAY, .description = desc, .label = short, .internal = i, .overlayed = ov, .level = lvl},
@@ -515,6 +563,7 @@ typedef struct
 #define OPTION_BOOL(o, p, d, short, desc, lvl) OPTION_ADV_BOOL(o, p, d, short, desc, false, false, lvl)
 #define OPTION_SIGNED(o, p, d, min, max, short, desc, lvl) OPTION_ADV_SIGNED(o, p, d, min, max, short, desc, false, false, lvl)
 #define OPTION_UNSIGNED(o, p, d, min, max, short, desc, lvl) OPTION_ADV_UNSIGNED(o, p, d, min, max, short, desc, false, false, lvl)
+#define OPTION_ENUM(o, p, d, max, short, desc, vals, lvl) OPTION_ADV_ENUM(o, p, d, max, short, desc, vals, false, false, lvl)
 #define OPTION_FLOAT(o, p, d, min, max, short, desc, lvl) OPTION_ADV_FLOAT(o, p, d, min, max, short, desc, false, false, lvl)
 #define OPTION_STRING(o, p, d, short, desc, lvl) OPTION_ADV_STRING(o, p, d, short, desc, false, false, lvl)
 #define OPTION_U64_ARRAY(o, p, s, short, desc, lvl) OPTION_ADV_U64_ARRAY(o, p, s, short, desc, false, false, lvl)

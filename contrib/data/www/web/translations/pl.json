@@ -27,6 +27,293 @@
         "statusLoadFailedDetails": "Nie udało się wczytać stanu uwierzytelniania. Sprawdź połączenie z TeddyCloud i spróbuj ponownie.",
         "retry": "Spróbuj ponownie"
     },
+    "cfw": {
+        "saveError": "Zapisywanie nie powiodło się",
+        "saved": "Ustawienia CFW zapisane",
+        "savedDetails": "Boxy z Custom Firmware przejmą je od razu (zdalne sterowanie) lub przy następnym sprawdzeniu.",
+        "notSet": "Nie ustawiono",
+        "on": "Wł.",
+        "off": "Wył.",
+        "locked": "Zablokowane",
+        "unlocked": "Odblokowane",
+        "minutes": "min",
+        "speakerLimit": "Limit głośności głośnika",
+        "headphoneLimit": "Limit głośności słuchawek",
+        "ledLevelLabel": "Jasność LED",
+        "ledLevel": {
+            "0": "Włączona",
+            "1": "Wyłączona (po fazie jasnej)",
+            "2": "Przyciemniona"
+        },
+        "slapLock": "Blokada uderzeń",
+        "tiltLock": "Blokada przechylania",
+        "volumeLock": "Blokada głośności",
+        "volumeStep": "Poziom {{step}}",
+        "kind": "Zastosowanie",
+        "kindNone": "Brak ustawień",
+        "kindProfile": "Figurka z profilem",
+        "kindEvent": "Tag zdarzenia",
+        "tagIntro": "Te ustawienia obowiązują dla tego tagu na każdym boxie z Custom Firmware. Boxy z oryginalnym firmware je ignorują.",
+        "lastChange": "Ostatnia zmiana: {{time}} ({{origin}})",
+        "origin": {
+            "box": "na boxie",
+            "server": "w teddyCloud",
+            "tool": "przez narzędzie",
+            "unknown": "nieznane"
+        },
+        "profile": {
+            "resume": "Wznawianie",
+            "resumeHint": "Figurka kontynuuje od miejsca, w którym ostatnio przerwała, nawet jeśli w międzyczasie grały inne figurki.",
+            "shuffle": "Losowa kolejność",
+            "shuffleHint": "Rozdziały są odtwarzane w losowej kolejności, każdy dokładnie raz.",
+            "sleepTimer": "Wyłącznik czasowy",
+            "sleepTimerHint": "Po jednej trzeciej czasu głośność powoli maleje; na końcu box się wyłącza.",
+            "sleepAfter": "Wyłącz po",
+            "ledLevelHint": "Obowiązuje, gdy figurka stoi na boxie.",
+            "limitHint": "Najwyższa głośność, gdy figurka stoi na boxie; może przekraczać limit boxa.",
+            "lockHint": "\"Nie ustawiono\": obowiązuje ustawienie boxa. Figurka ma pierwszeństwo w obu kierunkach."
+        },
+        "event": {
+            "intro": "Tag zdarzenia niczego nie odtwarza. Po jego położeniu box wykonuje jego akcje: dla następnej figurki położonej w ciągu 60 s lub dla całego boxa.",
+            "scope": "Dotyczy",
+            "scopeHint": "Tag zdarzenia zmienia albo następną figurkę, albo ustawienia boxa.",
+            "scopeFigure": "Następna figurka",
+            "scopeGlobal": "Cały box",
+            "actions": "Akcje",
+            "tones": "Dźwięki potwierdzenia",
+            "tonesHint": "Rosnące dźwięki dla \"włączono\", opadające dla \"wyłączono\". Potwierdzenie diodą LED pozostaje zawsze.",
+            "noSource": "Tag zdarzenia nie odtwarza zawartości, dlatego źródło jest ukryte. Przypisane źródło pozostaje zapisane, aby można było szybko wrócić, ale nie jest dostarczane do żadnego boxa. Boxy bez niestandardowego firmware słyszą zamiast tego komunikat."
+        },
+        "action": {
+            "resume": "Wznawianie (zapamiętaj pozycję)",
+            "shuffle": "Losowa kolejność",
+            "sleepTimer": "Wyłącznik czasowy (na stałe)",
+            "sleepTimerOnce": "Wyłącznik czasowy (jednorazowo)",
+            "volumeLimitFigure": "Limit głośności figurki (ustawiany uszami)",
+            "ledLevelFigure": "Jasność LED figurki (ustawiana uszami)",
+            "resetProfile": "Zresetuj profil figurki",
+            "slapLockFigure": "Blokada uderzeń figurki",
+            "tiltLockFigure": "Blokada przechylania figurki",
+            "volumeLockFigure": "Blokada głośności figurki",
+            "ledLevelGlobal": "Jasność LED boxa (ustawiana uszami)",
+            "volumeLimitGlobal": "Limit głośności boxa (ustawiany uszami)",
+            "slapLockGlobal": "Blokada uderzeń boxa",
+            "tiltLockGlobal": "Blokada przechylania boxa",
+            "volumeLockGlobal": "Blokada głośności boxa",
+            "bothEarsOff": "Wyłączanie obydwoma uszami"
+        },
+        "mode": {
+            "0": "Przełącz",
+            "1": "Włącz",
+            "2": "Wyłącz",
+            "3": "Usuń",
+            "earsSet": "Ustaw uszami",
+            "remove": "Usuń"
+        },
+        "addAction": "Dodaj akcję",
+        "removeAction": "Usuń akcję",
+        "secondEarsActionIgnored": "Tylko pierwsza akcja tego rodzaju jest ustawiana uszami.",
+        "startCurrentVolume": "Start: bieżąca głośność",
+        "startVolume": "Start: poziom {{step}}",
+        "startCurrentLed": "Start: bieżąca jasność",
+        "startLed": "Początek: {{level}}",
+        "box": {
+            "badgeTooltip": "Custom Firmware, build {{build}}",
+            "batteryTooltip": "Bateria ostatnio zgłoszona: {{time}}",
+            "batteryTooltipStation": "Bateria ostatnio zgłoszona: {{time}} · na stacji ładującej",
+            "connected": "połączony",
+            "notConnected": "niepołączony"
+        },
+        "remote": {
+            "open": "Zdalne sterowanie",
+            "title": "Zdalne sterowanie: {{name}}",
+            "notAvailable": "Tym boxem nie można teraz sterować",
+            "notAvailableHint": "Box musi być włączony i połączony z Custom Firmware, a zdalne sterowanie musi być dozwolone w ustawieniach.",
+            "state": "Stan",
+            "states": {
+                "idle": "Gotowy",
+                "idleWithFigure": "Gotowy (figurka na boxie)",
+                "playing": "Odtwarzanie",
+                "paused": "Wstrzymany",
+                "preparing": "Ładowanie",
+                "unknown": "Nieznany"
+            },
+            "queued": "Oczekujące polecenia: {{count}}",
+            "tonie": "Tonie",
+            "chapter": "Rozdział",
+            "volume": "Głośność",
+            "volumeValue": "Poziom {{step}} z {{limit}} ({{output}})",
+            "speaker": "głośnik",
+            "headphones": "słuchawki",
+            "battery": "Bateria",
+            "charging": "ładowanie",
+            "locks": "Blokady",
+            "updated": "Stan na",
+            "prev": "Poprzedni rozdział",
+            "pause": "Pauza",
+            "continue": "Kontynuuj",
+            "stop": "Zatrzymaj",
+            "next": "Następny rozdział",
+            "refresh": "Pobierz status",
+            "playContent": "Odtwórz zawartość",
+            "selectTonie": "Wybierz Tonie",
+            "play": "Odtwórz",
+            "playHint": "Tylko gdy na boxie nie ma figurki, a box jest gotowy.",
+            "updateCheck": "Sprawdź teraz aktualizację firmware",
+            "commandFailed": "Polecenie nie zostało wysłane",
+            "lastResult": "Ostatnie polecenie: {{command}} – {{result}} ({{time}})",
+            "results": {
+                "0": "wykonano",
+                "1": "teraz niemożliwe",
+                "2": "nieprawidłowe wartości"
+            },
+            "commands": {
+                "64": "Zastosuj ustawienia",
+                "65": "Pauza",
+                "66": "Kontynuuj",
+                "67": "Zatrzymaj",
+                "68": "Następny rozdział",
+                "69": "Poprzedni rozdział",
+                "70": "Głośność",
+                "71": "Odtwórz zawartość",
+                "72": "Status",
+                "73": "Sprawdzenie aktualizacji"
+            }
+        },
+        "channel": {
+            "none": "Brak",
+            "release": "Release",
+            "beta": "Beta",
+            "alpha": "Alpha"
+        },
+        "update": {
+            "navigationTitle": "Aktualizacja boxa",
+            "title": "Aktualizacja boxa (Custom Firmware)",
+            "intro": "Zarządzaj obrazami Custom Firmware i wybierz, który box otrzyma który obraz. Box pobiera aktualizację przy starcie lub na żądanie. W trybie \"Ręcznie\" otrzymuje tylko przypisany mu obraz, w trybie \"Automatycznie\" najnowszy obraz swojego kanału.",
+            "boxes": "Boxy",
+            "box": "Box",
+            "running": "Uruchomiony",
+            "channelLabel": "Kanał",
+            "mode": "Dostarczanie",
+            "manual": "Ręcznie",
+            "automatic": "Automatycznie",
+            "assignedImage": "Przypisany obraz",
+            "noAssignment": "Brak",
+            "deliverNow": "Teraz",
+            "deliverNowHint": "Box sprawdzi aktualizację od razu (wymaga zdalnego sterowania), w przeciwnym razie przy następnym starcie.",
+            "checking": "Box sprawdza teraz aktualizację.",
+            "checkFailed": "Box jest teraz nieosiągalny (wymaga zdalnego sterowania); sprawdzi przy następnym starcie.",
+            "assigned": "Przypisanie zapisane",
+            "next": "Oferowany",
+            "nextHint": "Box otrzyma ten obraz przy następnym sprawdzeniu aktualizacji.",
+            "nothing": "nic",
+            "disabled": "aktualizacja wył.",
+            "notCfw": "Oryginalny firmware / nieznany",
+            "rolledBack": "Build {{build}} został wycofany",
+            "confirmed": "Ostatnia aktualizacja potwierdzona",
+            "pageNew": "Nowa strona konfiguracji {{version}}",
+            "pageNewHint": "Pakiet zawiera stronę konfiguracji inną niż poprzednia wersja dla tej platformy. Pudełka z tym firmware otrzymają ją przy następnym uruchomieniu.",
+            "pageSame": "Strona konfiguracji {{version}} bez zmian",
+            "pageRequires": "wymaga {{version}}",
+            "pageRequiresHint": "Strona konfiguracji ma własną wersję i wymaga co najmniej tego firmware; pudełko ze starszym firmware jej nie otrzymuje.",
+            "pageOffered": "strona konfiguracji {{version}} w drodze",
+            "pageOfferedHint": "Pudełko ma inną stronę konfiguracji niż ta jego firmware; teddyCloud dostarczy ją przy następnym uruchomieniu po sprawdzeniu.",
+            "pageWithNext": "ze stroną konfiguracji {{version}}",
+            "pageWithNextHint": "Z tym obrazem na kartę pudełka trafi też nowa strona konfiguracji.",
+            "noDefaultPage": "Brak domyślnej strony konfiguracji. Przesłanie pliku .htm powyżej ustawia ją dla obrazów bez własnej.",
+            "defaultPage": "Domyślna strona konfiguracji dla obrazów bez własnej: {{version}}. Przesłanie pliku .htm powyżej ją zastępuje.",
+            "pageUploadHint": "Prześlij stronę konfiguracji (.htm) tylko dla tego obrazu",
+            "pageUploaded": "Strona konfiguracji zapisana",
+            "noBoxes": "Brak boxów",
+            "boxesHint": "Kanał alpha otrzymuje też obrazy beta i release, kanał beta także obrazy release. Automatyczna dostawa aktualizuje tylko do nowszych kompilacji; starszy obraz można przypisać ręcznie. Pudełko otrzymuje tylko obrazy swojej platformy. Pudełko ESP32 z oryginalnym oprogramowaniem otrzymuje własne oprogramowanie raz, gdy zostanie mu przypisany obraz.",
+            "library": "Obrazy firmware",
+            "uploadChannel": "Kanał dla przesyłanego pliku",
+            "uploadText": "Upuść tutaj pakiet wydania (toniebox-cfw-*.zip), obraz (ng-cfw*.bin / cfw-slot.bin, .bin ESP32) lub stronę konfiguracji (.htm) albo kliknij",
+            "uploadHint": "Sprawdzane są skrót, blok kompilacji i znacznik CFW1, w obrazie ESP32 także format, suma kontrolna i blok serwera. Oryginalne oprogramowanie pudełka ESP32 (obraz aplikacji lub zrzut pamięci flash) służy do powrotu i jest dostarczane tylko przez przypisanie.",
+            "uploaded": "Obraz przesłany",
+            "uploadFailed": "Przesyłanie nie powiodło się",
+            "build": "Build",
+            "version": "Wersja",
+            "source": "Źródło",
+            "sourceUpload": "Przesłany",
+            "notes": "Uwagi",
+            "added": "Dodano",
+            "deleteConfirm": "Usunąć obraz {{build}}?",
+            "deleted": "Obraz usunięty",
+            "noImages": "Brak obrazów",
+            "github": "Pobieranie z GitHub",
+            "githubRepo": "Repozytorium",
+            "githubAuto": "Pobieraj automatycznie",
+            "githubAutoValues": {
+                "0": "Wył. (tylko ręcznie)",
+                "1": "Release",
+                "2": "Release i beta",
+                "3": "Release, beta i alpha"
+            },
+            "githubInterval": "co",
+            "githubCheck": "Sprawdź teraz",
+            "githubChecked": "Sprawdzono GitHub",
+            "githubFailed": "Zapytanie do GitHub nie powiodło się",
+            "githubLastCheck": "Ostatnie sprawdzenie: {{time}} – {{message}}",
+            "githubNoRepo": "Gdy firmware zostanie opublikowany na GitHub, wpisz tutaj jego repozytorium (owner/name). Wydania (releases) są traktowane jako release, wydania wstępne (pre-releases) z \"alpha\" w nazwie jako alpha, pozostałe wydania wstępne jako beta.",
+            "release": "Wydanie",
+            "published": "Opublikowano",
+            "download": "Pobierz",
+            "downloaded": "Obraz pobrany",
+            "downloadFailed": "Pobieranie nie powiodło się",
+            "noImage": "brak obrazu",
+            "inLibrary": "w bibliotece",
+            "unassigned": "Przypisanie usunięte",
+            "platformName": {
+                "cc3200": "CC3200",
+                "esp32": "ESP32"
+            },
+            "esp32Install": "zostanie zainstalowane przy następnym sprawdzeniu aktualizacji",
+            "esp32InstallHint": "Pudełko działa jeszcze na oryginalnym oprogramowaniu. Przy następnym sprawdzeniu aktualizacji otrzyma raz przypisany obraz, z już wpisanym tym serwerem; potem uruchomi własne oprogramowanie.",
+            "esp32Delivered": "Instalacja dostarczona: {{build}}",
+            "original": "Oryginalne oprogramowanie",
+            "originalChannel": "tylko przez przypisanie",
+            "patched": "załatane: {{patches}}",
+            "unpatched": "niezałatane",
+            "patchTitle": "Łatki dla oryginalnego oprogramowania pudełka ESP32",
+            "patchHint": "Dotyczy tylko obrazu oryginalnego oprogramowania pudełka ESP32 (obraz aplikacji lub pełny zrzut pamięci flash, z którego brany jest slot z najwyższą wersją). teddyCloud nakłada swoje łatki jak przy flashowaniu pudełka ESP32: host zamiast serwerów Boxine (najwyżej tak długi jak zastępowana nazwa, czyli 12 znaków) i port. Jeśli obraz jest już załatany, podaj jako stary host ten, który teraz zawiera.",
+            "patchHost": "Host (teddyCloud)",
+            "patchHostOld": "stary host (opcjonalnie)",
+            "patchPort": "Port (opcjonalnie)",
+            "esp32Return": "powrót do oryginalnego oprogramowania {{version}}",
+            "esp32ReturnHint": "Przy następnym sprawdzeniu aktualizacji pudełko otrzymuje oryginalne oprogramowanie, zapisuje je w wolnym slocie i uruchamia. Dotychczasowy slot oryginalny pozostaje bez zmian. Następnie przypisanie jest usuwane.",
+            "supportOff": "Obsługa niestandardowego firmware'u w teddyCloud jest wyłączona. Włącz \"Obsługa CFW\" w ustawieniach, aby dostarczać firmware do boxów.",
+            "githubRepoPlaceholder": "właściciel/nazwa"
+        },
+        "sectionTitle": "Custom Firmware",
+        "loadError": "Nie udało się wczytać ustawień CFW",
+        "messages": {
+            "boxNotFound": "Nie znaleziono boxa",
+            "imageNotFound": "Nie znaleziono obrazu",
+            "ruidInvalid": "Brak ID tagu lub jest nieprawidłowe",
+            "otherPlatform": "Obraz jest przeznaczony dla innej platformy boxa",
+            "checkingNow": "Box sprawdza teraz dostępność aktualizacji",
+            "portOutOfRange": "Port poza zakresem",
+            "outOfMemory": "Brak pamięci na serwerze",
+            "settingsNotStored": "Nie udało się zapisać ustawień",
+            "notSaved": "Nie udało się zapisać",
+            "invalidChannel": "Kanał musi być release, beta lub alpha",
+            "assignmentRemoved": "Przypisanie usunięte",
+            "assignedNow": "Przypisano; box sprawdza teraz aktualizację",
+            "assignedNextStart": "Przypisano; box pobierze go przy następnym uruchomieniu",
+            "invalidKind": "Zastosowanie musi być profilem, tagiem zdarzenia lub żadnym",
+            "eventActions": "Tag zdarzenia wymaga od 1 do 16 akcji",
+            "unknownCommand": "Nieznane polecenie",
+            "invalidVolume": "Głośność musi wynosić od 0 do 15",
+            "remoteOff": "Zdalne sterowanie jest wyłączone dla tego boxa",
+            "notConnected": "Box nie jest połączony z niestandardowym firmware",
+            "noRemote": "Firmware boxa nie obsługuje zdalnego sterowania",
+            "tooManyCommands": "Zbyt wiele poleceń w kolejce",
+            "noImage": "Nie otrzymano obrazu",
+            "tagMissing": "Brak tagu wydania",
+            "cfwOff": "Obsługa CFW jest wyłączona (cfw.enabled)"
+        }
+    },
     "common": {
         "cancel": "Anuluj"
     },
@@ -1151,7 +1438,767 @@
             "saveFailed": "Nie udało się zapisać zmian",
             "title": "Logowanie do interfejsu WWW",
             "users": "Użytkownicy"
-        }
+        },
+        "options": {
+            "log_level": {
+                "label": "Poziom logowania",
+                "description": "0=wył. - 6=szczegółowy"
+            },
+            "log_color": {
+                "label": "Kolorowy log",
+                "description": "Kolorowy log"
+            },
+            "log_logFullAuth": {
+                "label": "Loguj uwierzytelnianie",
+                "description": "Loguj pełne uwierzytelnianie tagów"
+            },
+            "core_server_http_port": {
+                "label": "Port HTTP",
+                "description": "Port HTTP dla interfejsu webowego"
+            },
+            "core_server_https_web_port": {
+                "label": "Port HTTPS Web",
+                "description": "Port HTTPS dla interfejsu webowego"
+            },
+            "core_server_https_api_port": {
+                "label": "Port HTTPS API",
+                "description": "Port HTTPS dla API Tonieboxa"
+            },
+            "core_server_bind_ip": {
+                "label": "Bind IP",
+                "description": "IP, do którego powiązane są porty HTTP"
+            },
+            "core_host_url": {
+                "label": "URL hosta",
+                "description": "URL serwera teddyCloud"
+            },
+            "core_certdir": {
+                "label": "Katalog certyfikatów",
+                "description": "Katalog do przesyłania oryginalnych certyfikatów klienta"
+            },
+            "core_contentdir": {
+                "label": "Katalog zawartości",
+                "description": "Katalog na zawartość z chmury"
+            },
+            "core_librarydir": {
+                "label": "Katalog biblioteki",
+                "description": "Katalog biblioteki audio"
+            },
+            "core_datadir": {
+                "label": "Katalog danych",
+                "description": "Katalog bazowy dla 'contentdir', 'firmwaredir', 'cachedir' i 'wwwdir', gdy są podane względnie"
+            },
+            "core_wwwdir": {
+                "label": "Katalog WWW",
+                "description": "Katalog zasobów interfejsu webowego (względem datadir lub bezwzględny)"
+            },
+            "core_pluginsdir": {
+                "label": "Katalog wtyczek",
+                "description": "Katalog wtyczek webowych (względem wwwdir lub bezwzględny)"
+            },
+            "core_firmwaredir": {
+                "label": "Katalog firmware",
+                "description": "Katalog do przesyłania oryginalnego firmware"
+            },
+            "core_cachedir": {
+                "label": "Katalog cache",
+                "description": "Katalog do buforowania plików pobranych z internetu"
+            },
+            "core_sslkeylogfile": {
+                "label": "Plik logu kluczy SSL",
+                "description": "Nazwa pliku logu kluczy SSL/TLS"
+            },
+            "core_server_http_client_timeout": {
+                "label": "Limit czasu połączenia",
+                "description": "Limit czasu połączenia klienta HTTP (domyślnie: 500ms)"
+            },
+            "core_file_upload_timeout_ms": {
+                "label": "Limit czasu przesyłania plików",
+                "description": "Limit czasu po stronie klienta dla przesyłania plików w ms (15s–5min). Domyślnie 120s dla dużych plików audio."
+            },
+            "core_server_cert_file_ca": {
+                "label": "Certyfikat CA",
+                "description": "Certyfikat CA"
+            },
+            "core_server_cert_file_ca_der": {
+                "label": "Certyfikat CA jako DER",
+                "description": "Certyfikat CA jako DER"
+            },
+            "core_server_cert_file_ca_key": {
+                "label": "Klucz CA",
+                "description": "Klucz CA"
+            },
+            "core_server_cert_file_crt": {
+                "label": "Certyfikat serwera",
+                "description": "Certyfikat serwera"
+            },
+            "core_server_cert_file_key": {
+                "label": "Klucz serwera",
+                "description": "Klucz serwera"
+            },
+            "core_server_cert_data_ca": {
+                "label": "Dane certyfikatu CA",
+                "description": "Dane certyfikatu CA"
+            },
+            "core_server_cert_tb2_file_ca": {
+                "label": "Certyfikat CA (TB2)",
+                "description": "Certyfikat CA (TB2)"
+            },
+            "core_server_cert_tb2_file_ca_der": {
+                "label": "Certyfikat CA jako DER (TB2)",
+                "description": "Certyfikat CA jako DER (TB2)"
+            },
+            "core_server_cert_tb2_file_ca_key": {
+                "label": "Klucz CA (TB2)",
+                "description": "Klucz CA (TB2)"
+            },
+            "core_server_cert_tb2_file_crt": {
+                "label": "Certyfikat serwera (TB2)",
+                "description": "Certyfikat serwera (TB2)"
+            },
+            "core_server_cert_tb2_file_key": {
+                "label": "Klucz serwera (TB2)",
+                "description": "Klucz serwera (TB2)"
+            },
+            "core_server_cert_tb2_data_ca": {
+                "label": "Dane certyfikatu CA (TB2)",
+                "description": "Dane certyfikatu CA (TB2)"
+            },
+            "core_client_cert_file_ca": {
+                "label": "CA klienta",
+                "description": "Urząd certyfikacji (CA) klienta"
+            },
+            "core_client_cert_file_crt": {
+                "label": "Certyfikat klienta",
+                "description": "Certyfikat klienta"
+            },
+            "core_client_cert_file_key": {
+                "label": "Klucz klienta",
+                "description": "Klucz klienta"
+            },
+            "core_client_cert_fake_file_ca": {
+                "label": "Fałszywe CA klienta",
+                "description": "Fałszywy urząd certyfikacji (CA) klienta"
+            },
+            "core_client_cert_fake_file_crt": {
+                "label": "Fałszywy certyfikat klienta",
+                "description": "Fałszywy certyfikat klienta"
+            },
+            "core_client_cert_fake_file_key": {
+                "label": "Fałszywy klucz klienta",
+                "description": "Fałszywy klucz klienta"
+            },
+            "core_allowOrigin": {
+                "label": "CORS Allow-Origin",
+                "description": "Ustaw nagłówek CORS Access-Control-Allow-Origin"
+            },
+            "core_boxCertAuth": {
+                "label": "Uwierzytelnianie certyfikatem boxa (HTTPS)",
+                "description": "Certyfikaty klienta są wymagane do dostępu boxów do API HTTPS"
+            },
+            "core_allowPrivateFetch": {
+                "label": "Zezwól na pobieranie z sieci prywatnych",
+                "description": "Pozwala serwerowi pobierać z adresów w sieci lokalnej/prywatnej (np. obrazy Tonies przechowywane na NAS-ie). Domyślnie wyłączone, ponieważ podany przez użytkownika URL mógłby w przeciwnym razie zmusić serwer do odczytu usług wewnętrznych (SSRF)."
+            },
+            "core_allowNewBox": {
+                "label": "Zezwól na nowe boxy",
+                "description": "Zezwól na dodawanie nowych boxów, jeśli próbują się połączyć"
+            },
+            "core_flex_enabled": {
+                "label": "Włącz Flex-Tonie",
+                "description": "Po włączeniu temu UID zawsze przypisywane jest audio wybrane w interfejsie webowym"
+            },
+            "core_flex_uid": {
+                "label": "UID Flex-Tonie",
+                "description": "UID, któremu mają być przypisywane wybrane pliki audio"
+            },
+            "core_settings_level": {
+                "label": "Poziom ustawień",
+                "description": "1: Podstawowy, 2: Szczegółowy, 3: Ekspert"
+            },
+            "core_tonies_json_auto_update": {
+                "label": "Automatyczna aktualizacja tonies.json",
+                "description": "Automatyczna aktualizacja tonies.json z informacjami i obrazami Tonies."
+            },
+            "core_full_taf_validation": {
+                "label": "Pełna walidacja TAF",
+                "description": "Waliduj pliki TAF, sprawdzając długość audio i hash SHA1. (może być wolne, ponieważ plik musi zostać odczytany w całości!)"
+            },
+            "core_tap_taf_validation": {
+                "label": "Walidacja TAF dla TAP",
+                "description": "Waliduj pliki TAF z TAP, sprawdzając długość audio i hash SHA1. (może być wolne, ponieważ plik musi zostać odczytany w całości!)"
+            },
+            "core_track_pos_taf_validation": {
+                "label": "Walidacja TAF przy błędzie pozycji utworu",
+                "description": "Waliduj pliki TAF przy wystąpieniu błędu pozycji utworu, sprawdzając długość audio i hash SHA1. (może być wolne, ponieważ plik musi zostać odczytany w całości!)"
+            },
+            "security_mit_warnAccess": {
+                "label": "Ostrzeżenie przy niepożądanym dostępie",
+                "description": "Jeśli teddyCloud wykryje nietypowy dostęp, ostrzegaj w interfejsie do czasu restartu. (Zobacz on*)"
+            },
+            "security_mit_lockAccess": {
+                "label": "Blokada przy niepożądanym dostępie",
+                "description": "Jeśli teddyCloud wykryje nietypowy dostęp, zablokuj interfejs do czasu restartu. (Zobacz on*)"
+            },
+            "security_mit_httpsOnly": {
+                "label": "Tylko na HTTPS",
+                "description": "Blokuj/ostrzegaj tylko na porcie HTTPS."
+            },
+            "security_mit_onBlacklistDomain": {
+                "label": "Wykrywaj domeny z czarnej listy",
+                "description": "Blokuj/ostrzegaj, jeśli domena jest znana jako publiczna."
+            },
+            "security_mit_onCrawler": {
+                "label": "Wykrywaj crawlery",
+                "description": "Blokuj/ostrzegaj, jeśli wykryto crawlera (User-Agent)."
+            },
+            "security_mit_onRobotsTxt": {
+                "label": "Wykrywaj robots.txt",
+                "description": "Blokuj/ostrzegaj, jeśli nastąpi dostęp do robots.txt."
+            },
+            "cloud_enabled": {
+                "label": "Chmura włączona",
+                "description": "Ogólnie włącz działanie chmury"
+            },
+            "cloud_remote_hostname": {
+                "label": "Nazwa hosta chmury",
+                "description": "Nazwa hosta zdalnego serwera chmury"
+            },
+            "cloud_remote_hostname_tb2": {
+                "label": "Nazwa hosta chmury TB2",
+                "description": "Nazwa hosta zdalnego serwera chmury dla TB2"
+            },
+            "cloud_remote_port": {
+                "label": "Port chmury",
+                "description": "Port zdalnego serwera chmury"
+            },
+            "cloud_remote_port_tb2": {
+                "label": "Port chmury TB2",
+                "description": "Port zdalnego serwera chmury dla TB2"
+            },
+            "cloud_enableV1Claim": {
+                "label": "Przekazuj 'claim'",
+                "description": "Przekazuj zapytania 'claim' w celu przypisania Tonies do gospodarstwa domowego w chmurze tonies"
+            },
+            "cloud_enableV1CloudReset": {
+                "label": "Przekazuj 'cloudReset'",
+                "description": "Przekazuj zapytania 'cloudReset' do chmury tonies"
+            },
+            "cloud_enableV1FreshnessCheck": {
+                "label": "Przekazuj 'freshnessCheck'",
+                "description": "Przekazuj zapytania 'freshnessCheck', aby oznaczać nową zawartość jako zaktualizowaną w chmurze tonies"
+            },
+            "cloud_enableV3FreshnessCheck": {
+                "label": "Przekazuj 'freshnessCheck' v3",
+                "description": "Przekazuj zapytania 'freshnessCheck' v3, aby oznaczać nową zawartość jako zaktualizowaną w chmurze tonies"
+            },
+            "cloud_enableV1Log": {
+                "label": "Przekazuj 'log'",
+                "description": "Przekazuj zapytania 'log' do chmury tonies"
+            },
+            "cloud_enableV1Time": {
+                "label": "Przekazuj 'time'",
+                "description": "Przekazuj zapytania 'time' do chmury tonies"
+            },
+            "cloud_enableV1Ota": {
+                "label": "Przekazuj 'ota'",
+                "description": "Przekazuj zapytania 'ota' do chmury tonies"
+            },
+            "cloud_enableV3Ota": {
+                "label": "Przekazuj 'check-ota' v3",
+                "description": "Przekazuj zapytania 'check-ota' v3 do chmury tonies"
+            },
+            "cloud_enableV2Content": {
+                "label": "Przekazuj 'content'",
+                "description": "Przekazuj zapytania 'content' w celu pobierania zawartości z chmury tonies"
+            },
+            "cloud_enableV3SetupStatus": {
+                "label": "Przekazuj 'setup-status' v3",
+                "description": "Przekazuj zapytania 'setup-status' v3 do chmury tonies"
+            },
+            "cloud_enableV3ContentMeta": {
+                "label": "Przekazuj 'content-meta' v3",
+                "description": "Przekazuj zapytania 'content-meta' v3 do chmury tonies"
+            },
+            "cloud_enableV3Chapter": {
+                "label": "Przekazuj 'chapter' v3",
+                "description": "Przekazuj zapytania 'chapter' v3 do chmury tonies"
+            },
+            "cloud_cacheOta": {
+                "label": "Buforuj OTA",
+                "description": "Buforuj pliki OTA w katalogu firmware lokalnego serwera (nadal blokuje OTA, jeśli lokalne dostarczanie OTA jest wyłączone)"
+            },
+            "cloud_localOta": {
+                "label": "Lokalne dostarczanie OTA",
+                "description": "Wysyłaj lokalne pliki OTA z katalogu firmware"
+            },
+            "cloud_cacheContent": {
+                "label": "Buforuj zawartość",
+                "description": "Buforuj zawartość z chmury na lokalnym serwerze"
+            },
+            "cloud_cacheToLibrary": {
+                "label": "Buforuj do biblioteki",
+                "description": "Buforuj zawartość z chmury do biblioteki"
+            },
+            "cloud_markCustomTagByPass": {
+                "label": "Automatycznie wykrywaj własne tagi (hasło)",
+                "description": "Automatycznie oznaczaj własne tagi na podstawie hasła"
+            },
+            "cloud_markCustomTagByUid": {
+                "label": "Automatycznie wykrywaj własne tagi (UID)",
+                "description": "Automatycznie oznaczaj własne tagi na podstawie UID"
+            },
+            "cloud_prioCustomContent": {
+                "label": "Priorytet dla własnej zawartości",
+                "description": "Przedkładaj własną zawartość nad zawartość tonies (wymusza aktualizację, tylko jeśli \"Aktualizuj zawartość przy niższym ID audio\" jest wyłączone)"
+            },
+            "cloud_updateOnLowerAudioId": {
+                "label": "Aktualizuj zawartość przy niższym ID audio",
+                "description": "Aktualizuj zawartość przy niższym ID audio"
+            },
+            "cloud_dumpRuidAuthContentJson": {
+                "label": "Zapisuj rUID/auth",
+                "description": "Zapisuj rUID i dane uwierzytelniania w JSON zawartości."
+            },
+            "cloud_autoMarkListenedOnSync": {
+                "label": "Automatycznie oznaczaj jako odsłuchane przy synchronizacji",
+                "description": "Automatycznie oznaczaj zawartość biblioteki jako odsłuchaną, gdy Toniebox pobierze/odtworzy ją z tego serwera"
+            },
+            "encode_bitrate": {
+                "label": "Bitrate Opus",
+                "description": "Bitrate Opus, testowane 64, 96 (domyślnie), 128, 192, 256 - pamiętaj, że zwiększa to rozmiar pliku TAF!"
+            },
+            "encode_ffmpeg_stream_buffer_ms": {
+                "label": "Bufor strumienia ms",
+                "description": "Bufor strumienia dla streamingu opartego na ffmpeg."
+            },
+            "encode_ffmpeg_stream_restart": {
+                "label": "Wymuś restart strumienia",
+                "description": "Jeśli box kontynuuje strumień, wymuszany jest nowy plik. Kosztem jest wolniejszy restart, ale stara zbuforowana zawartość nie jest odtwarzana, a poprzednie dane strumienia na boxie są usuwane."
+            },
+            "encode_ffmpeg_sweep_startup_buffer": {
+                "label": "Pomiń prebufor strumienia",
+                "description": "Strumienie radia internetowego często od razu wysyłają kilka sekund jako bufor. Może on zawierać reklamy i będzie się kumulował, jeśli wyłączysz 'Wymuś restart strumienia'."
+            },
+            "encode_ffmpeg_sweep_delay_ms": {
+                "label": "Opóźnienie pomijania ms",
+                "description": "Czekaj x ms, aż pomijanie zostanie zakończone i strumień się rozpocznie. Opóźnia start strumienia, ale może zwiększyć skuteczność."
+            },
+            "encode_stream_max_size": {
+                "label": "Maks. rozmiar pliku strumienia",
+                "description": "Box może utworzyć pusty plik o tej długości dla każdego strumienia. Jeśli więc używasz 10 Tonies ze streamingiem, box może zająć 10*240MB. Jedyną wadą jest to, że box zatrzyma się po zapełnieniu pliku i trzeba będzie ponownie położyć tag na boxie. Nie może być wielokrotnością 4096, domyślnie: 251.658.239, czyli 240MB, co odpowiada około 6h."
+            },
+            "encode_use_frontend": {
+                "label": "Kodowanie w przeglądarce",
+                "description": "Używaj kodowania po stronie przeglądarki zamiast po stronie serwera (wymaga nowoczesnej przeglądarki z obsługą WebAssembly)"
+            },
+            "frontend_split_model_content": {
+                "label": "Rozdziel zawartość / model",
+                "description": "Po włączeniu zawartość pliku TAF będzie wyświetlana obok modelu figurki"
+            },
+            "frontend_ignore_web_version_mismatch": {
+                "label": "Ignoruj niezgodność wersji web",
+                "description": "Ignoruj niezgodność wersji interfejsu webowego i nie pokazuj ostrzeżenia o niezgodności"
+            },
+            "frontend_confirm_audioplayer_close": {
+                "label": "Potwierdzaj zamknięcie odtwarzacza",
+                "description": "Okno potwierdzenia przy zamykaniu odtwarzacza audio podczas aktywnego odtwarzania"
+            },
+            "frontend_check_cc3200_cfw": {
+                "label": "Sprawdzaj CFW na boxie CC3200",
+                "description": "Włącz wykrywanie CFW na boxach CC3200, aby powiązać adresy MAC z adresami IP."
+            },
+            "frontend_web_auth_enabled": {
+                "label": "Logowanie do interfejsu webowego",
+                "description": "Wymagaj logowania do interfejsu webowego. Użytkownikami zarządza się w interfejsie webowym. Domyślnie wyłączone. Ustaw TEDDYCLOUD_WEB_AUTH_DISABLE=1, aby to obejść."
+            },
+            "toniebox_api_access": {
+                "label": "Dostęp do API",
+                "description": "Przyznaj dostęp do API (wartość domyślna dla nowych boxów)"
+            },
+            "toniebox_overrideCloud": {
+                "label": "Nadpisz ustawienia chmury",
+                "description": "Nadpisz ustawienia chmury tonies dla Tonieboxa ustawieniami podanymi tutaj"
+            },
+            "toniebox_boxGeneration": {
+                "label": "Generacja boxa",
+                "description": "Generacja boxa (TB1/TB2)"
+            },
+            "toniebox_max_vol_spk": {
+                "label": "Ogranicz głośność głośnika",
+                "description": "Najwyższa głośność głośnika boxa"
+            },
+            "toniebox_max_vol_hdp": {
+                "label": "Ogranicz głośność słuchawek",
+                "description": "Najwyższa głośność słuchawek boxa"
+            },
+            "toniebox_slap_enabled": {
+                "label": "Przełączanie uderzeniem",
+                "description": "Włącz przełączanie utworów gestem uderzenia"
+            },
+            "toniebox_slap_back_left": {
+                "label": "Kierunek uderzenia",
+                "description": "Określ kierunek uderzenia przy przełączaniu utworów: False dla lewo-wstecz, True dla lewo-naprzód"
+            },
+            "toniebox_led": {
+                "label": "Jasność LED",
+                "description": "LED, gdy box jest gotowy"
+            },
+            "toniebox_overrideFields": {
+                "label": "Nadpisz nieznane pola",
+                "description": "Nadpisz nieznane pola 2 + 6"
+            },
+            "toniebox_field2": {
+                "label": "Pole 2",
+                "description": "Nieznane ustawienie Tonieboxa, domyślnie 7"
+            },
+            "toniebox_field6": {
+                "label": "Pole 6",
+                "description": "Nieznane ustawienie Tonieboxa, domyślnie 1"
+            },
+            "toniebox_certPin": {
+                "label": "Przypięty certyfikat",
+                "description": "SHA-256 certyfikatu, po którym rozpoznawany jest ten box. Puste: zostanie przejęte przy następnym połączeniu, z przesłanego pliku client.der boxa lub od samego boxa"
+            },
+            "cfw_enabled": {
+                "label": "Obsługa CFW",
+                "description": "Obsługa pudełek z niestandardowym firmware: hello, pliki ustawień, zdalne sterowanie, aktualizacje firmware i web API CFW. Wyłączone: teddyCloud działa jak bez obsługi CFW, z wyjątkiem żądań wysyłanych tylko przez niestandardowy firmware (strona konfiguracji, sprawdzanie aktualizacji niestandardowego firmware ESP32), na które nadal odpowiada tutaj i nigdy nie przekazuje ich do chmury"
+            },
+            "cfw_settings_sync": {
+                "label": "Synchronizuj ustawienia tagów i boxa",
+                "description": "Wysyłaj profile Tonie, tagi zdarzeń i ustawienia boxa do boxa oraz przejmuj zmiany dokonane na boxie"
+            },
+            "cfw_remote_control": {
+                "label": "Zdalne sterowanie",
+                "description": "Zezwól na zdalne polecenia do boxa przez jego połączenie logowania"
+            },
+            "cfw_show_tag_settings": {
+                "label": "Pokaż ustawienia CFW dla Tonie",
+                "description": "Pokazuj ustawienia Custom Firmware (profil, tag zdarzenia) podczas edycji Tonie. Włączane jednorazowo, gdy połączy się pierwszy box z Custom Firmware"
+            },
+            "cfw_show_box_settings": {
+                "label": "Pokaż ustawienia CFW boxa",
+                "description": "Pokazuj ustawienia boxa z Custom Firmware. Zastępują one limity głośności w krokach co 25 % oraz 'Przełączanie uderzeniem', które są wtedy z nich wyprowadzane dla boxów bez Custom Firmware. Włączane jednorazowo, gdy połączy się pierwszy box z Custom Firmware"
+            },
+            "cfw_show_battery": {
+                "label": "Pokaż baterię",
+                "description": "Pokazuj na liście boxów ostatnio zgłoszone napięcie baterii boxa i to, czy stoi na stacji ładującej (niestandardowy firmware ze zgłaszaniem baterii)"
+            },
+            "cfw_battery_log": {
+                "label": "Dziennik baterii",
+                "description": "Dopisuj każde zgłoszenie baterii boxa do cfw/battery/<box>.csv w katalogu konfiguracji, na potrzeby przyszłego wskaźnika naładowania"
+            },
+            "cfw_setup_page_update": {
+                "label": "Aktualizuj stronę konfiguracji",
+                "description": "Dostarczaj pudełkom z niestandardowym firmware stronę konfiguracji firmware, który pudełko uruchamia, lub domyślną stronę konfiguracji; wyłączone: strona na karcie pudełka pozostaje bez zmian"
+            },
+            "cfw_event_image": {
+                "label": "Obraz tagów zdarzeń",
+                "description": "Obraz wyświetlany dla Toniego będącego tagiem zdarzenia zamiast obrazu jego zawartości"
+            },
+            "cfw_event_notice_language": {
+                "label": "Język komunikatu tagu zdarzenia",
+                "description": "Tag zdarzenia nie odtwarza zawartości. Box bez niestandardowego firmware słyszy zamiast tego komunikat w tym języku"
+            },
+            "cfw_force_box_settings": {
+                "label": "Pokaż ustawienia CFW dla tego boxa",
+                "description": "Pokazuj ustawienia Custom Firmware dla tego boxa, mimo że nie połączył się jeszcze z Custom Firmware"
+            },
+            "cfw_box_speaker_limit": {
+                "label": "Ogranicz głośność głośnika",
+                "description": "Najwyższy poziom głośności głośnika. Boxy bez Custom Firmware otrzymują go zaokrąglonego do 25/50/75/100 %"
+            },
+            "cfw_box_headphone_limit": {
+                "label": "Ogranicz głośność słuchawek",
+                "description": "Najwyższy poziom głośności słuchawek. Boxy bez Custom Firmware otrzymują go zaokrąglonego do 25/50/75/100 %"
+            },
+            "cfw_box_both_ears_off": {
+                "label": "Wyłączanie obydwoma uszami",
+                "description": "Krótkie jednoczesne naciśnięcie obu uszu wyłącza box"
+            },
+            "cfw_box_slap_lock": {
+                "label": "Blokada uderzeń",
+                "description": "Uderzenia nic nie robią. Boxy bez Custom Firmware mają wyłączone 'Przełączanie uderzeniem'"
+            },
+            "cfw_box_tilt_lock": {
+                "label": "Blokada przechylania",
+                "description": "Przechylanie nie przewija"
+            },
+            "cfw_box_volume_lock": {
+                "label": "Blokada głośności",
+                "description": "Krótkie naciśnięcie ucha nie zmienia głośności"
+            },
+            "cfw_update_enabled": {
+                "label": "Aktualizacja firmware",
+                "description": "Oferuj boxowi obrazy Custom Firmware"
+            },
+            "cfw_update_channel": {
+                "label": "Kanał aktualizacji",
+                "description": "Które obrazy firmware box przyjmuje: tylko release lub także beta / alpha"
+            },
+            "cfw_update_mode": {
+                "label": "Dostarczanie aktualizacji",
+                "description": "Ręcznie: obraz jest dostarczany tylko wtedy, gdy jest przypisany do boxa. Automatycznie: dostarczany jest najnowszy obraz kanału"
+            },
+            "cfw_update_target": {
+                "label": "Przypisany obraz",
+                "description": "Numer buildu obrazu przypisanego do tego boxa (dostarczanie ręczne); puste: brak"
+            },
+            "cfw_update_allow_rolled_back": {
+                "label": "Oferuj ponownie wycofany obraz",
+                "description": "Oferuj ponownie obraz, który box wycofał"
+            },
+            "cfw_firmware_github_repo": {
+                "label": "Repozytorium GitHub",
+                "description": "owner/name repozytorium GitHub, którego wydania zawierają firmware boxa; puste: brak pobierania"
+            },
+            "cfw_firmware_github_download": {
+                "label": "Automatyczne pobieranie",
+                "description": "Które obrazy są automatycznie pobierane z GitHub"
+            },
+            "cfw_firmware_github_interval": {
+                "label": "Interwał sprawdzania (h)",
+                "description": "Liczba godzin między dwoma sprawdzeniami nowych obrazów na GitHub"
+            },
+            "toniebox2_baby_mode": {
+                "label": "Tryb niemowlęcy",
+                "description": "Włącz tryb niemowlęcy (1 rok)."
+            },
+            "toniebox2_lightring_brightness": {
+                "label": "Jasność LED",
+                "description": "Jasność pierścienia świetlnego"
+            },
+            "rtnl_logRaw": {
+                "label": "Loguj RTNL (bin)",
+                "description": "Włącz logowanie surowych danych RTNL"
+            },
+            "rtnl_logHuman": {
+                "label": "Loguj RTNL (csv)",
+                "description": "Włącz logowanie czytelnych danych RTNL"
+            },
+            "rtnl_logRawFile": {
+                "label": "Plik RTNL bin",
+                "description": "Podaj ścieżkę pliku surowego logu RTNL"
+            },
+            "rtnl_logHumanFile": {
+                "label": "Plik RTNL csv",
+                "description": "Podaj ścieżkę pliku czytelnego logu RTNL"
+            },
+            "pcap_enabled": {
+                "label": "Loguj ruch HTTP(S)",
+                "description": "Włącz logowanie ruchu HTTP(S) do pliku .pcap (wymaga restartu)"
+            },
+            "pcap_filename": {
+                "label": "Plik logu libpcap",
+                "description": "Podaj ścieżkę pliku logu libpcap"
+            },
+            "mqtt_enabled": {
+                "label": "Włącz MQTT",
+                "description": "Włącz klienta MQTT"
+            },
+            "mqtt_hostname": {
+                "label": "Nazwa hosta MQTT",
+                "description": "IP lub nazwa hosta serwera MQTT"
+            },
+            "mqtt_port": {
+                "label": "Port MQTT",
+                "description": "Port serwera MQTT"
+            },
+            "mqtt_username": {
+                "label": "Nazwa użytkownika",
+                "description": "Nazwa użytkownika MQTT"
+            },
+            "mqtt_password": {
+                "label": "Hasło",
+                "description": "Hasło MQTT"
+            },
+            "mqtt_identification": {
+                "label": "Identyfikacja klienta",
+                "description": "Identyfikacja klienta"
+            },
+            "mqtt_topic": {
+                "label": "Prefiks tematu",
+                "description": "Prefiks tematu"
+            },
+            "mqtt_qosLevel": {
+                "label": "Poziom QoS",
+                "description": "Poziom QoS"
+            },
+            "mqtt_retain_will": {
+                "label": "Zachowuj ostatnią wolę",
+                "description": "Zachowuj wiadomość ostatniej woli (last will)"
+            },
+            "mqtt_disable_on_error": {
+                "label": "Wyłącz MQTT przy błędzie",
+                "description": "Wyłącz MQTT, jeśli wystąpiło zbyt wiele błędów"
+            },
+            "mqtt_tls_enabled": {
+                "label": "Włącz TLS",
+                "description": "Włącz szyfrowanie TLS/SSL dla połączenia MQTT"
+            },
+            "mqtt_tls_ca_file": {
+                "label": "Certyfikat CA",
+                "description": "Ścieżka do pliku certyfikatu CA (format PEM)"
+            },
+            "mqtt_tls_insecure": {
+                "label": "Pomiń weryfikację",
+                "description": "Pomiń weryfikację certyfikatu TLS (niebezpieczne!)"
+            },
+            "mqtt_server_enabled": {
+                "label": "Włącz serwer MQTT",
+                "description": "Włącz wewnętrzny serwer MQTT"
+            },
+            "mqtt_server_port": {
+                "label": "Port serwera MQTT",
+                "description": "Port wewnętrznego serwera MQTT"
+            },
+            "mqtt_server_cert_crt": {
+                "label": "Certyfikat serwera",
+                "description": "Ścieżka do pliku certyfikatu serwera (format PEM)"
+            },
+            "mqtt_server_cert_key": {
+                "label": "Klucz serwera",
+                "description": "Ścieżka do pliku klucza serwera (format PEM)"
+            },
+            "hass_name": {
+                "label": "Nazwa w Home Assistant",
+                "description": "Nazwa w Home Assistant"
+            },
+            "hass_id": {
+                "label": "Unikalne ID",
+                "description": "Unikalne ID identyfikujące to urządzenie"
+            },
+            "tonie_json_cache_images": {
+                "label": "Buforuj obrazy",
+                "description": "Buforuj obrazy figurek lokalnie"
+            },
+            "tonie_json_cache_preload": {
+                "label": "Wstępnie wczytaj wszystkie obrazy",
+                "description": "Pobierz wszystkie obrazy figurek przy starcie. Przy pierwszym uruchomieniu TeddyCloud zajmie to kilka minut."
+            },
+            "tonie_json_custom_backup_keep": {
+                "label": "Kopie zapasowe własnego JSON",
+                "description": "Ile kopii zapasowych tonies.custom.json ze znacznikiem czasu przechowywać (0 wyłącza przechowywanie)."
+            },
+            "debug_web_pcm_encode_console_url": {
+                "label": "URL PCM w konsoli",
+                "description": "Buforuje PCM kodowania po stronie przeglądarki i wypisuje link do pobrania w konsoli przeglądarki."
+            }
+        },
+        "groups": {
+            "log": "Logowanie",
+            "core_server": "Porty serwera",
+            "core": "Serwer HTTP",
+            "core_server_cert": "Certyfikaty serwera HTTPS",
+            "core_server_cert_file": "Certyfikaty z plików",
+            "core_server_cert_data": "Surowe certyfikaty",
+            "core_server_cert_tb2": "Certyfikaty serwera HTTPS (TB2)",
+            "core_server_cert_tb2_file": "Certyfikaty z plików (TB2)",
+            "core_server_cert_tb2_data": "Surowe certyfikaty (TB2)",
+            "core_client_cert": "Certyfikaty klienta chmury",
+            "core_client_cert_file": "Certyfikaty z plików",
+            "core_client_cert_data": "Surowe certyfikaty",
+            "core_client_cert_fake": "Fałszywe certyfikaty klienta",
+            "core_client_cert_fake_file": "Fałszywe certyfikaty z plików",
+            "core_client_cert_fake_data": "Surowe certyfikaty",
+            "security_mit": "Środki bezpieczeństwa",
+            "internal": "Wewnętrzne",
+            "cloud": "Chmura",
+            "encode": "Kodowanie TAF",
+            "frontend": "Frontend",
+            "toniebox": "Toniebox",
+            "cfw": "Custom Firmware",
+            "cfw_box": "Funkcje Custom Firmware",
+            "cfw_update": "Aktualizacja firmware",
+            "cfw_firmware": "Pobieranie firmware",
+            "toniebox2": "Toniebox 2",
+            "rtnl": "Log RTNL",
+            "pcap": "Log pakietów libpcap",
+            "mqtt": "MQTT",
+            "mqtt_server": "Serwer MQTT",
+            "hass": "Home Assistant",
+            "tonie_json": "Tonie JSON",
+            "debug": "Debugowanie",
+            "debug_web": "Interfejs webowy",
+            "mqtt_server_cert": "Certyfikat"
+        },
+        "values": {
+            "toniebox_max_vol_spk": {
+                "0": "25%",
+                "1": "50%",
+                "2": "75%",
+                "3": "100%"
+            },
+            "toniebox_max_vol_hdp": {
+                "0": "25%",
+                "1": "50%",
+                "2": "75%",
+                "3": "100%"
+            },
+            "toniebox_led": {
+                "0": "Włączona",
+                "1": "Wyłączona",
+                "2": "Przyciemniona"
+            },
+            "cfw_box_speaker_limit": {
+                "0": "Poziom 0",
+                "1": "Poziom 1",
+                "2": "Poziom 2",
+                "3": "Poziom 3",
+                "4": "Poziom 4",
+                "5": "Poziom 5",
+                "6": "Poziom 6 (= 25 % w oryginalnym firmware)",
+                "7": "Poziom 7",
+                "8": "Poziom 8",
+                "9": "Poziom 9 (= 50 % w oryginalnym firmware)",
+                "10": "Poziom 10",
+                "11": "Poziom 11",
+                "12": "Poziom 12 (= 75 % w oryginalnym firmware)",
+                "13": "Poziom 13",
+                "14": "Poziom 14",
+                "15": "Poziom 15 (= 100 % w oryginalnym firmware)"
+            },
+            "cfw_box_headphone_limit": {
+                "0": "Poziom 0",
+                "1": "Poziom 1",
+                "2": "Poziom 2",
+                "3": "Poziom 3",
+                "4": "Poziom 4",
+                "5": "Poziom 5",
+                "6": "Poziom 6 (= 25 % w oryginalnym firmware)",
+                "7": "Poziom 7",
+                "8": "Poziom 8",
+                "9": "Poziom 9 (= 50 % w oryginalnym firmware)",
+                "10": "Poziom 10",
+                "11": "Poziom 11",
+                "12": "Poziom 12 (= 75 % w oryginalnym firmware)",
+                "13": "Poziom 13",
+                "14": "Poziom 14",
+                "15": "Poziom 15 (= 100 % w oryginalnym firmware)"
+            },
+            "cfw_update_channel": {
+                "0": "Brak",
+                "1": "Release",
+                "2": "Beta",
+                "3": "Alpha"
+            },
+            "cfw_update_mode": {
+                "0": "Ręcznie",
+                "1": "Automatycznie"
+            },
+            "cfw_firmware_github_download": {
+                "0": "Wył.",
+                "1": "Release",
+                "2": "Release i beta",
+                "3": "Release, beta i alpha"
+            },
+            "cfw_event_notice_language": {
+                "0": "Niemiecki",
+                "1": "Angielski",
+                "2": "Francuski"
+            }
+        },
+        "derivedFromCfw": "Wyprowadzone z funkcji Custom Firmware (zaokrąglone do 25/50/75/100 %). Przy włączonym \"Nadpisaniu\" ten box otrzymuje własną wartość."
     },
     "teddycloud": {
         "newVersionAvailable": "Dostępna jest nowa wersja!",

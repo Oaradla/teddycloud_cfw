@@ -674,6 +674,22 @@ error_t handleApiCfwStatus(HttpConnection *connection, const char_t *uri, const 
     return send_json(connection, json, 200);
 }
 
+/* the host under which the boxes reach this server (Host header of the last box request), empty
+   while no box has asked since the start */
+error_t handleApiCfwBoxHost(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
+{
+    if (!get_settings()->cfw.enabled)
+    {
+        return send_disabled(connection);
+    }
+    char host[96];
+    cfw_box_host_get(host, sizeof(host));
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddStringToObject(json, "host", host);
+    cJSON_AddNumberToObject(json, "apiPort", get_settings()->core.https_api_port);
+    return send_json(connection, json, 200);
+}
+
 static cJSON *image_json(const cfw_image_t *image)
 {
     cJSON *entry = cJSON_CreateObject();

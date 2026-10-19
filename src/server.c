@@ -172,6 +172,7 @@ request_type_t request_paths[] = {
     {REQ_POST, "/api/cfw/tag", SERTY_WEB, &handleApiCfwTagSet},
     {REQ_POST, "/api/cfw/remote", SERTY_WEB, &handleApiCfwRemote},
     {REQ_GET, "/api/cfw/status", SERTY_WEB, &handleApiCfwStatus},
+    {REQ_GET, "/api/cfw/boxHost", SERTY_WEB, &handleApiCfwBoxHost},
     {REQ_GET, "/api/cfw/battery", SERTY_WEB, &handleApiCfwBattery},
     {REQ_POST, "/api/cfw/firmware/upload", SERTY_WEB, &handleApiCfwFirmwareUpload},
     {REQ_POST, "/api/cfw/firmware/edit", SERTY_WEB, &handleApiCfwFirmwareEdit},
@@ -580,6 +581,7 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
         {
             cfw_box_seen_request(client_ctx->settings, cfwSeenBuild, connection->request.cfwBuild);
             cfw_box_seen_platform(client_ctx->settings);
+            cfw_box_host_seen(connection->request.host);
             cfwSeen = false;
         }
 

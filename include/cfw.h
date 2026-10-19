@@ -29,6 +29,8 @@ void cfw_box_seen_request(settings_t *settings, uint32_t build, uint32_t cfwBuil
 /* records the platform of the box IC taken from the User-Agent of a request, which a reload of the settings
    resets (cfw_box_platform) */
 void cfw_box_seen_platform(settings_t *settings);
+void cfw_box_host_seen(const char *host);
+void cfw_box_host_get(char *host, size_t size);
 /* queues a remote command for the box (CFW_CMD_*), from the API or MQTT; the HTTP status of the
    outcome (200 queued, 409 switched off or not connected, 429 queue full) with its text in message */
 uint_t cfw_remote_send(settings_t *settings, uint8_t command, const uint8_t *args, size_t argsLength, char *message, size_t messageSize);
@@ -40,6 +42,7 @@ bool cfw_is_derived_setting(settings_t *settings, const char *name);
 uint32_t cfw_derived_setting(settings_t *settings, const char *name, uint32_t value);
 
 error_t handleApiCfwBoxes(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
+error_t handleApiCfwBoxHost(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiCfwTags(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiCfwTagGet(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiCfwTagSet(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);

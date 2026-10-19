@@ -207,6 +207,14 @@ def test_hello_answer_is_recorded(box, start):
     assert entry["isCfw"] and entry["version"] == BUILD
 
 
+def test_box_host_is_offered_for_a_new_box(box):
+    # the address the boxes use, for the server line of a new box's card
+    freshness(box)
+    status, data = api_json("GET", "/api/cfw/boxHost")
+    assert status == 200 and data["host"] == box.host, data
+    assert data["apiPort"] > 0
+
+
 def test_first_cfw_box_shows_the_settings_once(box, start):
     wait_until(lambda: setting_value("cfw.show_box_settings") == "true")
     assert setting_value("cfw.show_tag_settings") == "true"

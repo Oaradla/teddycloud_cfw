@@ -415,6 +415,30 @@ void cfw_box_seen_request(settings_t *settings, uint32_t build, uint32_t cfwBuil
     cfw_unlock();
 }
 
+/* the Host header of the last accepted box request: the name or address under which the boxes reach
+   this server, offered when a new box is set up (behind a reverse proxy the web address differs) */
+static char box_host[96];
+
+void cfw_box_host_seen(const char *host)
+{
+    if (host == NULL || host[0] == '\0')
+    {
+        return;
+    }
+    cfw_lock();
+    osStrncpy(box_host, host, sizeof(box_host) - 1);
+    box_host[sizeof(box_host) - 1] = '\0';
+    cfw_unlock();
+}
+
+void cfw_box_host_get(char *host, size_t size)
+{
+    cfw_lock();
+    osStrncpy(host, box_host, size - 1);
+    host[size - 1] = '\0';
+    cfw_unlock();
+}
+
 void cfw_box_seen_platform(settings_t *settings)
 {
     settings_box_type ic = settings->internal.toniebox_firmware.boxIC;

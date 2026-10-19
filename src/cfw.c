@@ -86,6 +86,7 @@ void cfw_deinit(void)
     for (size_t i = 0; i < MAX_OVERLAYS; i++)
     {
         osFreeMem(cfw_boxes[i].known);
+        cfw_battery_free(&cfw_boxes[i]);
     }
     osMemset(cfw_boxes, 0, sizeof(cfw_boxes));
     cfw_unlock();
@@ -512,6 +513,7 @@ cfw_box_t *cfw_box_get(settings_t *settings)
     {
         /* the overlay now belongs to another box */
         osFreeMem(box->known);
+        cfw_battery_free(box);
         osMemset(box, 0, sizeof(*box));
     }
     if (!box->loaded)
@@ -1098,6 +1100,8 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
     size_t globalLength = 0;
     uint32_t globalTimestamp = 0;
     bool batteryReport = false;
+    cfw_battery_model_t *batteryModel = NULL;
+    cfw_battery_result_t batteryResult = {0};
     bool statusReport = false;
     uint32_t status[sizeof(((cfw_box_t *)0)->status) / sizeof(uint32_t)];
     uint32_t battery[5];
@@ -1214,6 +1218,8 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
             box->batteryValid = true;
             box->batteryTime = time(NULL);
             batteryReport = settings->cfw.battery_log;
+            batteryModel = cfw_battery_update(box, log2->uptime);
+            batteryResult = box->batteryResult;
             osMemcpy(battery, box->battery, sizeof(battery));
             osStrncpy(boxId, box->id, sizeof(boxId) - 1);
             boxId[sizeof(boxId) - 1] = 0;
@@ -1235,6 +1241,11 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
     if (batteryReport)
     {
         battery_log(boxId, battery, time(NULL), log2->uptime, build);
+    }
+    if (batteryModel != NULL)
+    {
+        cfw_battery_save(boxId, batteryModel);
+        cfw_mqtt_battery(client_ctx, battery[0], &batteryResult);
     }
     if (globalLength > 0)
     {

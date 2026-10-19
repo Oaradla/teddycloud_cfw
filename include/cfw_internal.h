@@ -2,6 +2,7 @@
 
 /* shared by cfw.c (protocol), cfw_firmware.c (images, update) and cfw_api.c (web API) */
 
+#include "cfw_battery_model.h"
 #include <time.h>
 
 #include "cJSON.h"
@@ -110,6 +111,10 @@ typedef struct
     bool batteryValid;
     uint32_t battery[5]; /* voltage, flags, reason, load, ADC value */
     time_t batteryTime;
+    /* the charge from the battery reports (cfw_battery.c) */
+    cfw_battery_model_t *batteryModel;
+    bool batteryResultValid;
+    cfw_battery_result_t batteryResult;
 } cfw_box_t;
 
 typedef struct
@@ -162,6 +167,11 @@ void cfw_library_unlock(void);
 
 uint32_t cfw_temp_number(void);
 uint8_t *cfw_read_file(const char *path, size_t maxLength, size_t *length);
+/* under the lock: feeds the last battery report to the box's model; a copy of the model to save */
+cfw_battery_model_t *cfw_battery_update(cfw_box_t *box, uint64_t uptimeMs);
+/* outside the lock: writes the copy and frees it */
+void cfw_battery_save(const char *boxId, cfw_battery_model_t *model);
+void cfw_battery_free(cfw_box_t *box);
 bool cfw_write_file(const char *path, const void *data, size_t length);
 char *cfw_dir(const char *base, const char *sub);
 

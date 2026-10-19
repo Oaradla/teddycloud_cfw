@@ -25,3 +25,7 @@ void test_cfw_esp32_image(void);
 void test_cfw_esp32_original(void);
 void test_box_cert_id(void);
 void test_box_cert_issuer_known(void);
+void test_cfw_battery_model_curve(void);
+void test_cfw_battery_model_report(void);
+void test_cfw_battery_model_learns(void);
+void test_cfw_battery_model_start(void);

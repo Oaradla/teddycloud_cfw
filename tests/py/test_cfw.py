@@ -468,8 +468,10 @@ def test_remote_result_and_status(box, box_id, start):
 
 
 def test_battery_report_shown_and_logged(box, box_id, start):
+    later = start.next()
+    later["uptime"] += 120000  # past the first minute of a start, when the voltage is still near rest
     box.rtnl(cfw.record(cfw.FUNC_BATTERY, cfw.battery(3712, station=True, reason=0, adc=920), **start.next()),
-             cfw.record(cfw.FUNC_BATTERY, cfw.battery(3650, low=True, state=2, step=6, adc=905), **start.next()))
+             cfw.record(cfw.FUNC_BATTERY, cfw.battery(3650, low=True, state=2, step=6, adc=905), **later))
 
     def battery():
         entry = next(b for b in api_json("GET", "/api/cfw/boxes")[1]["boxes"] if b["id"] == box_id)
@@ -483,6 +485,13 @@ def test_battery_report_shown_and_logged(box, box_id, start):
     assert lines[0].startswith("time,mv,station,low,critical,implausible,reason,state,step")
     assert lines[1].split(",")[1:7] == ["3712", "1", "0", "0", "0", "0"] and lines[1].split(",")[10] == "920"
     assert lines[2].split(",")[1:10] == ["3650", "0", "1", "0", "0", "1", "2", "6", "0"]
+    # the charge: none on the charger; while playing at step 6 the play drop of that volume (30 mV
+    # until learned) is added, 3680 mV idle is 23 % on the default curve
+    assert battery()["percent"] == 23 and battery()["learned"] is False and "remainingMin" not in battery()
+    sandbox = os.environ.get("TC_SANDBOX")
+    if sandbox:
+        model = json.load(open(os.path.join(sandbox, "config", "cfw", "battery", f"{box_id}.model.json")))
+        assert model["version"] == 1 and model["cycle"]["active"] is True and model["last"]["station"] is False
 
 
 def test_tag_record_names_the_tonie(box, box_id, start):

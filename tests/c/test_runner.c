@@ -37,6 +37,10 @@ static const test_case_t tests[] = {
     {"cfw_strip_volume_fields", test_cfw_strip_volume_fields},
     {"cfw_esp32_image", test_cfw_esp32_image},
     {"cfw_esp32_original", test_cfw_esp32_original},
+    {"cfw_battery_model_curve", test_cfw_battery_model_curve},
+    {"cfw_battery_model_report", test_cfw_battery_model_report},
+    {"cfw_battery_model_start", test_cfw_battery_model_start},
+    {"cfw_battery_model_learns", test_cfw_battery_model_learns},
     {"box_cert_id", test_box_cert_id},
     {"box_cert_issuer_known", test_box_cert_issuer_known},
 };

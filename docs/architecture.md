@@ -117,6 +117,16 @@ the support on.
   `config/cfw/tags/`, box state in `config/cfw/boxes/`, box-wide settings
   are `cfw.box.*`. Battery reports are logged to
   `config/cfw/battery/<box>.csv` and shown by `/api/cfw/battery`.
+- **Charge** (`cfw_battery.c`, the model in `cfw_battery_model.c`, C-tested):
+  every battery report goes through a model per box, kept in
+  `config/cfw/battery/<box>.model.json` (learned from the box's battery log
+  when there is none yet). It reads the charge from a curve of idle voltage
+  (the play drop of the volume band added back while playing, the first
+  minute of a start corrected, five reports smoothed; none on the charger),
+  learns the base drop, the play drop per volume band, and the curve and the
+  capacity (in mV·s, the drops being the measure of the load) from each
+  discharge from near full to the low-battery range. `/api/cfw/boxes` gives
+  `percent`, `remainingMin` (at the volume of the report) and `learned`.
 - **Images** (`cfw_firmware.c`): the library `<firmwaredir>/cfw/`, keyed by
   platform and build (`<build>.*` CC3200, `esp32-<build>.*` ESP32), filled
   by upload, by release zips (both images and `setup.htm`) or from GitHub
@@ -147,7 +157,8 @@ battery, ...) shows up as HA entities automatically.
 With CFW support on, `cfw_mqtt.c` adds the remote control of a box with the
 custom firmware to its HA device: buttons `CfwPause`, `CfwContinue`,
 `CfwStop`, `CfwNext`, `CfwPrev`, the number `CfwVolume` (0-15), the text
-`CfwPlay` (a tag UID) and the sensors `CfwState` and `CfwChapter`, under
+`CfwPlay` (a tag UID), the sensors `CfwState` and `CfwChapter`, and
+`CfwBattery` (%), `CfwBatteryVoltage` (V) and `CfwBatteryRemaining` (min), under
 `<mqtt.topic>/box/<box id>/...` (commands on `.../set`). Commands take the
 same way as `/api/cfw/remote` (`cfw_remote_send`); a status record of the box
 updates the state. The entities are added when the box's HA device is created,

@@ -155,6 +155,33 @@ void cfw_mqtt_add_entities(t_ha_info *ha_info, uint8_t overlay)
     ha_add(ha_info, &entity);
 
     osMemset(&entity, 0, sizeof(entity));
+    entity.id = "CfwBattery";
+    entity.name = "Battery";
+    entity.type = ha_sensor;
+    entity.stat_t = "%s/CfwBattery";
+    entity.unit_of_meas = "%";
+    entity.dev_class = "battery";
+    ha_add(ha_info, &entity);
+
+    osMemset(&entity, 0, sizeof(entity));
+    entity.id = "CfwBatteryVoltage";
+    entity.name = "Battery Voltage";
+    entity.type = ha_sensor;
+    entity.stat_t = "%s/CfwBatteryVoltage";
+    entity.unit_of_meas = "V";
+    entity.dev_class = "voltage";
+    ha_add(ha_info, &entity);
+
+    osMemset(&entity, 0, sizeof(entity));
+    entity.id = "CfwBatteryRemaining";
+    entity.name = "Playing Time Left";
+    entity.type = ha_sensor;
+    entity.stat_t = "%s/CfwBatteryRemaining";
+    entity.unit_of_meas = "min";
+    entity.dev_class = "duration";
+    ha_add(ha_info, &entity);
+
+    osMemset(&entity, 0, sizeof(entity));
     entity.id = "CfwChapter";
     entity.name = "Chapter";
     entity.type = ha_sensor;
@@ -180,4 +207,31 @@ void cfw_mqtt_status(client_ctx_t *client_ctx, const uint32_t *status)
     ha_transmit_topic(ha_info, "%s/CfwChapter", text);
     osSnprintf(text, sizeof(text), "%" PRIu32, status[6] & 0xFF);
     ha_transmit_topic(ha_info, "%s/CfwVolume", text);
+}
+
+void cfw_mqtt_battery(client_ctx_t *client_ctx, uint32_t mv, const cfw_battery_result_t *result)
+{
+    char text[16];
+    if (!settings_get_bool("mqtt.enabled"))
+    {
+        return;
+    }
+    t_ha_info *ha_info = mqtt_get_box(client_ctx);
+    if (ha_info == NULL)
+    {
+        return;
+    }
+    osSnprintf(text, sizeof(text), "%" PRIu32 ".%03" PRIu32, mv / 1000, mv % 1000);
+    ha_transmit_topic(ha_info, "%s/CfwBatteryVoltage", text);
+    /* on the charger the voltage is the charger's: no charge then */
+    if (result->percent >= 0)
+    {
+        osSnprintf(text, sizeof(text), "%d", result->percent);
+        ha_transmit_topic(ha_info, "%s/CfwBattery", text);
+    }
+    if (result->remainingSec)
+    {
+        osSnprintf(text, sizeof(text), "%" PRIu32, result->remainingSec / 60);
+        ha_transmit_topic(ha_info, "%s/CfwBatteryRemaining", text);
+    }
 }

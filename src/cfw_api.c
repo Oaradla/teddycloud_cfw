@@ -293,6 +293,7 @@ error_t handleApiCfwBoxes(HttpConnection *connection, const char_t *uri, const c
         {
             box = *found;
             box.known = NULL;
+            box.batteryModel = NULL; /* only the result is read here */
         }
         bool online = found != NULL && cfw_box_online(found);
         cfw_unlock();
@@ -329,6 +330,18 @@ error_t handleApiCfwBoxes(HttpConnection *connection, const char_t *uri, const c
             cJSON_AddBoolToObject(battery, "implausible", (box.battery[1] >> 3) & 1);
             cJSON_AddNumberToObject(battery, "reason", box.battery[2]);
             cJSON_AddNumberToObject(battery, "time", (double)box.batteryTime);
+            if (box.batteryResultValid)
+            {
+                if (box.batteryResult.percent >= 0)
+                {
+                    cJSON_AddNumberToObject(battery, "percent", box.batteryResult.percent);
+                }
+                if (box.batteryResult.remainingSec)
+                {
+                    cJSON_AddNumberToObject(battery, "remainingMin", box.batteryResult.remainingSec / 60);
+                }
+                cJSON_AddBoolToObject(battery, "learned", box.batteryResult.learned);
+            }
         }
         cJSON *cfw = cJSON_AddObjectToObject(entry, "settings");
         cJSON_AddBoolToObject(cfw, "enabled", settings->cfw.enabled);

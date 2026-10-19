@@ -64,6 +64,8 @@ static const MimeType mimeTypeList[] =
    {".png",   "image/png"},
    {".svg",   "image/svg+xml"},
    {".tif",   "image/tiff"},
+   {".webp",  "image/webp"},
+   {".avif",  "image/avif"},
 
    //Audio MIME types
    {".aac",   "audio/x-aac"},

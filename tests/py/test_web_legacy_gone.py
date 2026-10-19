@@ -112,6 +112,23 @@ class WebLegacyGoneTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn('id="root"', body)
 
+    def test_images_are_served_with_their_type(self):
+        # pictures uploaded for tonies are shown, not downloaded: WebP and AVIF have their own type
+        sandbox = os.environ.get("TC_SANDBOX")
+        if not sandbox:
+            self.skipTest("needs the sandbox from tests/py/with_server.sh")
+        folder = os.path.join(sandbox, "data", "www", "custom_img")
+        os.makedirs(folder, exist_ok=True)
+        try:
+            for name, mime in (("t.webp", "image/webp"), ("t.avif", "image/avif"), ("t.png", "image/png")):
+                with open(os.path.join(folder, name), "wb") as f:
+                    f.write(b"RIFF\0\0\0\0WEBP")
+                status, headers, _ = self.request(f"/custom_img/{name}")
+                self.assertEqual((status, headers.get("content-type")), (200, mime))
+        finally:
+            for name in ("t.webp", "t.avif", "t.png"):
+                os.remove(os.path.join(folder, name))
+
     def test_legacy_admin_gui_is_gone(self):
         status, _, body = self.request("/legacy.html")
         self.assertNotEqual(status, 200)

@@ -624,7 +624,7 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
             if (!strcmp(uri, "/") || !strcmp(uri, "index.shtm"))
             {
                 /* web2 when chosen and installed; 302, so that browsers follow a change of the setting */
-                char *web2 = custom_asprintf("%s/web/v2/index.html", client_ctx->settings->core.wwwdir);
+                char *web2 = custom_asprintf("%s%cweb%cv2%cindex.html", settings_get_string("internal.wwwdirfull"), PATH_SEPARATOR, PATH_SEPARATOR, PATH_SEPARATOR);
                 uri = get_settings()->frontend.default_ui == 1 && fsFileExists(web2) ? "/web/v2/index.html" : "/web";
                 osFreeMem(web2);
                 httpPrepareHeader(connection, "", 0);

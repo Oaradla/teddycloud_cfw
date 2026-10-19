@@ -48,6 +48,37 @@ class WebLegacyGoneTests(unittest.TestCase):
         self.assertEqual(status, 302)
         self.assertEqual(headers.get("location"), "/web")
 
+    def test_web2_as_default_when_installed(self):
+        # the sandbox links the repository's web UI; a folder of its own gets web2 beside a classic index
+        sandbox = os.environ.get("TC_SANDBOX")
+        if not sandbox:
+            self.skipTest("needs the sandbox from tests/py/with_server.sh")
+        web = os.path.join(sandbox, "data", "www", "web")
+        if os.path.islink(web):
+            os.unlink(web)
+        os.makedirs(os.path.join(web, "v2"), exist_ok=True)
+        with open(os.path.join(web, "index.html"), "w") as f:
+            f.write('<div id="root"></div>')
+        with open(os.path.join(web, "v2", "index.html"), "w") as f:
+            f.write("web2")
+        connection = http.client.HTTPConnection(HOST, PORT, timeout=10)
+        connection.request("POST", "/api/settings/set/frontend.default_ui", "1")
+        self.assertEqual(connection.getresponse().status, 200)
+        connection.close()
+        try:
+            status, headers, _ = self.request("/")
+            self.assertEqual(status, 302)
+            self.assertEqual(headers.get("location"), "/web/v2/index.html")
+            status, _, body = self.request("/web/v2/")
+            self.assertEqual((status, body), (200, "web2"))
+        finally:
+            connection = http.client.HTTPConnection(HOST, PORT, timeout=10)
+            connection.request("POST", "/api/settings/reset/frontend.default_ui", "")
+            connection.getresponse().read()
+            connection.close()
+            os.remove(os.path.join(web, "v2", "index.html"))
+            os.rmdir(os.path.join(web, "v2"))
+
     def test_web2_as_default_only_when_installed(self):
         # without web2 under /web/v2/ the classic interface stays the start page
         connection = http.client.HTTPConnection(HOST, PORT, timeout=10)

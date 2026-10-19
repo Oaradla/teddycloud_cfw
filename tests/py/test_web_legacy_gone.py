@@ -71,6 +71,15 @@ class WebLegacyGoneTests(unittest.TestCase):
             self.assertEqual(headers.get("location"), "/web/v2/index.html")
             status, _, body = self.request("/web/v2/")
             self.assertEqual((status, body), (200, "web2"))
+            # the classic entry follows too: browsers keep an old 301 from / to /web
+            for path in ("/web", "/web/"):
+                status, headers, _ = self.request(path)
+                self.assertEqual((status, headers.get("location")), (302, "/web/v2/index.html"))
+            # the classic interface stays reachable by its index and its routes
+            for path in ("/web/index.html", "/web/tonies"):
+                status, _, body = self.request(path)
+                self.assertEqual(status, 200)
+                self.assertIn('id="root"', body)
         finally:
             connection = http.client.HTTPConnection(HOST, PORT, timeout=10)
             connection.request("POST", "/api/settings/reset/frontend.default_ui", "")
@@ -89,6 +98,9 @@ class WebLegacyGoneTests(unittest.TestCase):
             status, headers, _ = self.request("/")
             self.assertEqual(status, 302)
             self.assertEqual(headers.get("location"), "/web")
+            status, _, body = self.request("/web/")
+            self.assertEqual(status, 200)
+            self.assertIn('id="root"', body)
         finally:
             connection = http.client.HTTPConnection(HOST, PORT, timeout=10)
             connection.request("POST", "/api/settings/reset/frontend.default_ui", "")

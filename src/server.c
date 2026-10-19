@@ -621,17 +621,23 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
 
         if (!connection->private.api_access_only)
         {
-            if (!strcmp(uri, "/") || !strcmp(uri, "index.shtm"))
+            /* the start page, and the classic one's entry when web2 is the default: browsers keep the
+             * earlier 301 from / to /web, and bookmarks point there */
+            bool_t start = !strcmp(uri, "/") || !strcmp(uri, "index.shtm");
+            if (start || !strcmp(uri, "/web") || !strcmp(uri, "/web/"))
             {
                 /* web2 when chosen and installed; 302, so that browsers follow a change of the setting */
                 char *web2 = custom_asprintf("%s%cweb%cv2%cindex.html", settings_get_string("internal.wwwdirfull"), PATH_SEPARATOR, PATH_SEPARATOR, PATH_SEPARATOR);
-                uri = get_settings()->frontend.default_ui == 1 && fsFileExists(web2) ? "/web/v2/index.html" : "/web";
+                bool_t toWeb2 = get_settings()->frontend.default_ui == 1 && fsFileExists(web2);
                 osFreeMem(web2);
-                httpPrepareHeader(connection, "", 0);
-                connection->response.keepAlive = false;
-                connection->response.location = uri;
-                connection->response.statusCode = 302;
-                return httpWriteResponseString(connection, "", false);
+                if (start || toWeb2)
+                {
+                    httpPrepareHeader(connection, "", 0);
+                    connection->response.keepAlive = false;
+                    connection->response.location = toWeb2 ? "/web/v2/index.html" : "/web";
+                    connection->response.statusCode = 302;
+                    return httpWriteResponseString(connection, "", false);
+                }
             }
 
             /* web2 keeps its routes in the fragment (#/...), so only its folder itself needs its index */

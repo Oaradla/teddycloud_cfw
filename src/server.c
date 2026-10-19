@@ -178,6 +178,7 @@ request_type_t request_paths[] = {
     {REQ_POST, "/api/cfw/firmware/delete", SERTY_WEB, &handleApiCfwFirmwareDelete},
     {REQ_POST, "/api/cfw/firmware/githubDownload", SERTY_WEB, &handleApiCfwFirmwareGithubDownload},
     {REQ_POST, "/api/cfw/firmware/github", SERTY_WEB, &handleApiCfwFirmwareGithub},
+    {REQ_GET, "/api/cfw/firmware/package", SERTY_WEB, &handleApiCfwFirmwarePackage},
     {REQ_GET, "/api/cfw/firmware", SERTY_WEB, &handleApiCfwFirmwareList},
     {REQ_POST, "/api/cfw/deliver", SERTY_WEB, &handleApiCfwDeliver},
     {REQ_POST, "/api/assignUnknown", SERTY_WEB, &handleApiAssignUnknown},
@@ -622,15 +623,23 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
         {
             if (!strcmp(uri, "/") || !strcmp(uri, "index.shtm"))
             {
-                uri = "/web";
+                /* web2 when chosen and installed; 302, so that browsers follow a change of the setting */
+                char *web2 = custom_asprintf("%s/web/v2/index.html", client_ctx->settings->core.wwwdir);
+                uri = get_settings()->frontend.default_ui == 1 && fsFileExists(web2) ? "/web/v2/index.html" : "/web";
+                osFreeMem(web2);
                 httpPrepareHeader(connection, "", 0);
                 connection->response.keepAlive = false;
                 connection->response.location = uri;
-                connection->response.statusCode = 301;
+                connection->response.statusCode = 302;
                 return httpWriteResponseString(connection, "", false);
             }
 
-            if (!strncmp(uri, "/web", 4) && (uri[4] == '\0' || uri[strlen(uri) - 1] == '/' || !strchr(uri, '.')))
+            /* web2 keeps its routes in the fragment (#/...), so only its folder itself needs its index */
+            if (!strcmp(uri, "/web/v2") || !strcmp(uri, "/web/v2/"))
+            {
+                uri = "/web/v2/index.html";
+            }
+            else if (!strncmp(uri, "/web", 4) && (uri[4] == '\0' || uri[strlen(uri) - 1] == '/' || !strchr(uri, '.')))
             {
                 uri = "/web/index.html";
             }

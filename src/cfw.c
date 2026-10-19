@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "cfw_internal.h"
+#include "cfw_mqtt.h"
 #include "date_time.h"
 #include "debug.h"
 #include "fs_ext.h"
@@ -1073,6 +1074,8 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
     size_t globalLength = 0;
     uint32_t globalTimestamp = 0;
     bool batteryReport = false;
+    bool statusReport = false;
+    uint32_t status[sizeof(((cfw_box_t *)0)->status) / sizeof(uint32_t)];
     uint32_t battery[5];
     char boxId[sizeof(((cfw_box_t *)0)->id)];
     uint32_t build = 0;
@@ -1171,6 +1174,8 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
             }
             box->statusValid = true;
             box->statusTime = time(NULL);
+            osMemcpy(status, box->status, sizeof(status));
+            statusReport = true;
             eventName = "cfw-status";
             osSnprintf(event, sizeof(event), "{\"box\":\"%s\",\"state\":%" PRIu32 "}", box->id, box->status[0]);
         }
@@ -1199,6 +1204,10 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
     }
     cfw_unlock();
 
+    if (statusReport)
+    {
+        cfw_mqtt_status(client_ctx, status);
+    }
     if (batteryReport)
     {
         battery_log(boxId, battery, time(NULL), log2->uptime, build);
@@ -1215,6 +1224,37 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
     {
         show_settings_once();
     }
+}
+
+uint_t cfw_remote_send(settings_t *settings, uint8_t command, const uint8_t *args, size_t argsLength, char *message, size_t messageSize)
+{
+    uint_t status = 409;
+    cfw_lock();
+    cfw_box_t *box = cfw_box_get(settings);
+    if (!get_settings()->cfw.enabled || !settings->cfw.enabled || !settings->cfw.remote_control)
+    {
+        osSnprintf(message, messageSize, "remote control is switched off for this box");
+    }
+    else if (box == NULL || !box->helloValid)
+    {
+        osSnprintf(message, messageSize, "the box is not connected with the custom firmware");
+    }
+    else if (!(box->capabilities & CFW_CAP_REMOTE))
+    {
+        osSnprintf(message, messageSize, "the firmware of the box has no remote control");
+    }
+    else if (!cfw_remote_queue(box, command, args, argsLength))
+    {
+        status = 429;
+        osSnprintf(message, messageSize, "too many commands waiting");
+    }
+    else
+    {
+        status = 200;
+        osSnprintf(message, messageSize, "OK");
+    }
+    cfw_unlock();
+    return status;
 }
 
 bool cfw_remote_queue(cfw_box_t *box, uint8_t command, const uint8_t *args, size_t argsLength)

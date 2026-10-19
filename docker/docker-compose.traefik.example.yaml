@@ -11,7 +11,7 @@
 
 services:
   teddycloud:
-    image: ghcr.io/oaradla/teddycloud_cfw:latest
+    image: ghcr.io/toniebox-reverse-engineering/teddycloud:latest
     hostname: teddycloud
     environment:
       # Recovery only — bypasses web UI login:

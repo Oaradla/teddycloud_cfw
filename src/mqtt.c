@@ -33,6 +33,7 @@ typedef struct
 #include "mutex_manager.h"
 #include "mqtt.h"
 #include "toniebox_state.h"
+#include "cfw_mqtt.h"
 
 #define MQTT_BOX_INSTANCES 32
 t_ha_info *mqtt_get_box(client_ctx_t *client_ctx);
@@ -1260,6 +1261,7 @@ error_t mqtt_init_box(t_ha_info *ha_box_instance, client_ctx_t *client_ctx)
         entity.transmit_ctx = cmd_ctx;
         ha_add(ha_box_instance, &entity);
     }
+    cfw_mqtt_add_entities(ha_box_instance, client_ctx->settings->internal.overlayNumber);
 
     return NO_ERROR;
 }

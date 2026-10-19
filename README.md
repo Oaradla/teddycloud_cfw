@@ -1,5 +1,37 @@
 # TeddyCloud
 
+## What teddyCloud CFW adds
+
+teddyCloud CFW serves first-generation Tonieboxes (CC3200 and ESP32-S3) that run the custom firmware (CFW). Everything sits behind the setting **CFW support** (`cfw.enabled`). It is off by default, and then teddyCloud behaves like the original. Requests that only the CFW sends never go to the cloud, and towards the cloud the box presents itself as an original box.
+
+**Settings per tonie** (in the tonie's edit dialog)
+- **Figure profile:** resume (the figure continues where it stopped, even if other figures played in between), shuffle (every chapter exactly once), sleep timer (gets quieter after a third of the time, switches the box off at the end), maximum volume and LED brightness while the figure is on the box, slap, tilt and volume locks.
+- **Event tag:** plays nothing, but runs actions, either for the next figure or for the whole box. Actions can be combined (e.g. sleep timer, locks, volume limit, start volume, LED), and each one can switch on, switch off or toggle. Optional confirmation tones: rising for "on", falling for "off". A box without the CFW hears a notice instead (German, English or French).
+
+**Settings per box**
+- Speaker and headphone volume limits in 15 steps instead of 4.
+- Switch off by briefly pressing both ears.
+- Slap, tilt and volume locks.
+- Changes made on the box are synchronised with teddyCloud.
+
+**Remote control and status** (box card)
+- Pause, continue, stop, next/previous chapter, volume, play a given tonie, request the status, check for an update now.
+- Firmware version, battery voltage and charging station shown; optional battery log per box as CSV.
+- The same remote control in Home Assistant through MQTT: buttons, a volume slider, a text field that plays a tag UID, and the player state and chapter, on the box's MQTT device (needs `mqtt.enabled`; the box needs remote control on).
+
+**Firmware updates through teddyCloud** (tab *Tonieboxes → Box Update*)
+- Library for release packages (CC3200, ESP32 and setup page in one zip) and single images.
+- Channels release, beta and alpha; per box manual assignment or automatically the newest image of the channel.
+- Download from GitHub releases, manually or automatically at an interval, with certificate and digest check.
+- **Trial start:** the box writes the update into a free slot and starts it once as a trial. If the new image does not confirm itself, the box starts the previous one again; teddyCloud detects the rollback and does not offer that image again.
+- The matching setup page is delivered along with the image.
+- ESP32 boxes: the way back to the original firmware also goes through teddyCloud, with the server and port patches applied.
+
+**What the box can do with the CFW**
+- **Slap upside down:** restarts the content from the beginning.
+- **Setup page of the box** (in setup mode, through its own Wi-Fi access point): Wi-Fi with network scan, box language, server host and port, certificate upload (CA, client certificate, private key), and **delete buttons** for stored Wi-Fi networks, local contents and settings, and the server settings. They replace the factory reset.
+- Plus everything above on the box side: figure profiles, event tags, remote control, updates with trial start.
+
 ## Features
 TeddyCloud is an alternative server for your Toniebox, allowing you to host the cloud services locally.
 This gives you the control about which data is sent to the original manufacturer's cloud and allows you

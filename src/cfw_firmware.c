@@ -609,8 +609,17 @@ static bool ends_with(const char *name, size_t length, const char *suffix)
 static bool set_page(const char *platform, uint32_t build, const uint8_t *data, size_t size, const char *fallbackLabel, uint32_t *page, char *label,
                      size_t labelSize, char *message, size_t messageSize);
 
+/* files of a release package that install a CC3200 box by hand or in the browser, no images: the SD
+   bootloader, its preloader for the flash and the SD card tree */
+static bool package_extra(const char *name, size_t length)
+{
+    return ends_with(name, length, "ngbootloader.bin") || (length >= 13 && osStrncmp(name, "cc3200/flash/", 13) == 0) ||
+           (length >= 12 && osStrncmp(name, "cc3200/card/", 12) == 0);
+}
+
 /* the images of a release package: every .bin of the zip into the library, its setup.htm as the page
-   of each of them */
+   of each of them; with a card tree the package is kept beside the CC3200 image (<build>.zip), from
+   which the web UI installs a box */
 static bool import_zip(const uint8_t *zip, size_t length, uint32_t channel, const char *source, const char *githubTag, const char *notes,
                        cfw_image_t *images, size_t *count, char *message, size_t messageSize)
 {
@@ -620,11 +629,14 @@ static bool import_zip(const uint8_t *zip, size_t length, uint32_t channel, cons
     const uint8_t *page = NULL;
     size_t pageSize = 0;
     bool failed = false;
+    bool card = false;
     *count = 0;
     while (cfw_zip_next(zip, length, &pos, &entry))
     {
-        bool bin = ends_with(entry.name, entry.nameLength, ".bin");
-        bool htm = ends_with(entry.name, entry.nameLength, "setup.htm");
+        bool extra = package_extra(entry.name, entry.nameLength);
+        card |= extra && osStrncmp(entry.name, "cc3200/card/", 12) == 0;
+        bool bin = !extra && ends_with(entry.name, entry.nameLength, ".bin");
+        bool htm = !extra && ends_with(entry.name, entry.nameLength, "setup.htm");
         if (!bin && !htm)
         {
             continue;
@@ -665,6 +677,15 @@ static bool import_zip(const uint8_t *zip, size_t length, uint32_t channel, cons
             osSnprintf(message, messageSize, "no image in the package");
         }
         return false;
+    }
+    for (size_t i = 0; card && i < *count; i++)
+    {
+        char *path = is_esp32(images[i].platform) ? NULL : firmware_path(images[i].platform, images[i].build, "zip");
+        if (path != NULL && !cfw_write_file(path, zip, length))
+        {
+            osSnprintf(message, messageSize, "the package could not be kept for the installation in the browser");
+        }
+        osFreeMem(path);
     }
     for (size_t i = 0; page != NULL && i < *count; i++)
     {
@@ -807,6 +828,7 @@ static bool firmware_import(const char *tmpPath, uint32_t channel, const char *s
 bool cfw_firmware_import(const char *tmpPath, uint32_t channel, const char *source, const char *githubTag, const char *notes,
                          const cfw_esp32_patch_t *patch, cfw_image_t *images, size_t *count, char *message, size_t messageSize)
 {
+    message[0] = '\0';
     cfw_library_lock();
     bool imported = firmware_import(tmpPath, channel, source, githubTag, notes, patch, images, count, message, messageSize);
     cfw_library_unlock();
@@ -819,10 +841,15 @@ bool cfw_firmware_delete(const char *platform, uint32_t build)
     char *image = firmware_path(platform, build, "bin");
     char *meta = firmware_path(platform, build, "json");
     char *page = firmware_path(platform, build, "htm");
+    char *package = firmware_path(platform, build, "zip");
     bool deleted = image != NULL && meta != NULL && fsDeleteFile(image) == NO_ERROR;
     if (deleted)
     {
         fsDeleteFile(meta);
+        if (package != NULL)
+        {
+            fsDeleteFile(package);
+        }
         if (page != NULL)
         {
             fsDeleteFile(page);
@@ -832,7 +859,19 @@ bool cfw_firmware_delete(const char *platform, uint32_t build)
     osFreeMem(image);
     osFreeMem(meta);
     osFreeMem(page);
+    osFreeMem(package);
     return deleted;
+}
+
+char *cfw_firmware_package(uint32_t build)
+{
+    char *path = firmware_path(CFW_PLATFORM_CC3200, build, "zip");
+    if (path != NULL && !fsFileExists(path))
+    {
+        osFreeMem(path);
+        path = NULL;
+    }
+    return path;
 }
 
 /* from the User-Agent of the current start; without one (the settings were reloaded since) the platform the box

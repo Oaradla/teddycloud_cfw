@@ -1,0 +1,21 @@
+{
+    "name": "TeddyCloud",
+    "short_name": "TeddyCloud",
+    "description": "Tonieboxen, Tonies und Inhalte verwalten",
+    "id": "./index.html",
+    "start_url": "./index.html#/",
+    "scope": "./",
+    "display": "standalone",
+    "orientation": "any",
+    "background_color": "#f6f5f2",
+    "theme_color": "#f6f5f2",
+    "icons": [
+        { "src": "icons/web-app-manifest-light-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+        { "src": "icons/web-app-manifest-light-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    ],
+    "shortcuts": [
+        { "name": "Tonies", "url": "./index.html#/tonies" },
+        { "name": "Bibliothek", "url": "./index.html#/library" },
+        { "name": "Hochladen", "url": "./index.html#/upload" }
+    ]
+}

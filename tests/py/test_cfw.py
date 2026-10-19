@@ -24,6 +24,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from sim import cfw  # noqa: E402
 from sim.box import Box  # noqa: E402
+from sim.mqtt_broker import MqttBroker  # noqa: E402
 from sim.upstream import FakeCloud  # noqa: E402
 
 BASE = urlparse(os.environ.get("TEDDYCLOUD_BASE_URL", "http://127.0.0.1:80"))
@@ -50,6 +51,16 @@ def api(method, path, body=None, headers=None):
         conn.request(method, path, json.dumps(body) if isinstance(body, dict) else body, headers or {})
         resp = conn.getresponse()
         return resp.status, resp.read().decode(errors="replace")
+    finally:
+        conn.close()
+
+
+def api_bytes(method, path):
+    conn = http.client.HTTPConnection(BASE.hostname, BASE.port, timeout=30)
+    try:
+        conn.request(method, path)
+        resp = conn.getresponse()
+        return resp.status, resp.read()
     finally:
         conn.close()
 
@@ -370,6 +381,40 @@ def test_remote_command_reaches_the_box(box, box_id, start):
         assert all(field != 2 for frame in frames for field, _ in frame)
     finally:
         sock.close()
+
+
+def test_remote_control_through_mqtt(box, box_id, start):
+    # Home Assistant: buttons, volume and play tag on the MQTT device of the box, and its state
+    broker = MqttBroker()
+    sock = None
+    status = struct.pack("<9I", 2, 0, 0, 0, 3, 0, 5 | (15 << 8), 0, 0)
+    try:
+        box.rtnl(cfw.record(cfw.FUNC_STATUS, status, **start.next()))
+        set_setting("mqtt.hostname", "127.0.0.1")
+        set_setting("mqtt.port", broker.port)
+        set_setting("mqtt.enabled", True)
+        pause = f"/box/{box_id}/CfwPause/set".lower()
+        wait_until(lambda: any(t.lower().endswith(pause) for t in list(broker.subscribed)), timeout=30)
+        base = next(t for t in list(broker.subscribed) if t.lower().endswith(pause))[: -len("/CfwPause/set")]
+        wait_until(lambda: any("CfwVolume" in t and t.endswith("/config") for t in list(broker.published)))
+
+        sock = box.rtnl(cfw.hello(BUILD, CAPS_ALL, **start.next()), keep_open=True)
+        reader = cfw.FrameReader(sock)
+        broker.publish(base + "/CfwPause/set", "PRESS")
+        broker.publish(base + "/CfwVolume/set", "11")
+        frames = []
+        wait_until(lambda: frames.extend(reader.frames(0.5)) or (any((1, 65) in f for f in frames) and [(1, 70), (3, b"\x0b")] in frames), timeout=10)
+
+        box.rtnl(cfw.record(cfw.FUNC_STATUS, status, **start.next()))
+        wait_until(lambda: broker.value(base + "/CfwState") == "playing")
+        assert broker.value(base + "/CfwChapter") == "3" and broker.value(base + "/CfwVolume") == "5"
+    finally:
+        set_setting("mqtt.enabled", False)
+        reset_setting("mqtt.hostname")
+        reset_setting("mqtt.port")
+        if sock:
+            sock.close()
+        broker.close()
 
 
 def test_update_check_now_without_assignment(box, box_id, start):
@@ -899,7 +944,11 @@ def test_release_package_with_setup_page():
     first, second, third = BUILD + 300, BUILD + 400, BUILD + 500
     packages = [
         # built from one commit, both images carry the same build number
-        {"cc3200/ng-cfw.bin": cfw.slot_image(first), "esp32/toniebox-cfw-esp32.bin": cfw.esp32_image(first), "setup.htm": page1, "README.md": readme},
+        # the SD bootloader, its preloader and the card tree travel with the package but are no images
+        {"cc3200/ng-cfw.bin": cfw.slot_image(first), "cc3200/ngbootloader.bin": bytes(range(256)) * 64,
+         "cc3200/flash/sys/mcuimg.bin": bytes(range(256)) * 32, "cc3200/card/revvox/boot/ng-cfw1.bin": cfw.slot_image(first),
+         "cc3200/card/revvox/boot/ngbootloader.bin": bytes(range(256)) * 64, "cc3200/card/cfw/setup.htm": b"<html>card copy</html>",
+         "esp32/toniebox-cfw-esp32.bin": cfw.esp32_image(first), "setup.htm": page1, "README.md": readme},
         {"cc3200/ng-cfw.bin": cfw.slot_image(second), "setup.htm": page1},
         {"cc3200/ng-cfw.bin": cfw.slot_image(third), "setup.htm": page2},
     ]
@@ -907,13 +956,21 @@ def test_release_package_with_setup_page():
     mac = "deadbeefc031"
     runner = None
     try:
-        status, result = upload(cfw.release_package(packages[0]), "beta")
+        package = cfw.release_package(packages[0])
+        status, result = upload(package, "beta")
         assert status == 200 and sorted((i["build"], i["platform"]) for i in result["images"]) == [(first, "cc3200"), (first, "esp32")]
+        assert result["message"] == "OK", result["message"]
+        # kept for the installation in the browser, beside the CC3200 image only
+        assert library_entry(first, "cc3200")["package"] and not library_entry(first, "esp32")["package"]
+        status, body = api_bytes("GET", f"/api/cfw/firmware/package?build={first}")
+        assert status == 200 and body == package
         for platform, version in (("cc3200", "CFW_0.2.0"), ("esp32", "CFW_0.3.0")):
             entry = library_entry(first, platform)
             # a page without its own version gets the one of the image it came with
             assert entry["page"] == cfw.page_version(page1) and entry["pageNew"] and entry["pageLabel"] == version
         assert upload(cfw.release_package(packages[1]), "beta")[0] == 200
+        assert not library_entry(second)["package"]
+        assert api_bytes("GET", f"/api/cfw/firmware/package?build={second}")[0] == 404
         assert library_entry(second)["page"] == cfw.page_version(page1) and not library_entry(second)["pageNew"]
         assert upload(cfw.release_package(packages[2]), "beta")[0] == 200
         assert library_entry(third)["page"] == cfw.page_version(page2) and library_entry(third)["pageNew"]

@@ -283,7 +283,32 @@
             "esp32Return": "back to the original firmware {{version}}",
             "esp32ReturnHint": "At its next update check the box gets the original firmware, writes it into the free slot and starts it. The previous original slot stays unchanged. The assignment is removed afterwards.",
             "supportOff": "The custom firmware support of teddyCloud is switched off. Switch on \"CFW support\" in the settings to deliver firmware to the boxes.",
-            "githubRepoPlaceholder": "owner/name"
+            "githubRepoPlaceholder": "owner/name",
+            "guide": {
+                "title": "Getting the custom firmware onto a box",
+                "intro": "This is how a box that still runs the original firmware gets the custom firmware. The way depends on the chip of the box (<identify>identify the box version</identify>). teddyCloud's CFW support has to be switched on for it.",
+                "cc3200": {
+                    "title": "Toniebox with CC3200 chip (SD card)",
+                    "step1": "The box must already run with teddyCloud and have the HackieboxNG SD bootloader. See <setup>Add Toniebox</setup> (CC3200) for how to do that.",
+                    "step2": "Take the release package of the custom firmware (<code>toniebox-cfw-….zip</code>), the same one you load into the library below, and unpack it on your computer.",
+                    "step3": "The custom firmware needs the adapted HackieboxNG bootloader with trial start and automatic return on updates. It is in the package as <code>cc3200/ngbootloader.bin</code>: copy it over <code>/revvox/boot/ngbootloader.bin</code> on the SD card.",
+                    "step4": "Copy to the SD card: <code>cc3200/ng-cfw.bin</code> to <code>/revvox/boot/ng-cfw1.bin</code> and <code>setup.htm</code> to <code>/cfw/setup.htm</code>.",
+                    "step5": "Enter the server in <code>/cfw/config.txt</code>: <code>host={{host}}</code> (and <code>port=</code> if needed). It can be changed later on the setup page of the box too.",
+                    "step6": "In <code>/revvox/boot/ngCfg.json</code> set <code>\"activeImg\": \"cfw1\"</code> and <code>\"stateFile\": \"/revvox/boot/ngstate.bin\"</code> under <code>general</code>. The original firmware stays: with the previous <code>activeImg</code> (usually <code>\"ofw1\"</code>) the box starts as before.",
+                    "step7": "Put the card back and start the box. It reports to teddyCloud with the custom firmware and shows up here under \"Boxes\". All further updates come through this page."
+                },
+                "esp32": {
+                    "title": "Toniebox with ESP32 chip (through teddyCloud)",
+                    "step1": "The box must run the original firmware patched for teddyCloud, see <setup>Add Toniebox</setup> (ESP32). Keep the flash dump made there in a safe place.",
+                    "step2": "Load the flash dump of the original firmware into the library below (the patches for teddyCloud are explained at the upload). With it the box can go back to the original firmware at any time.",
+                    "step3": "Load the release package of the custom firmware (<code>toniebox-cfw-….zip</code>) into the library below.",
+                    "step4": "Under \"Boxes\" the box is listed as \"Original firmware / unknown\". Assign the ESP32 image to it.",
+                    "step5": "Restart the box. At its update check it downloads the image once, with this server ({{host}}) already set, writes it into the free slot and starts the custom firmware. The box does not have to be opened.",
+                    "step6": "Back to the original firmware: assign the image of the original firmware to the box. It installs it at its next update check."
+                },
+                "enable": "Switch on CFW support",
+                "enabled": "CFW support switched on"
+            }
         },
         "sectionTitle": "Custom firmware",
         "loadError": "Could not load the CFW settings",

@@ -121,6 +121,7 @@ typedef struct
     bool confirm_audioplayer_close;
     bool check_cc3200_cfw;
     bool web_auth_enabled;
+    uint32_t default_ui;
 } settings_frontend_t;
 
 typedef struct

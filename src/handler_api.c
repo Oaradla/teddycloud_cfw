@@ -1,3 +1,4 @@
+#include <ctype.h>
 
 #include <sys/types.h>
 #include <time.h>
@@ -1308,12 +1309,32 @@ error_t handleApiUploadCert(HttpConnection *connection, const char_t *uri, const
     uint_t statusCode = 500;
     char message[128] = {0};
     char overlay[16] = {0};
+    char mac[16] = {0};
+    char *macPath = NULL;
 
     if (queryGet(queryString, "overlay", overlay, sizeof(overlay)))
     {
         TRACE_DEBUG("got overlay '%s'\r\n", overlay);
     }
-    const char *rootPath = settings_get_string_ovl("internal.certdirfull", overlay);
+    /* a box that is not known yet (set up in the browser): <certdir>/<mac>, as the ESP32 extraction does */
+    bool_t byMac = queryGet(queryString, "mac", mac, sizeof(mac));
+    bool_t macValid = byMac && osStrlen(mac) == 12;
+    for (size_t i = 0; macValid && i < 12; i++)
+    {
+        macValid = isxdigit((unsigned char)mac[i]) != 0;
+    }
+    if (byMac && !macValid)
+    {
+        httpPrepareHeader(connection, "text/plain; charset=utf-8", 11);
+        connection->response.statusCode = 400;
+        return httpWriteResponseString(connection, "invalid mac", false);
+    }
+    if (byMac)
+    {
+        osStringToLower(mac);
+        macPath = custom_asprintf("%s%c%s", get_settings()->internal.certdirfull, PATH_SEPARATOR, mac);
+    }
+    const char *rootPath = byMac ? macPath : settings_get_string_ovl("internal.certdirfull", overlay);
     error_t dirError = rootPath != NULL && !fsDirExists(rootPath) ? fsCreateDirEx(rootPath, true) : NO_ERROR;
 
     if (rootPath == NULL)
@@ -1337,7 +1358,8 @@ error_t handleApiUploadCert(HttpConnection *connection, const char_t *uri, const
 
         cbr.multipart_start = &file_save_start_cert;
         cbr.multipart_add = &file_save_add;
-        cbr.multipart_end = &file_save_end_cert;
+        /* by MAC the files only land in the box's directory; the settings follow when the box connects */
+        cbr.multipart_end = byMac ? &file_save_end : &file_save_end_cert;
 
         ctx.root_path = rootPath;
         ctx.overlay = overlay;
@@ -1347,6 +1369,19 @@ error_t handleApiUploadCert(HttpConnection *connection, const char_t *uri, const
         case NO_ERROR:
             statusCode = 200;
             osSnprintf(message, sizeof(message), "OK");
+            /* the first box: its certificates also become the default ones, which the server uses towards the cloud */
+            for (size_t i = 0; byMac && i < 3; i++)
+            {
+                static const char *const names[] = {"ca.der", "client.der", "private.der"};
+                char *from = custom_asprintf("%s%c%s", macPath, PATH_SEPARATOR, names[i]);
+                char *to = custom_asprintf("%s%c%s", get_settings()->internal.certdirfull, PATH_SEPARATOR, names[i]);
+                if (fsFileExists(from) && !fsFileExists(to) && fsCopyFile(from, to, false) == NO_ERROR)
+                {
+                    osChmodOwnerOnly(to);
+                }
+                osFreeMem(from);
+                osFreeMem(to);
+            }
             break;
         default:
             statusCode = 500;
@@ -1354,6 +1389,7 @@ error_t handleApiUploadCert(HttpConnection *connection, const char_t *uri, const
         }
     }
 
+    osFreeMem(macPath);
     httpPrepareHeader(connection, "text/plain; charset=utf-8", osStrlen(message));
     connection->response.statusCode = statusCode;
 

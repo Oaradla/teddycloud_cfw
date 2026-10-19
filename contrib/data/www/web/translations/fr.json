@@ -283,7 +283,32 @@
             "esp32Return": "retour au firmware d'origine {{version}}",
             "esp32ReturnHint": "Lors de sa prochaine vérification des mises à jour, la box reçoit le firmware d'origine, l'écrit dans l'emplacement libre et le démarre. L'ancien emplacement d'origine reste inchangé. L'attribution est ensuite supprimée.",
             "supportOff": "La prise en charge du firmware personnalisé de teddyCloud est désactivée. Activez « Prise en charge CFW » dans les paramètres pour livrer du firmware aux box.",
-            "githubRepoPlaceholder": "propriétaire/nom"
+            "githubRepoPlaceholder": "propriétaire/nom",
+            "guide": {
+                "title": "Installer le firmware personnalisé sur une box",
+                "intro": "Voici comment une box qui a encore le firmware d'origine reçoit le firmware personnalisé. La méthode dépend de la puce de la box (<identify>identifier la version de la box</identify>). Le support CFW de teddyCloud doit être activé.",
+                "cc3200": {
+                    "title": "Toniebox avec puce CC3200 (carte SD)",
+                    "step1": "La box doit déjà fonctionner avec teddyCloud et avoir le chargeur d'amorçage SD HackieboxNG. Voir <setup>Ajouter Toniebox</setup> (CC3200).",
+                    "step2": "Prends le paquet de version du firmware personnalisé (<code>toniebox-cfw-….zip</code>), le même que tu charges dans la bibliothèque ci-dessous, et décompresse-le sur ton ordinateur.",
+                    "step3": "Le firmware personnalisé a besoin du chargeur d'amorçage HackieboxNG adapté, avec démarrage d'essai et retour automatique lors des mises à jour. Il se trouve dans le paquet sous <code>cc3200/ngbootloader.bin</code> : copie-le sur <code>/revvox/boot/ngbootloader.bin</code> de la carte SD.",
+                    "step4": "Copie sur la carte SD : <code>cc3200/ng-cfw.bin</code> vers <code>/revvox/boot/ng-cfw1.bin</code> et <code>setup.htm</code> vers <code>/cfw/setup.htm</code>.",
+                    "step5": "Indique le serveur dans <code>/cfw/config.txt</code> : <code>host={{host}}</code> (et <code>port=</code> si besoin). Il peut aussi être modifié plus tard sur la page de configuration de la box.",
+                    "step6": "Dans <code>/revvox/boot/ngCfg.json</code>, sous <code>general</code>, mets <code>\"activeImg\": \"cfw1\"</code> et <code>\"stateFile\": \"/revvox/boot/ngstate.bin\"</code>. Le firmware d'origine reste : avec l'<code>activeImg</code> précédent (souvent <code>\"ofw1\"</code>) la box démarre comme avant.",
+                    "step7": "Remets la carte et démarre la box. Elle se connecte à teddyCloud avec le firmware personnalisé et apparaît ici sous « Box ». Toutes les mises à jour suivantes passent par cette page."
+                },
+                "esp32": {
+                    "title": "Toniebox avec puce ESP32 (via teddyCloud)",
+                    "step1": "La box doit fonctionner avec le firmware d'origine patché pour teddyCloud, voir <setup>Ajouter Toniebox</setup> (ESP32). Conserve bien le dump flash créé à cette occasion.",
+                    "step2": "Charge le dump flash du firmware d'origine dans la bibliothèque ci-dessous (les patchs pour teddyCloud sont expliqués au chargement). Ainsi la box peut revenir au firmware d'origine à tout moment.",
+                    "step3": "Charge le paquet de version du firmware personnalisé (<code>toniebox-cfw-….zip</code>) dans la bibliothèque ci-dessous.",
+                    "step4": "Sous « Box », la box apparaît comme « Firmware d'origine / inconnue ». Attribue-lui l'image ESP32.",
+                    "step5": "Redémarre la box. Lors de sa vérification de mise à jour, elle télécharge l'image une fois, avec ce serveur ({{host}}) déjà réglé, l'écrit dans l'emplacement libre et démarre le firmware personnalisé. Inutile d'ouvrir la box.",
+                    "step6": "Retour au firmware d'origine : attribue à la box l'image du firmware d'origine. Elle l'installe lors de la vérification suivante."
+                },
+                "enable": "Activer le support CFW",
+                "enabled": "Support CFW activé"
+            }
         },
         "sectionTitle": "Firmware personnalisée",
         "loadError": "Impossible de charger les paramètres CFW",

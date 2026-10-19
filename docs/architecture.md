@@ -144,6 +144,15 @@ broker so local clients can subscribe without running an external one.
 (`homeassistant/<type>/<id>/<entity>/config`) so box state (tag, playback,
 battery, ...) shows up as HA entities automatically.
 
+With CFW support on, `cfw_mqtt.c` adds the remote control of a box with the
+custom firmware to its HA device: buttons `CfwPause`, `CfwContinue`,
+`CfwStop`, `CfwNext`, `CfwPrev`, the number `CfwVolume` (0-15), the text
+`CfwPlay` (a tag UID) and the sensors `CfwState` and `CfwChapter`, under
+`<mqtt.topic>/box/<box id>/...` (commands on `.../set`). Commands take the
+same way as `/api/cfw/remote` (`cfw_remote_send`); a status record of the box
+updates the state. The entities are added when the box's HA device is created,
+so switching CFW support on needs a restart to add them to boxes known before.
+
 ## Settings
 
 `settings.c` declares configuration as a macro-based option table

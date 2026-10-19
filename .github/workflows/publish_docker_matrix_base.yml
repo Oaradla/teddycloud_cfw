@@ -38,11 +38,10 @@ on:
 
 # permissions are needed if pushing to ghcr.io
 permissions:
-  contents: read
   packages: write
 
 env:
-  REGISTRY_IMAGE: ghcr.io/oaradla/teddycloud_cfw
+  REGISTRY_IMAGE: ghcr.io/toniebox-reverse-engineering/teddycloud
 
 jobs:
   build:
@@ -53,7 +52,7 @@ jobs:
     # aarch64 is built/tested natively so AddressSanitizer works (QEMU-user
     # emulation cannot satisfy libasan's fixed 64-bit allocator mapping).
     # All other platforms stay on the amd64 runner and cross-build via QEMU.
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.platform == 'linux/arm64/v8' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v7
         with:

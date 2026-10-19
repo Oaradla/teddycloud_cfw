@@ -283,7 +283,32 @@
             "esp32Return": "zurück zur Original-Firmware {{version}}",
             "esp32ReturnHint": "Die Box bekommt beim nächsten Update-Check die Original-Firmware, schreibt sie in den freien Slot und startet sie. Der bisherige Original-Slot bleibt unverändert. Danach wird die Zuweisung entfernt.",
             "supportOff": "Die Custom-Firmware-Unterstützung von teddyCloud ist ausgeschaltet. Schalte in den Einstellungen \"CFW-Unterstützung\" ein, um Firmware an die Boxen auszuliefern.",
-            "githubRepoPlaceholder": "Besitzer/Name"
+            "githubRepoPlaceholder": "Besitzer/Name",
+            "guide": {
+                "title": "Custom-Firmware auf eine Box bringen",
+                "intro": "So kommt die Custom-Firmware auf eine Box, die noch die Original-Firmware hat. Der Weg hängt vom Chip der Box ab (<identify>Box-Version bestimmen</identify>). Die CFW-Unterstützung von teddyCloud muss dafür eingeschaltet sein.",
+                "cc3200": {
+                    "title": "Toniebox mit CC3200-Chip (SD-Karte)",
+                    "step1": "Die Box muss bereits mit teddyCloud laufen und den HackieboxNG-SD-Bootloader haben. Wie das geht, steht unter <setup>Toniebox hinzufügen</setup> (CC3200).",
+                    "step2": "Nimm das Release-Paket der Custom-Firmware (<code>toniebox-cfw-….zip</code>), also dasselbe, das du unten in die Bibliothek lädst, und entpacke es auf deinem Rechner.",
+                    "step3": "Die Custom-Firmware braucht den angepassten HackieboxNG-Bootloader mit Probestart und automatischer Rückkehr bei Updates. Er liegt im Paket als <code>cc3200/ngbootloader.bin</code>: kopiere ihn über <code>/revvox/boot/ngbootloader.bin</code> auf der SD-Karte.",
+                    "step4": "Kopiere auf die SD-Karte: <code>cc3200/ng-cfw.bin</code> nach <code>/revvox/boot/ng-cfw1.bin</code> und <code>setup.htm</code> nach <code>/cfw/setup.htm</code>.",
+                    "step5": "Den Server in <code>/cfw/config.txt</code> eintragen: <code>host={{host}}</code> (bei Bedarf auch <code>port=</code>). Das lässt sich später auch auf der Setup-Seite der Box ändern.",
+                    "step6": "In <code>/revvox/boot/ngCfg.json</code> unter <code>general</code> <code>\"activeImg\": \"cfw1\"</code> und <code>\"stateFile\": \"/revvox/boot/ngstate.bin\"</code> setzen. Die Original-Firmware bleibt erhalten: Mit dem vorherigen <code>activeImg</code> (meist <code>\"ofw1\"</code>) startet die Box wieder wie vorher.",
+                    "step7": "Karte wieder einsetzen und die Box starten. Sie meldet sich mit der Custom-Firmware bei teddyCloud und erscheint hier unter „Boxen“. Alle weiteren Updates kommen über diese Seite."
+                },
+                "esp32": {
+                    "title": "Toniebox mit ESP32-Chip (über teddyCloud)",
+                    "step1": "Die Box muss mit der für teddyCloud gepatchten Original-Firmware laufen, siehe <setup>Toniebox hinzufügen</setup> (ESP32). Bewahre den dabei erstellten Flash-Dump gut auf.",
+                    "step2": "Lade den Flash-Dump der Original-Firmware unten in die Bibliothek (die Patches für teddyCloud stehen beim Upload). Damit kann die Box später jederzeit zur Original-Firmware zurück.",
+                    "step3": "Lade das Release-Paket der Custom-Firmware (<code>toniebox-cfw-….zip</code>) unten in die Bibliothek.",
+                    "step4": "Unter „Boxen“ steht die Box mit „Original-Firmware / unbekannt“. Weise ihr das ESP32-Image zu.",
+                    "step5": "Starte die Box neu. Bei ihrer Update-Prüfung lädt sie das Image einmal herunter, mit diesem Server ({{host}}) schon eingetragen, schreibt es in den freien Slot und startet die Custom-Firmware. Die Box muss dafür nicht geöffnet werden.",
+                    "step6": "Zurück zur Original-Firmware: Weise der Box das Image der Original-Firmware zu. Sie installiert es bei der nächsten Update-Prüfung."
+                },
+                "enable": "CFW-Unterstützung einschalten",
+                "enabled": "CFW-Unterstützung eingeschaltet"
+            }
         },
         "sectionTitle": "Custom Firmware",
         "loadError": "CFW-Einstellungen konnten nicht geladen werden",

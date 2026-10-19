@@ -383,6 +383,29 @@ error_t handleApiCfwBattery(HttpConnection *connection, const char_t *uri, const
     return httpWriteResponse(connection, data, length, true);
 }
 
+/* the release package of a CC3200 image, from which the web UI installs a box (preloader, card tree) */
+error_t handleApiCfwFirmwarePackage(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
+{
+    if (!get_settings()->cfw.enabled)
+    {
+        return send_disabled(connection);
+    }
+    char build[16] = "";
+    char *path = queryGet(queryString, "build", build, sizeof(build)) ? cfw_firmware_package((uint32_t)strtoul(build, NULL, 10)) : NULL;
+    size_t length = 0;
+    uint8_t *data = path ? cfw_read_file(path, 16 * 1024 * 1024, &length) : NULL;
+    osFreeMem(path);
+    if (data == NULL)
+    {
+        return send_message(connection, 404, "no release package with a card tree for this build");
+    }
+    httpInitResponseHeader(connection);
+    connection->response.contentType = "application/zip";
+    connection->response.contentLength = length;
+    connection->response.statusCode = 200;
+    return httpWriteResponse(connection, data, length, true);
+}
+
 error_t handleApiCfwTags(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
     if (!get_settings()->cfw.enabled)
@@ -505,11 +528,11 @@ static const struct
     const char *name;
     uint8_t command;
 } remote_commands[] = {
-    {"pause", 65},
-    {"continue", 66},
-    {"stop", 67},
-    {"next", 68},
-    {"prev", 69},
+    {"pause", CFW_CMD_PAUSE},
+    {"continue", CFW_CMD_CONTINUE},
+    {"stop", CFW_CMD_STOP},
+    {"next", CFW_CMD_NEXT},
+    {"prev", CFW_CMD_PREV},
     {"volume", CFW_CMD_VOLUME},
     {"play", CFW_CMD_PLAY},
     {"status", 72},
@@ -579,32 +602,7 @@ error_t handleApiCfwRemote(HttpConnection *connection, const char_t *uri, const 
         return send_message(connection, 400, message);
     }
 
-    uint_t status = 409;
-    cfw_lock();
-    cfw_box_t *box = cfw_box_get(settings);
-    if (!settings->cfw.enabled || !settings->cfw.remote_control)
-    {
-        osSnprintf(message, sizeof(message), "remote control is switched off for this box");
-    }
-    else if (box == NULL || !box->helloValid)
-    {
-        osSnprintf(message, sizeof(message), "the box is not connected with the custom firmware");
-    }
-    else if (!(box->capabilities & CFW_CAP_REMOTE))
-    {
-        osSnprintf(message, sizeof(message), "the firmware of the box has no remote control");
-    }
-    else if (!cfw_remote_queue(box, (uint8_t)command, args, argsLength))
-    {
-        status = 429;
-        osSnprintf(message, sizeof(message), "too many commands waiting");
-    }
-    else
-    {
-        status = 200;
-        osSnprintf(message, sizeof(message), "OK");
-    }
-    cfw_unlock();
+    uint_t status = cfw_remote_send(settings, (uint8_t)command, args, argsLength, message, sizeof(message));
     return send_message(connection, status, message);
 }
 
@@ -695,6 +693,9 @@ static cJSON *image_json(const cfw_image_t *image)
     cJSON_AddNumberToObject(entry, "page", image->page);
     cJSON_AddStringToObject(entry, "pageLabel", image->pageLabel);
     cJSON_AddStringToObject(entry, "pageRequires", image->pageRequires);
+    char *package = image->original ? NULL : cfw_firmware_package(image->build);
+    cJSON_AddBoolToObject(entry, "package", package != NULL && osStrcmp(image->platform, CFW_PLATFORM_CC3200) == 0);
+    osFreeMem(package);
     return entry;
 }
 
@@ -859,7 +860,8 @@ error_t handleApiCfwFirmwareUpload(HttpConnection *connection, const char_t *uri
     }
     cJSON *json = cJSON_CreateObject();
     cJSON_AddBoolToObject(json, "ok", true);
-    cJSON_AddStringToObject(json, "message", "OK");
+    /* a package with a file that could not be taken in reports it, though the others were */
+    cJSON_AddStringToObject(json, "message", message[0] ? message : "OK");
     cJSON_AddItemToObject(json, "image", image_json(&images[0]));
     cJSON *list = cJSON_AddArrayToObject(json, "images");
     for (size_t i = 0; i < count; i++)

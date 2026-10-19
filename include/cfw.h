@@ -29,6 +29,9 @@ void cfw_box_seen_request(settings_t *settings, uint32_t build, uint32_t cfwBuil
 /* records the platform of the box IC taken from the User-Agent of a request, which a reload of the settings
    resets (cfw_box_platform) */
 void cfw_box_seen_platform(settings_t *settings);
+/* queues a remote command for the box (CFW_CMD_*), from the API or MQTT; the HTTP status of the
+   outcome (200 queued, 409 switched off or not connected, 429 queue full) with its text in message */
+uint_t cfw_remote_send(settings_t *settings, uint8_t command, const uint8_t *args, size_t argsLength, char *message, size_t messageSize);
 bool cfw_ota_request(HttpConnection *connection, const char_t *uri, client_ctx_t *client_ctx, uint32_t fileId, uint32_t currentVersion, error_t *result);
 
 /* toniebox.max_vol_spk, max_vol_hdp and slap_enabled of a box without the CFW, derived from cfw.box.*
@@ -43,6 +46,7 @@ error_t handleApiCfwTagSet(HttpConnection *connection, const char_t *uri, const 
 error_t handleApiCfwRemote(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiCfwStatus(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiCfwBattery(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
+error_t handleApiCfwFirmwarePackage(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiCfwFirmwareList(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiCfwFirmwareUpload(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiCfwFirmwareEdit(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);

@@ -3,7 +3,7 @@
 Web UI tests: the legacy admin GUI is gone (#489).
 
 Verifies the sunset of the legacy admin GUI:
-- "/" and the parser-rewritten "index.shtm" always redirect to the web UI at /web
+- "/" and the parser-rewritten "index.shtm" redirect to the web UI at /web (web2 only when chosen and installed)
 - "/web/" serves the built SPA
 - the removed "/legacy.html" is no longer served
 
@@ -43,9 +43,26 @@ class WebLegacyGoneTests(unittest.TestCase):
             connection.close()
 
     def test_root_redirects_to_web(self):
+        # 302: a browser must follow a later change of frontend.default_ui
         status, headers, _ = self.request("/")
-        self.assertEqual(status, 301)
+        self.assertEqual(status, 302)
         self.assertEqual(headers.get("location"), "/web")
+
+    def test_web2_as_default_only_when_installed(self):
+        # without web2 under /web/v2/ the classic interface stays the start page
+        connection = http.client.HTTPConnection(HOST, PORT, timeout=10)
+        connection.request("POST", "/api/settings/set/frontend.default_ui", "1")
+        self.assertEqual(connection.getresponse().status, 200)
+        connection.close()
+        try:
+            status, headers, _ = self.request("/")
+            self.assertEqual(status, 302)
+            self.assertEqual(headers.get("location"), "/web")
+        finally:
+            connection = http.client.HTTPConnection(HOST, PORT, timeout=10)
+            connection.request("POST", "/api/settings/reset/frontend.default_ui", "")
+            connection.getresponse().read()
+            connection.close()
 
     def test_web_serves_spa(self):
         status, _, body = self.request("/web/")

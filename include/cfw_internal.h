@@ -15,6 +15,11 @@
 
 #define CFW_CMD_SYNC 6
 #define CFW_CMD_APPLY_SETTINGS 64
+#define CFW_CMD_PAUSE 65
+#define CFW_CMD_CONTINUE 66
+#define CFW_CMD_STOP 67
+#define CFW_CMD_NEXT 68
+#define CFW_CMD_PREV 69
 #define CFW_CMD_VOLUME 70
 #define CFW_CMD_PLAY 71
 #define CFW_CMD_UPDATE_CHECK 73
@@ -172,6 +177,8 @@ uint32_t cfw_firmware_choose(settings_t *settings, const cfw_box_t *box, uint32_
 const char *cfw_box_platform(settings_t *settings);
 size_t cfw_firmware_list(cfw_image_t **images);
 bool cfw_firmware_get(const char *platform, uint32_t build, cfw_image_t *image);
+/* the release package kept beside a CC3200 image, with the card tree; NULL when there is none */
+char *cfw_firmware_package(uint32_t build);
 /* an image (CC3200 slot image, ESP32 app image or body, or the original ESP32 firmware as app image or in a
    flash dump, with patch applied; patch may be NULL) into the library, or for a release package (zip) each of its
    images with its setup page; images holds *count entries, *count is set to the number added */

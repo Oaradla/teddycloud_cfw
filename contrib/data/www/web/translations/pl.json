@@ -11,21 +11,44 @@
         "unknownSource": "Nieznane"
     },
     "auth": {
+        "backToLogin": "Powrót do logowania",
+        "loginBusy": "Serwer jest zajęty, spróbuj ponownie.",
         "loginFailed": "Nieprawidłowa nazwa użytkownika lub hasło",
         "loginHint": "Zaloguj się do TeddyCloud",
         "loginRateLimited": "Zbyt wiele prób logowania. Spróbuj ponownie za kilka minut.",
+        "loginRateLimitedMinutes": "Zbyt wiele prób logowania. Spróbuj ponownie za {{count}} min (o {{until}}).",
+        "loginRateLimitedSeconds": "Zbyt wiele prób logowania. Spróbuj ponownie za {{count}} s (o {{until}}).",
         "loginSubmit": "Zaloguj się",
         "loginTitle": "Logowanie do interfejsu WWW",
         "logout": "Wyloguj się",
         "newPassword": "Nowe hasło",
         "password": "Hasło",
-        "passwordMin": "Co najmniej 4 znaki",
+        "passwordMinLength": "Co najmniej {{count}} znaków",
         "passwordRequired": "Hasło jest wymagane",
-        "username": "Nazwa użytkownika",
-        "usernameRequired": "Nazwa użytkownika jest wymagana",
+        "recoveryCode": "Kod odzyskiwania",
+        "recoveryCodeHint": "Wpisz jeden ze swoich kodów odzyskiwania. Każdy kod działa tylko raz.",
+        "recoveryCodeRequired": "Wpisz kod odzyskiwania",
+        "recoveryCodeWrong": "Kod odzyskiwania jest błędny lub został już użyty.",
+        "retry": "Spróbuj ponownie",
         "statusLoadFailed": "Nie udało się wczytać stanu uwierzytelniania",
         "statusLoadFailedDetails": "Nie udało się wczytać stanu uwierzytelniania. Sprawdź połączenie z TeddyCloud i spróbuj ponownie.",
-        "retry": "Spróbuj ponownie"
+        "twoFactorCode": "Kod",
+        "twoFactorCodeInvalid": "Wpisz 6-cyfrowy kod",
+        "twoFactorCodeWrong": "Kod jest błędny lub został już użyty.",
+        "twoFactorExpired": "Logowanie wygasło. Zaloguj się ponownie.",
+        "twoFactorHint": "Wpisz 6-cyfrowy kod z aplikacji uwierzytelniającej.",
+        "twoFactorSetupHint": "Twoje konto wymaga drugiego składnika. Skonfiguruj go, aby kontynuować.",
+        "twoFactorSetupTitle": "Skonfiguruj uwierzytelnianie dwuskładnikowe",
+        "twoFactorSubmit": "Potwierdź",
+        "twoFactorTitle": "Uwierzytelnianie dwuskładnikowe",
+        "useRecoveryCode": "Użyj kodu odzyskiwania",
+        "useTwoFactorCode": "Użyj aplikacji uwierzytelniającej",
+        "username": "Nazwa użytkownika",
+        "usernameRequired": "Nazwa użytkownika jest wymagana",
+        "passwordChangeTitle": "Ustaw nowe hasło",
+        "passwordChangeHint": "Administrator wymaga zmiany hasła, zanim będziesz mógł kontynuować.",
+        "repeatPassword": "Powtórz nowe hasło",
+        "passwordMismatch": "Hasła nie są zgodne"
     },
     "cfw": {
         "saveError": "Zapisywanie nie powiodło się",
@@ -65,7 +88,7 @@
             "resume": "Wznawianie",
             "resumeHint": "Figurka kontynuuje od miejsca, w którym ostatnio przerwała, nawet jeśli w międzyczasie grały inne figurki.",
             "shuffle": "Losowa kolejność",
-            "shuffleHint": "Rozdziały są odtwarzane w losowej kolejności, każdy dokładnie raz.",
+            "shuffleHint": "Rozdziały są odtwarzane w losowej kolejności, każdy dokładnie raz. Uderzenie odwróconego boxa zaczyna nową kolejność.",
             "sleepTimer": "Wyłącznik czasowy",
             "sleepTimerHint": "Po jednej trzeciej czasu głośność powoli maleje; na końcu box się wyłącza.",
             "sleepAfter": "Wyłącz po",
@@ -337,6 +360,30 @@
             "noImage": "Nie otrzymano obrazu",
             "tagMissing": "Brak tagu wydania",
             "cfwOff": "Obsługa CFW jest wyłączona (cfw.enabled)"
+        },
+        "controls": {
+            "title": "Obsługa z Custom Firmware",
+            "intro": "Te gesty i funkcje ma tylko Custom Firmware; oryginalny firmware ich nie zna.",
+            "restart": {
+                "title": "Uderzenie do góry nogami: od początku",
+                "text": "Odwróć box do góry nogami (uszami w dół) i uderz w niego z boku: odtwarzanie wraca na początek figurki, z dźwiękiem „poprzedni rozdział”. Przy odtwarzaniu losowym zaczyna się nowa kolejność. W oryginalnym firmware uderzenie odwróconego boxa zmienia tylko jeden rozdział. Przydatne przy audiobookach i figurkach z wieloma rozdziałami. Blokada uderzeń blokuje także ten gest."
+            },
+            "bothEars": {
+                "title": "Oba uszy krótko: wyłączenie",
+                "text": "Naciśnij oba uszy jednocześnie i puść w ciągu 2 s: dioda mignie raz na liliowo, box zapamięta pozycję i od razu się wyłączy, także z figurką. Dłuższe przytrzymanie działa jak dotąd (5 s: tryb konfiguracji, 10 s do góry nogami: restart). Można wyłączyć w ustawieniach boxa."
+            },
+            "anyTag": {
+                "title": "Dowolny tag NFC jako figurka",
+                "text": "Oprócz prawdziwych Tonies działa każdy tag NFC ISO 15693 (np. naklejki lub karty). Box odczytuje tylko jego ID i nigdy nic na nim nie zapisuje. Zawartość przypisujesz w teddyCloud jak dla każdego Tonie."
+            },
+            "event": {
+                "title": "Tagi zdarzeń",
+                "text": "Tag zdarzenia niczego nie odtwarza; zmienia następną figurkę (położoną w ciągu 60 s) albo box. Konfiguruje się go w oknie edycji Tonie. Potwierdzenie: pięć turkusowych mignięć = włączone, pięć liliowych = wyłączone. Gdy na boxie stoi tag zdarzenia „uszami”, uszy ustawiają limit głośności lub diodę; przytrzymanie jednego ucha przez 3 s przełącza między nimi."
+            },
+            "locks": {
+                "title": "Blokady",
+                "text": "Dla boxa lub figurki: blokada uderzeń (zmiana rozdziału, także uderzenie do góry nogami), blokada przechylania (przewijanie) i blokada głośności (krótkie naciśnięcie ucha). Zablokowany gest nic nie robi: bez dźwięku i bez mignięcia."
+            }
         }
     },
     "common": {
@@ -662,10 +709,10 @@
             "cancel": "Anuluj",
             "create": "Utwórz",
             "createDirectory": "Utwórz nowy katalog",
-            "directoryCreated": "Nowy katalog został utworzony!",
-            "directoryCreatedDetails": "Nowy katalog \"{{directory}}\" został utworzony!",
             "directoryCreateFailed": "Nie udało się utworzyć katalogu!",
             "directoryCreateFailedDetails": "Nie udało się utworzyć katalogu \"{{directory}}\": ",
+            "directoryCreated": "Nowy katalog został utworzony!",
+            "directoryCreatedDetails": "Nowy katalog \"{{directory}}\" został utworzony!",
             "inDirectory": "w katalogu ",
             "modalTitle": "Utwórz nowy katalog",
             "parentPath": "Katalog nadrzędny:",
@@ -703,9 +750,17 @@
         "filter": "Filtruj w bieżącym folderze",
         "help": {
             "actionItems": {
+                "assignToTonie": {
+                    "text": "Przypisuje wybrany plik jako zawartość do Tonie/Taga.",
+                    "title": "Przypisz do Tonie"
+                },
                 "deleteFileFolder": {
                     "text": "Usuwa plik lub folder (tylko jeśli folder jest pusty). Uwaga: jeśli ten plik jest przypisany do Tonie/Taga, odwołanie nie zostanie zaktualizowane.",
                     "title": "Usuń plik/folder"
+                },
+                "downloadFile": {
+                    "text": "Pobiera wybrany plik. W przypadku plików TAF z wieloma utworami otwiera się wybór utworów, aby pobrać je jako osobne pliki *.ogg (ZIP) lub jako jeden plik *.ogg; pliki TAF z jednym utworem są pobierane jako jeden plik *.ogg.",
+                    "title": "Pobierz plik"
                 },
                 "duplicateTAPFile": {
                     "text": "Tworzy duplikat wybranego pliku TAP.",
@@ -718,6 +773,16 @@
                 "editTAPPlaylist": {
                     "text": "Otwiera edytor playlist TeddyAudio do zarządzania plikami TAP.",
                     "title": "Edytuj playlistę TAP"
+                },
+                "markAsListened": {
+                    "listened": {
+                        "text": "Plik jest obecnie oznaczony jako odsłuchany. Kliknij, aby oznaczyć go jako nieodsłuchany.",
+                        "title": "Oznacz jako nieodsłuchane"
+                    },
+                    "unlistened": {
+                        "text": "Plik jest obecnie oznaczony jako nieodsłuchany. Kliknij, aby oznaczyć go jako odsłuchany.",
+                        "title": "Oznacz jako odsłuchane"
+                    }
                 },
                 "migrateToAudioIdFolder": {
                     "text": "Przenosi plik TAF do folderu biblioteki 'by/audioId' i aktualizuje źródło w pliku JSON.",
@@ -739,23 +804,9 @@
                     "text": "Zmienia nazwę pliku. Uwaga: jeśli ten plik jest przypisany do Tonie/Taga, odwołanie nie zostanie zaktualizowane automatycznie.",
                     "title": "Zmień nazwę pliku"
                 },
-                "downloadFile": {
-                    "title": "Pobierz plik",
-                    "text": "Pobiera wybrany plik. W przypadku plików TAF z wieloma utworami otwiera się wybór utworów, aby pobrać je jako osobne pliki *.ogg (ZIP) lub jako jeden plik *.ogg; pliki TAF z jednym utworem są pobierane jako jeden plik *.ogg."
-                },
-                "markAsListened": {
-                    "unlistened": {
-                        "title": "Oznacz jako odsłuchane",
-                        "text": "Plik jest obecnie oznaczony jako nieodsłuchany. Kliknij, aby oznaczyć go jako odsłuchany."
-                    },
-                    "listened": {
-                        "title": "Oznacz jako nieodsłuchane",
-                        "text": "Plik jest obecnie oznaczony jako odsłuchany. Kliknij, aby oznaczyć go jako nieodsłuchany."
-                    }
-                },
-                "assignToTonie": {
-                    "title": "Przypisz do Tonie",
-                    "text": "Przypisuje wybrany plik jako zawartość do Tonie/Taga."
+                "splitTafToPlaylist": {
+                    "title": "Podziel TAF na utwory",
+                    "text": "Tworzy folder z każdym rozdziałem jako osobnym TAF i playlistę, która łączy je z powrotem w oryginalny TAF. W playliście można przestawiać, usuwać lub wstawiać utwory; zapis składa TAF na nowo bez ponownego kodowania."
                 }
             },
             "actionItemsMulti": {
@@ -877,7 +928,11 @@
                 "savedSuccessfully": "TAP zapisany pomyślnie!",
                 "savedSuccessfullyDetails": "TAP \"{{file}}\" zapisany pomyślnie w \"{{path}}\"!",
                 "savingFailed": "Zapis TAP nie powiódł się!",
-                "savingFailedDetails": "Zapis TAP \"{{file}}\" w \"{{path}}\" nie powiódł się:"
+                "savingFailedDetails": "Zapis TAP \"{{file}}\" w \"{{path}}\" nie powiódł się:",
+                "buildFailed": "Nie utworzono TAF playlisty",
+                "buildFailedDetails": "Nie udało się złożyć TAF playlisty „{{file}}”:",
+                "built": "TAF playlisty został złożony na nowo.",
+                "encodedOnPlayback": "Playlista zawiera pliki, które nie są TAF; zostanie zakodowana przy pierwszym odtworzeniu."
             }
         },
         "title": "Przeglądarka plików",
@@ -896,18 +951,31 @@
             "modalTitle": "Prześlij plik(i)",
             "showUploadFilesDragNDrop": "Przesyłanie plików",
             "upload": "Prześlij",
-            "uploadedFile": "Plik przesłany!",
-            "uploadedFileFailed": "Przesyłanie pliku nie powiodło się!",
             "uploadFailed": "Nie udało się przesłać niektórych plików. Spróbuj ponownie.",
             "uploadFailedForFile": "Przesyłanie \"{{file}}\" nie powiodło się.",
             "uploadHint": "Kliknij lub przeciągnij pliki do obszaru przesyłania / na listę plików, aby je przesłać",
-            "uploading": "Przesyłanie...",
             "uploadInProgress": "Przesyłanie \"{{file}}\"...",
             "uploadSuccessful": "Pliki przesłane pomyślnie.",
             "uploadSuccessfulDetails": "Wszystkie pliki zostały pomyślnie przesłane.",
             "uploadSuccessfulForFile": "Plik \"{{file}}\" przesłany pomyślnie.",
             "uploadText": "Kliknij lub przeciągnij pliki do tego obszaru, aby je przesłać",
-            "uploadTimeout": "Przekroczono limit czasu przesyłania po {{ms}}ms"
+            "uploadTimeout": "Przekroczono limit czasu przesyłania po {{ms}}ms",
+            "uploadedFile": "Plik przesłany!",
+            "uploadedFileFailed": "Przesyłanie pliku nie powiodło się!",
+            "uploading": "Przesyłanie..."
+        },
+        "tafSplit": {
+            "action": "Podziel na utwory (playlista)",
+            "cancel": "Anuluj",
+            "confirm": "Podziel",
+            "description": "Każdy rozdział staje się osobnym TAF w nowym folderze „{{folder}}”. Tam playlista łączy utwory z powrotem; można w niej przestawiać, usuwać lub wstawiać utwory.",
+            "descriptionCount": "Każdy z {{count}} rozdziałów staje się osobnym TAF w nowym folderze „{{folder}}”. Tam playlista łączy utwory z powrotem; można w niej przestawiać, usuwać lub wstawiać utwory.",
+            "failed": "Podział nie powiódł się",
+            "failedDetails": "Nie udało się podzielić „{{file}}”:",
+            "originalStays": "„{{file}}” zostaje zachowany i składany na nowo przy zapisie playlisty, więc tonies z tą zawartością odtwarzają zmienioną playlistę. Dane audio są tylko kopiowane, a nie ponownie kodowane.",
+            "success": "Podzielono TAF",
+            "successDetails": "„{{file}}” podzielono na {{count}} utworów w „{{folder}}”.",
+            "title": "Podziel „{{file}}” na utwory"
         }
     },
     "footer": {
@@ -1037,12 +1105,12 @@
         "stats": {
             "claimed": "Przypisane",
             "claimedTitle": "Status przypisania",
-            "cloud_blocked": "Zablokowane żądania do chmury",
-            "cloud_failed": "Nieudane żądania do chmury",
-            "cloud_requests": "Wykonane żądania do chmury",
             "cloudDisabled": "Chmura wyłączona",
             "cloudEnabled": "Chmura włączona",
             "cloudTitle": "Status chmury",
+            "cloud_blocked": "Zablokowane żądania do chmury",
+            "cloud_failed": "Nieudane żądania do chmury",
+            "cloud_requests": "Wykonane żądania do chmury",
             "connections": "Połączenia nawiązane z tym serwerem",
             "languageTitle": "Języki",
             "live": "Na żywo",
@@ -1362,6 +1430,7 @@
             "uploadText": "Kliknij lub przeciągnij certyfikaty klienta do tego obszaru, aby je przesłać"
         },
         "close": "Zamknij",
+        "derivedFromCfw": "Wyprowadzone z funkcji Custom Firmware (zaokrąglone do 25/50/75/100 %). Przy włączonym \"Nadpisaniu\" ten box otrzymuje własną wartość.",
         "discard": "Odrzuć zmiany",
         "errorFetchingFieldValue": "Błąd podczas pobierania wartości pola",
         "errorFetchingFieldValueDetails": "Błąd podczas pobierania wartości pola dla \"{{setting}}\"{{overlay}}:",
@@ -1375,13 +1444,50 @@
             "navigationTitle": "Ogólne",
             "title": "Ustawienia ogólne"
         },
+        "groups": {
+            "log": "Logowanie",
+            "core_server": "Porty serwera",
+            "core": "Serwer HTTP",
+            "core_server_cert": "Certyfikaty serwera HTTPS",
+            "core_server_cert_file": "Certyfikaty z plików",
+            "core_server_cert_data": "Surowe certyfikaty",
+            "core_server_cert_tb2": "Certyfikaty serwera HTTPS (TB2)",
+            "core_server_cert_tb2_file": "Certyfikaty z plików (TB2)",
+            "core_server_cert_tb2_data": "Surowe certyfikaty (TB2)",
+            "core_client_cert": "Certyfikaty klienta chmury",
+            "core_client_cert_file": "Certyfikaty z plików",
+            "core_client_cert_data": "Surowe certyfikaty",
+            "core_client_cert_fake": "Fałszywe certyfikaty klienta",
+            "core_client_cert_fake_file": "Fałszywe certyfikaty z plików",
+            "core_client_cert_fake_data": "Surowe certyfikaty",
+            "security_mit": "Środki bezpieczeństwa",
+            "internal": "Wewnętrzne",
+            "cloud": "Chmura",
+            "encode": "Kodowanie TAF",
+            "frontend": "Frontend",
+            "toniebox": "Toniebox",
+            "cfw": "Custom Firmware",
+            "cfw_box": "Funkcje Custom Firmware",
+            "cfw_update": "Aktualizacja firmware",
+            "cfw_firmware": "Pobieranie firmware",
+            "toniebox2": "Toniebox 2",
+            "rtnl": "Log RTNL",
+            "pcap": "Log pakietów libpcap",
+            "mqtt": "MQTT",
+            "mqtt_server": "Serwer MQTT",
+            "hass": "Home Assistant",
+            "tonie_json": "Tonie JSON",
+            "debug": "Debugowanie",
+            "debug_web": "Interfejs webowy",
+            "mqtt_server_cert": "Certyfikat"
+        },
         "guiSettings": {
             "exportSettings": "Eksportuj",
             "importSettings": "Importuj",
-            "jsonLoaded": "Pamięć lokalna wczytana",
-            "jsonLoadedDetails": "JSON pamięci lokalnej został pomyślnie wczytany!",
             "jsonLoadFailed": "Nie udało się wczytać pamięci lokalnej",
             "jsonLoadFailedDetails": "Wystąpił błąd podczas wczytywania JSON pamięci lokalnej: ",
+            "jsonLoaded": "Pamięć lokalna wczytana",
+            "jsonLoadedDetails": "JSON pamięci lokalnej został pomyślnie wczytany!",
             "navigationTitle": "Ustawienia GUI",
             "noLocalSettings": "Nie znaleziono lokalnie zapisanych wartości",
             "title": "Ustawienia GUI i lokalnie zapisane wartości"
@@ -1399,8 +1505,8 @@
             "colStatus": "Status",
             "colTitle": "Tytuł",
             "colType": "Typ",
-            "confirmed": "potwierdzone",
             "confirmSelectedNotifications": "Potwierdź zaznaczone powiadomienia",
+            "confirmed": "potwierdzone",
             "endDate": "Data końcowa",
             "error": "Błąd",
             "filterBy": "Filtruj według",
@@ -1415,54 +1521,6 @@
             "title": "Powiadomienia",
             "unconfirmed": "niepotwierdzone",
             "warning": "Ostrzeżenie"
-        },
-        "overlayDisabled": "Nadpisanie wyłączone!",
-        "overlayed": "nadpisane",
-        "overlayEnabled": "Nadpisanie włączone!",
-        "resetToTCDetails": "Ustawienie \"{{setting}}\"{{overlay}} zostało pomyślnie przywrócone do wartości TeddyCloud.",
-        "restartComplete": "Ponowne uruchomienie serwera TeddyCloud powiodło się!",
-        "restartFailed": "Ponowne uruchomienie serwera TeddyCloud nie powiodło się!",
-        "restartInProgress": "TeddyCloud uruchamia się ponownie...",
-        "restartServer": "Uruchom serwer ponownie",
-        "restartTC": "Ponowne uruchamianie TeddyCloud",
-        "rtnl": {
-            "clear": "Wyczyść log RTNL",
-            "navigationTitle": "Log RTNL",
-            "title": "Log RTNL"
-        },
-        "save": "Zapisz",
-        "saved": "Ustawienie zapisane!",
-        "saveDetails": "Ustawienie \"{{setting}}\"{{overlay}} zostało pomyślnie zapisane.",
-        "title": "Ustawienia",
-        "tonieboxes": "tonieboxy",
-        "toniesJsonUpdate": "Wczytaj ponownie Tonies.json",
-        "toniesJsonUpdateFailed": "Nie udało się ponownie wczytać Tonies(.custom).json!",
-        "toniesJsonUpdateInProgress": "Wczytywanie Tonies(.custom).json...",
-        "toniesJsonUpdateSuccessful": "Tonies(.custom).json wczytany ponownie pomyślnie!",
-        "tryToRestartTC": "Spróbuj ponownie uruchomić TeddyCloud",
-        "warning": "Uwaga! Settings level",
-        "warningHint": "Jeśli brakuje Ci ustawień, zwiększ 'Settings level'.",
-        "webAuth": {
-            "addUser": "Dodaj użytkownika",
-            "changePassword": "Zmień hasło",
-            "changePasswordFor": "Zmień hasło użytkownika {{username}}",
-            "createFirstUser": "Utwórz użytkownika przed włączeniem ochrony logowaniem.",
-            "deleteContent": "Usunąć użytkownika {{username}}?",
-            "deleteLastContent": "Usunąć ostatniego użytkownika {{username}}? Ochrona logowaniem zostanie wyłączona.",
-            "deleteLastHint": "Po utworzeniu użytkownika możesz ponownie włączyć ochronę logowaniem.",
-            "deleteLastTitle": "Usuń ostatniego użytkownika",
-            "deleteTitle": "Usuń użytkownika",
-            "deleteUser": "Usuń",
-            "enabled": "Wymagaj logowania do interfejsu WWW",
-            "envOverride": "Ochrona logowaniem jest obecnie wyłączona przez TEDDYCLOUD_WEB_AUTH_DISABLE.",
-            "intro": "Wszyscy użytkownicy mają pełny dostęp do interfejsu WWW. Interfejsy API Tonieboxa pozostają bez zmian.",
-            "loadFailed": "Nie udało się wczytać użytkowników",
-            "navigationTitle": "Logowanie do interfejsu WWW",
-            "passwordChanged": "Hasło zaktualizowane",
-            "passwordChangedDetails": "Hasło użytkownika {{username}} zostało zaktualizowane.",
-            "saveFailed": "Nie udało się zapisać zmian",
-            "title": "Logowanie do interfejsu WWW",
-            "users": "Użytkownicy"
         },
         "options": {
             "log_level": {
@@ -1943,7 +2001,7 @@
             },
             "cfw_box_slap_lock": {
                 "label": "Blokada uderzeń",
-                "description": "Uderzenia nic nie robią. Boxy bez Custom Firmware mają wyłączone 'Przełączanie uderzeniem'"
+                "description": "Uderzenia nic nie robią, także uderzenie do góry nogami (od początku). Boxy bez Custom Firmware mają wyłączone 'Przełączanie uderzeniem'"
             },
             "cfw_box_tilt_lock": {
                 "label": "Blokada przechylania",
@@ -2110,43 +2168,30 @@
                 "description": "Buforuje PCM kodowania po stronie przeglądarki i wypisuje link do pobrania w konsoli przeglądarki."
             }
         },
-        "groups": {
-            "log": "Logowanie",
-            "core_server": "Porty serwera",
-            "core": "Serwer HTTP",
-            "core_server_cert": "Certyfikaty serwera HTTPS",
-            "core_server_cert_file": "Certyfikaty z plików",
-            "core_server_cert_data": "Surowe certyfikaty",
-            "core_server_cert_tb2": "Certyfikaty serwera HTTPS (TB2)",
-            "core_server_cert_tb2_file": "Certyfikaty z plików (TB2)",
-            "core_server_cert_tb2_data": "Surowe certyfikaty (TB2)",
-            "core_client_cert": "Certyfikaty klienta chmury",
-            "core_client_cert_file": "Certyfikaty z plików",
-            "core_client_cert_data": "Surowe certyfikaty",
-            "core_client_cert_fake": "Fałszywe certyfikaty klienta",
-            "core_client_cert_fake_file": "Fałszywe certyfikaty z plików",
-            "core_client_cert_fake_data": "Surowe certyfikaty",
-            "security_mit": "Środki bezpieczeństwa",
-            "internal": "Wewnętrzne",
-            "cloud": "Chmura",
-            "encode": "Kodowanie TAF",
-            "frontend": "Frontend",
-            "toniebox": "Toniebox",
-            "cfw": "Custom Firmware",
-            "cfw_box": "Funkcje Custom Firmware",
-            "cfw_update": "Aktualizacja firmware",
-            "cfw_firmware": "Pobieranie firmware",
-            "toniebox2": "Toniebox 2",
-            "rtnl": "Log RTNL",
-            "pcap": "Log pakietów libpcap",
-            "mqtt": "MQTT",
-            "mqtt_server": "Serwer MQTT",
-            "hass": "Home Assistant",
-            "tonie_json": "Tonie JSON",
-            "debug": "Debugowanie",
-            "debug_web": "Interfejs webowy",
-            "mqtt_server_cert": "Certyfikat"
+        "overlayDisabled": "Nadpisanie wyłączone!",
+        "overlayEnabled": "Nadpisanie włączone!",
+        "overlayed": "nadpisane",
+        "resetToTCDetails": "Ustawienie \"{{setting}}\"{{overlay}} zostało pomyślnie przywrócone do wartości TeddyCloud.",
+        "restartComplete": "Ponowne uruchomienie serwera TeddyCloud powiodło się!",
+        "restartFailed": "Ponowne uruchomienie serwera TeddyCloud nie powiodło się!",
+        "restartInProgress": "TeddyCloud uruchamia się ponownie...",
+        "restartServer": "Uruchom serwer ponownie",
+        "restartTC": "Ponowne uruchamianie TeddyCloud",
+        "rtnl": {
+            "clear": "Wyczyść log RTNL",
+            "navigationTitle": "Log RTNL",
+            "title": "Log RTNL"
         },
+        "save": "Zapisz",
+        "saveDetails": "Ustawienie \"{{setting}}\"{{overlay}} zostało pomyślnie zapisane.",
+        "saved": "Ustawienie zapisane!",
+        "title": "Ustawienia",
+        "tonieboxes": "tonieboxy",
+        "toniesJsonUpdate": "Wczytaj ponownie Tonies.json",
+        "toniesJsonUpdateFailed": "Nie udało się ponownie wczytać Tonies(.custom).json!",
+        "toniesJsonUpdateInProgress": "Wczytywanie Tonies(.custom).json...",
+        "toniesJsonUpdateSuccessful": "Tonies(.custom).json wczytany ponownie pomyślnie!",
+        "tryToRestartTC": "Spróbuj ponownie uruchomić TeddyCloud",
         "values": {
             "toniebox_max_vol_spk": {
                 "0": "25%",
@@ -2223,7 +2268,234 @@
                 "2": "Francuski"
             }
         },
-        "derivedFromCfw": "Wyprowadzone z funkcji Custom Firmware (zaokrąglone do 25/50/75/100 %). Przy włączonym \"Nadpisaniu\" ten box otrzymuje własną wartość."
+        "warning": "Uwaga! Settings level",
+        "warningHint": "Jeśli brakuje Ci ustawień, zwiększ 'Settings level'.",
+        "webAuth": {
+            "access": {
+                "connection": "Połączenie",
+                "hint": "Reverse proxy, sieci lokalne, HTTPS z zewnątrz, dozwolone i zablokowane sieci oraz czasy blokady i sesji znajdziesz w ustawieniach w sekcji \"Web login security\".",
+                "ip": "Twój adres widziany przez TeddyCloud",
+                "lan": "sieć lokalna",
+                "link": "Otwórz ustawienia",
+                "network": "Sieć",
+                "remote": "zewnętrzna (internet)",
+                "title": "Dostęp z zewnątrz",
+                "untrustedProxy": "Twoje połączenie przechodzi przez niezaufany reverse proxy {{ip}}. TeddyCloud widzi każdego klienta jako {{ip}}, więc blokady, „tylko LAN” i dostęp z zewnątrz nie działają. Dodaj go w ustawieniu web_auth.trusted_proxies.",
+                "viaProxy": "przez zaufane proxy"
+            },
+            "account": {
+                "passwordChanged": "Hasło zmienione. Zakończone inne sesje: {{count}}",
+                "title": "Twoje konto ({{username}})"
+            },
+            "addUser": "Dodaj użytkownika",
+            "changePassword": "Zmień hasło",
+            "changePasswordFor": "Zmień hasło użytkownika {{username}}",
+            "createFirstUser": "Utwórz użytkownika przed włączeniem ochrony logowaniem.",
+            "currentPassword": "Obecne hasło",
+            "deleteContent": "Usunąć użytkownika {{username}}?",
+            "deleteLastContent": "Usunąć ostatniego użytkownika {{username}}? Ochrona logowaniem zostanie wyłączona.",
+            "deleteLastHint": "Po utworzeniu użytkownika możesz ponownie włączyć ochronę logowaniem.",
+            "deleteLastTitle": "Usuń ostatniego użytkownika",
+            "deleteTitle": "Usuń użytkownika",
+            "deleteUser": "Usuń",
+            "deny": "Uprawnienia",
+            "denyHint": "Co może {{username}}, zawsze w granicach swojej grupy. Odznaczenie odbiera uprawnienie.",
+            "enabled": "Wymagaj logowania do interfejsu WWW",
+            "envOverride": "Ochrona logowaniem jest obecnie wyłączona przez TEDDYCLOUD_WEB_AUTH_DISABLE.",
+            "errors": {
+                "2fa_required": "To konto wymaga uwierzytelniania dwuskładnikowego.",
+                "already_enabled": "Uwierzytelnianie dwuskładnikowe jest już skonfigurowane.",
+                "busy": "Serwer jest zajęty, spróbuj ponownie.",
+                "cross_site": "Żądanie zostało odrzucone, bo nie pochodziło z interfejsu webowego.",
+                "exists": "Taki użytkownik już istnieje.",
+                "invalid_code": "Kod jest błędny lub został już użyty.",
+                "invalid_user": "Tylko litery, cyfry, '.', '_' i '-' (maks. 32).",
+                "limit": "Osiągnięto maksymalną liczbę użytkowników.",
+                "login_disabled": "To wymaga aktywnego logowania.",
+                "no_setup": "Konfiguracja wygasła. Zacznij od nowa.",
+                "password_is_username": "Hasło nie może być nazwą użytkownika.",
+                "password_too_common": "To hasło jest zbyt popularne.",
+                "password_too_long": "Hasło jest za długie.",
+                "password_too_short": "Hasło jest za krótkie.",
+                "rate_limited": "Zbyt wiele prób. Spróbuj później.",
+                "reauth_required": "Potwierdź swoim hasłem.",
+                "wrong_password": "Hasło jest błędne.",
+                "group_in_use": "Do grupy należą jeszcze użytkownicy. Najpierw przypisz ich do innej grupy.",
+                "invalid_group": "Ta grupa nie istnieje.",
+                "invalid_name": "Nazwa musi mieć od 1 do 32 znaków.",
+                "password_unchanged": "Nowe hasło musi różnić się od obecnego.",
+                "password_change_required": "Najpierw zmień hasło."
+            },
+            "events": {
+                "detail": "Szczegóły",
+                "hint": "Logowania, nieudane próby i blokady od uruchomienia serwera. Nieudane logowania są też zapisywane w logu serwera dla fail2ban.",
+                "locked": "Zablokowane adresy",
+                "lockedUntil": "do {{time}}",
+                "reload": "Odśwież",
+                "time": "Czas",
+                "title": "Dziennik bezpieczeństwa",
+                "type": "Zdarzenie",
+                "types": {
+                    "2fa_disabled": "2FA wyłączone",
+                    "2fa_enabled": "2FA włączone",
+                    "2fa_reset": "2FA zresetowane",
+                    "account_locked": "Konto zablokowane z zewnątrz",
+                    "ip_locked": "Adres zablokowany",
+                    "login": "Logowanie",
+                    "login_2fa_setup": "Logowanie, wymagana konfiguracja 2FA",
+                    "login_disabled": "Ochrona logowania wyłączona",
+                    "login_enabled": "Ochrona logowania włączona",
+                    "login_failed": "Nieudane logowanie",
+                    "password_changed": "Zmieniono hasło",
+                    "recovery_code_used": "Użyto kodu odzyskiwania",
+                    "recovery_codes_renewed": "Nowe kody odzyskiwania",
+                    "sessions_revoked": "Zakończono sesje",
+                    "user_created": "Utworzono użytkownika",
+                    "user_deleted": "Usunięto użytkownika",
+                    "user_updated": "Zmieniono użytkownika"
+                },
+                "unlock": "Odblokuj"
+            },
+            "intro": "Administratorzy mogą wszystko. Użytkownicy posiadają boxy, tonie i foldery i je udostępniają; dzieci dostają tylko to, co im udostępniono. Własne grupy są jednego z tych dwóch rodzajów. API boxów nie są objęte.",
+            "lanOnly": "Tylko LAN",
+            "lanOnlyHint": "Może logować się tylko z sieci lokalnej",
+            "lastLogin": "Ostatnie logowanie",
+            "legacyHash": "stary hash",
+            "legacyHashHint": "Hasło jest zapisane w starym, słabszym formacie. Zostanie zaktualizowane przy następnym logowaniu tego użytkownika.",
+            "level": "Poziom",
+            "levels": {
+                "hint": "Najwięcej, co mają członkowie grupy, także na własnych boxach i przez udostępnienia. Zaznacz pola, potem zapisz.",
+                "save": "Zapisz",
+                "saved": "Zapisano.",
+                "title": "Grupy użytkowników",
+                "unassignedTonie": "Tonie bez właściciela",
+                "allowTitle": "Dozwolone",
+                "allowHint": "Członkowie nie dostają więcej. Rozwiń, aby zobaczyć pojedyncze uprawnienia i ustawienia.",
+                "unassignedHint": "Co każdy zalogowany użytkownik może robić z Tonies, które jeszcze do nikogo nie należą (jeszcze nie położone na żadnym boxie).",
+                "newGroup": "Nowa grupa",
+                "addGroup": "Grupa",
+                "name": "Nazwa",
+                "kind": "Rodzaj",
+                "kindHints": {
+                    "user": "Jak użytkownik: posiada boxy, tonie i foldery i je udostępnia.",
+                    "guest": "Jak dziecko: dostaje tylko to, co mu udostępniono."
+                },
+                "delete": "Usuń",
+                "deleteTitle": "Usuń grupę",
+                "deleteContent": "Usunąć grupę {{name}}? Możliwe tylko, gdy nie należy do niej żaden użytkownik."
+            },
+            "loadFailed": "Nie udało się wczytać użytkowników",
+            "navigationTitle": "Użytkownicy i uprawnienia",
+            "never": "nigdy",
+            "passwordChanged": "Hasło zaktualizowane",
+            "passwordChangedDetails": "Hasło użytkownika {{username}} zostało zaktualizowane.",
+            "reauth": {
+                "confirm": "Potwierdź",
+                "hint": "Ta zmiana wymaga ponownie twojego hasła.",
+                "title": "Potwierdź, że to ty"
+            },
+            "require2fa": "Wymagane 2FA",
+            "require2faAll": "Uwierzytelnianie dwuskładnikowe jest wymagane dla wszystkich użytkowników (ustawienie web_auth.require_2fa).",
+            "require2faHint": "Użytkownik musi skonfigurować uwierzytelnianie dwuskładnikowe przy następnym logowaniu.",
+            "saveFailed": "Nie udało się zapisać zmian",
+            "sessions": {
+                "current": "to urządzenie",
+                "device": "Urządzenie",
+                "ip": "Adres",
+                "lastSeen": "Ostatnio używana",
+                "revoke": "Wyloguj",
+                "revokeOthers": "Wyloguj inne sesje",
+                "revokeUser": "Wyloguj wszędzie",
+                "revoked": "Zakończone sesje: {{count}}",
+                "title": "Aktywne sesje"
+            },
+            "title": "Użytkownicy i uprawnienia",
+            "twoFactor": {
+                "activate": "Aktywuj",
+                "codeOrRecovery": "Kod z aplikacji lub kod odzyskiwania",
+                "codesLeft": "Pozostałe kody odzyskiwania: {{count}}",
+                "codesSaved": "Kody zostały zapisane",
+                "copyCodes": "Kopiuj",
+                "disable": "Wyłącz 2FA",
+                "disableHint": "Potwierdź hasłem i aktualnym kodem lub kodem odzyskiwania.",
+                "disabled": "Uwierzytelnianie dwuskładnikowe zostało wyłączone.",
+                "downloadCodes": "Pobierz",
+                "enabled": "Uwierzytelnianie dwuskładnikowe jest aktywne.",
+                "intro": "Użyj aplikacji uwierzytelniającej, np. Aegis, 2FAS, Google Authenticator, lub menedżera haseł. Aby zacząć, potwierdź swoje hasło.",
+                "manual": "Lub wpisz ten klucz ręcznie:",
+                "manualParams": "Oparte na czasie (TOTP), SHA-1, 6 cyfr, 30 sekund. Przycisk kopiowania kopiuje klucz bez spacji.",
+                "off": "wyłączone",
+                "on": "włączone",
+                "pending": "konfiguracja w toku",
+                "recoveryHint": "Przechowuj te kody odzyskiwania w bezpiecznym miejscu. Każdy kod pozwala na jedno logowanie bez aplikacji. Są wyświetlane tylko teraz.",
+                "renew": "Nowe kody odzyskiwania",
+                "renewHint": "Stare kody odzyskiwania przestaną działać. Potwierdź hasłem i aktualnym kodem.",
+                "reset": "Resetuj 2FA",
+                "resetContent": "Zresetować uwierzytelnianie dwuskładnikowe użytkownika {{username}}? Użytkownik zostanie wylogowany i będzie mógł zalogować się samym hasłem lub będzie musiał ponownie skonfigurować 2FA, jeśli jest wymagane.",
+                "scan": "Zeskanuj kod QR aplikacją uwierzytelniającą i wpisz wyświetlony kod.",
+                "setUp": "Skonfiguruj uwierzytelnianie dwuskładnikowe",
+                "start": "Dalej",
+                "title": "2FA"
+            },
+            "users": "Użytkownicy",
+            "you": "ty",
+            "tree": {
+                "all": "Wszystkie uprawnienia",
+                "settings": "Ustawienia",
+                "search": "Szukaj",
+                "extra": "Dodatkowo (zostaje):",
+                "asText": "Edytuj jako tekst",
+                "asTree": "Edytuj jako drzewo",
+                "scopes": {
+                    "box": "Tonieboxy",
+                    "tonie": "Tonies",
+                    "folder": "Biblioteka (foldery)",
+                    "users": "Użytkownicy"
+                }
+            },
+            "denyNone": "Jak grupa",
+            "denyCount": "Mniej: {{count}}",
+            "denyTitle": "Uprawnienia {{username}}",
+            "mustChangePassword": "Przy następnym logowaniu należy ustawić nowe hasło",
+            "mustChangePasswordPending": "Oczekuje na zmianę hasła",
+            "mustChangePasswordHint": "Po zalogowaniu użytkownik może tylko zmienić hasło. Przycisk x cofa to wymaganie."
+        }
+    },
+    "sharing": {
+        "add": "Udostępnij użytkownikowi",
+        "button": "Udostępnij",
+        "everyone": "Wszyscy",
+        "inherited": "Te udostępnienia pochodzą z folderu {{folder}}. Zapisanie tworzy własne udostępnienia dla tego folderu.",
+        "levels": {
+            "admin": "Administrator",
+            "guest": "Dziecko",
+            "user": "Użytkownik"
+        },
+        "noOwners": "nikt (tylko administratorzy)",
+        "noShares": "Nie udostępniono.",
+        "owners": "Właściciele",
+        "ownersAdminOnly": "Właścicieli wyznaczają tylko administratorzy.",
+        "ownersHint": "Właściciele mają wszystkie prawa i udostępniają innym. Właścicieli wyznaczają tylko administratorzy.",
+        "pickUser": "Użytkownik",
+        "remove": "Usuń",
+        "rights": {
+            "box.cfw": "Pilot / firmware",
+            "box.settings": "Wszystkie ustawienia",
+            "box.view": "Widzieć",
+            "folder.read": "Czytać",
+            "folder.write": "Zapisywać",
+            "tonie.assign": "Przypisać audio",
+            "tonie.edit": "Edytować (live, chmura, model)",
+            "tonie.view": "Widzieć i odtwarzać",
+            "box.share": "Udostępniać",
+            "tonie.share": "Udostępniać",
+            "folder.share": "Udostępniać",
+            "users.manage": "Tworzyć użytkowników i nimi zarządzać"
+        },
+        "save": "Zapisz",
+        "shares": "Udostępnione dla",
+        "singleSettings": "Pojedyncze ustawienia (jeśli nie wszystkie)",
+        "title": "Udostępnij: {{name}}"
     },
     "teddycloud": {
         "newVersionAvailable": "Dostępna jest nowa wersja!",
@@ -2246,6 +2518,19 @@
             "recheck": "Sprawdź ponownie",
             "status": "Status",
             "troubleShooting": "Rozwiązywanie problemów"
+        },
+        "boxCertificate": {
+            "nextConnection": "Status zostanie zaktualizowany przy następnym połączeniu Toniebox.",
+            "pin": "Przypięty certyfikat (SHA-256)",
+            "presented": "Przedstawiony certyfikat (SHA-256)",
+            "status": "Status",
+            "statusText": {
+                "mismatch": "Inny certyfikat niż przypięty!",
+                "none": "Jeszcze nie sprawdzono",
+                "pinned": "Przypięty certyfikat",
+                "trusted": "Certyfikat wystawiony przez TeddyCloud"
+            },
+            "title": "Sprawdzanie certyfikatu"
         },
         "boxFlashingCommon": {
             "adguard": {
@@ -2318,6 +2603,21 @@
             "preparations": "Przygotowania"
         },
         "boxSetup": {
+            "UARTHint": {
+                "ackUARTHint": "Mam ustawione prawidłowe napięcie (3,3 V) i zainstalowany najnowszy wymagany sterownik.",
+                "description": "Zanim przejdziesz dalej, sprawdź dwukrotnie:",
+                "imageAlt1": "Przykład zworki 1",
+                "imageAlt2": "Przykład zworki 2",
+                "imageAlt3": "Przykład zworki 3",
+                "noUSBCVersion": "Pojawiło się ostatnio kilka doniesień o problemach z wersją USB-C UART, w tym o błędach połączenia. Aby uniknąć tych problemów, zdecydowanie zalecamy zamiast tego użycie niezawodnej wersji micro-USB.",
+                "title": "Ważna uwaga: połączenie UART i ustawienia napięcia",
+                "uartDriver": "Instalacja sterownika UART",
+                "updateDriver": "Upewnij się, że dla Twojego urządzenia zainstalowany jest najnowszy sterownik UART. Sprawdź dwukrotnie w Menedżerze urządzeń. Jeśli żaden sterownik nie jest zainstalowany, pobierz i zainstaluj odpowiedni. Flashowanie może nie działać niezawodnie z ogólnymi lub przestarzałymi sterownikami.",
+                "voltageCompatibility": "Zgodność napięcia",
+                "voltageCompatibilityText1": "Upewnij się, że używasz adaptera UART obsługującego 3,3V.",
+                "voltageCompatibilityText2": "Jeśli Twój adapter UART obsługuje zarówno 3,3V, jak i 5V, musisz ustawić go na 3,3V. W większości przypadków na płytce znajduje się zworka do wyboru właściwego napięcia. Przykłady takich zworek można zobaczyć tutaj (Twoja płytka może wyglądać inaczej):",
+                "warning": "Ważne: bezwzględnie upewnij się, że napięcie jest ustawione na 3,3V (często oznaczone jako 3v3). Użycie ustawienia 5V może trwale uszkodzić Twojego Tonieboxa."
+            },
             "boxSetupIntro1": "Ta strona zawiera pełny przegląd kroków wymaganych do dodania Tonieboxa do TeddyCloud. W razie problemów zapraszamy na",
             "boxSetupIntro2": "lub dołącz do",
             "boxSetupIntro3": "po wsparcie społeczności.",
@@ -2420,21 +2720,6 @@
             "setupTeddyCloud": "Skonfiguruj TeddyCloud",
             "setupTeddyCloudText": "Gratulacje! Docierając do tej strony, pomyślnie skonfigurowałeś/aś TeddyCloud!",
             "title": "Dodaj swojego Tonieboxa do TeddyCloud",
-            "UARTHint": {
-                "ackUARTHint": "Mam ustawione prawidłowe napięcie (3,3 V) i zainstalowany najnowszy wymagany sterownik.",
-                "description": "Zanim przejdziesz dalej, sprawdź dwukrotnie:",
-                "imageAlt1": "Przykład zworki 1",
-                "imageAlt2": "Przykład zworki 2",
-                "imageAlt3": "Przykład zworki 3",
-                "noUSBCVersion": "Pojawiło się ostatnio kilka doniesień o problemach z wersją USB-C UART, w tym o błędach połączenia. Aby uniknąć tych problemów, zdecydowanie zalecamy zamiast tego użycie niezawodnej wersji micro-USB.",
-                "title": "Ważna uwaga: połączenie UART i ustawienia napięcia",
-                "uartDriver": "Instalacja sterownika UART",
-                "updateDriver": "Upewnij się, że dla Twojego urządzenia zainstalowany jest najnowszy sterownik UART. Sprawdź dwukrotnie w Menedżerze urządzeń. Jeśli żaden sterownik nie jest zainstalowany, pobierz i zainstaluj odpowiedni. Flashowanie może nie działać niezawodnie z ogólnymi lub przestarzałymi sterownikami.",
-                "voltageCompatibility": "Zgodność napięcia",
-                "voltageCompatibilityText1": "Upewnij się, że używasz adaptera UART obsługującego 3,3V.",
-                "voltageCompatibilityText2": "Jeśli Twój adapter UART obsługuje zarówno 3,3V, jak i 5V, musisz ustawić go na 3,3V. W większości przypadków na płytce znajduje się zworka do wyboru właściwego napięcia. Przykłady takich zworek można zobaczyć tutaj (Twoja płytka może wyglądać inaczej):",
-                "warning": "Ważne: bezwzględnie upewnij się, że napięcie jest ustawione na 3,3V (często oznaczone jako 3v3). Użycie ustawienia 5V może trwale uszkodzić Twojego Tonieboxa."
-            },
             "uploadCertificateButton": "Prześlij certyfikaty",
             "uploadCertificateIntro": "Powinieneś/aś przesłać wyodrębnione certyfikaty do TeddyCloud, jeśli to Twój pierwszy Toniebox lub jeśli chcesz wyznaczyć tego Tonieboxa jako ten używany do pobierania zawartości z oryginalnej chmury Tonies. Dodatkowo musisz dodać certyfikaty do Tonieboxa w TeddyCloud. Aby to zrobić, przejdź do sekcji Tonieboxy, kliknij ikonę Certyfikat i prześlij certyfikaty ponownie.",
             "uploadCertificates": "Prześlij certyfikaty (ca.der, client.der i private.der)",
@@ -2457,6 +2742,7 @@
             },
             "applyingPatches": "Stosowanie łatek",
             "applyingPatchesSection": {
+                "altPortHint": "Jeśli utworzyłeś poprawkę portu, umieść ją również w /revvox/boot/patch/ i dodaj \"altPort.custom\" do listy poprawek.",
                 "examplengCFGJsonCollapse": {
                     "collapseTitle": "Przykładowy plik \"ngCfg.json\" z łatką \"altUrl.custom.305\" używającą \"ofw2\""
                 },
@@ -2485,8 +2771,8 @@
                     "ofwFixValueDesc": "Magiczne bajty umieszczane w obrazie OFW podczas rozruchu (można je wyodrębnić z OFW BL data[-8:-4])",
                     "ofwSimBLDesc": "Odczytuje obraz do uruchomienia z flash:/sys/mcubootinfo.bin i ładuje obraz z flash:/sys/mcuimgN.bin zamiast odczytywać z karty SD (jak bootloader ofw)",
                     "patchDirectory": "katalog łatek",
-                    "patchesDesc": "Lista łatek do wczytania, zobacz:",
                     "patchWiki": "wiki łatek",
+                    "patchesDesc": "Lista łatek do wczytania, zobacz:",
                     "section1_link": "sd:/revvox/boot/ngCfg.json",
                     "section1_part1": "Konfiguracja bootloadera jest zapisana w",
                     "section1_part2": ". Wszystkie sekcje lub klucze zaczynające się od podkreślenia \"_\" są komentarzami i są ignorowane.",
@@ -2498,8 +2784,7 @@
                     "waitForPressDesc": "Czeka na naciśnięcie ucha przy starcie z sekwencją mrugania (niebieski, zielony, cyjan, czarny)",
                     "waitTimeoutInSDesc": "Limit czasu w sekundach dla waitForPress, jeśli brak naciśnięcia ucha (hibernacja)",
                     "watchdogDesc": "Utrzymuje watchdog włączony podczas uruchamiania firmware (jeśli rozruch się nie powiedzie, boxa się zrestartuje)"
-                },
-                "altPortHint": "Jeśli utworzyłeś poprawkę portu, umieść ją również w /revvox/boot/patch/ i dodaj \"altPort.custom\" do listy poprawek."
+                }
             },
             "applyingPatchesWithNgCfgJson": "Zastosuj łatki za pomocą ngCfg.json",
             "applyingPatchesWithNgCfgJsonLink": "Znajdź instrukcje tutaj",
@@ -2523,12 +2808,9 @@
             "connectToTonieboxText": "Zielona dioda LED na płycie głównej Tonieboxa powinna świecić się stabilnie (bez migania lub mrugania). Jeśli tak nie jest, Twoje połączenia mogą być poluzowane lub nieprawidłowe. Odłącz programator, sprawdź dwukrotnie wszystkie połączenia i spróbuj ponownie. Jeśli pracujesz z cienkimi przewodami, rozważ zastosowanie kleju na gorąco, aby je zabezpieczyć i zapobiec ruchowi. Dodatkowo upewnij się, że Toniebox jest zasilany za pomocą swojej ładowarki.",
             "connectToTonieboxTextUart": "Upewnij się, że UART jest skonfigurowany na 3,3V przed podłączeniem programatora UART do komputera przez USB.",
             "createPatch": "Utwórz altUrl.custom.305.patch",
+            "createPortPatch": "Utwórz altPort.custom.patch",
             "customPortPatch": "Opcjonalnie: utwórz poprawkę portu (altPort.custom.json)",
             "customPortPatchHint": "Potrzebne tylko wtedy, gdy Toniebox ma łączyć się z TeddyCloud przez inny port niż 443, np. przez proxy kierujące ruch według portu. Poprawka działa z wersjami firmware 3.1.0 BF2, 3.3.0 i 3.4.0. hackiebox-ng zawiera już altPort.json dla portu 10443; własną poprawkę twórz tylko dla innego portu. Toniebox z CC3235 i Toniebox 2 nie można załatać: zawsze łączą się z portem 443.",
-            "hintPatchPort": "Wpisz port, z którym Toniebox ma się łączyć, i kliknij 'Utwórz altPort.custom.patch'. Poprawka zostanie automatycznie pobrana.",
-            "port": "Port TeddyCloud:",
-            "portInvalid": "Port musi mieścić się w zakresie od 1 do 65535.",
-            "createPortPatch": "Utwórz altPort.custom.patch",
             "customUrlPatch": "Utwórz niestandardową łatkę URL (altUrl.custom.305.json)",
             "customUrlPatchHint": "Utwórz tę łatkę tylko wtedy, gdy predefiniowane łatki altUrl.tc.fritz.box.json i altUrl.305.json nie działają z Twoją obecną konfiguracją TeddyCloud. Jeśli spełniają Twoje potrzeby, możesz kontynuować, klikając 'Next'.",
             "dedicatedUart": "Dedykowany UART",
@@ -2551,6 +2833,7 @@
             "hint": "Obecnie nie ma bezpośredniego wsparcia flashowania Tonieboxa CC3200 z poziomu TeddyCloud, ale znajdziesz tutaj przewodnik krok po kroku:",
             "hint2": "Następnie postępuj zgodnie ze ścieżką CC3200:",
             "hintPatchHost": "Wprowadź nazwę hosta swojej instancji TeddyCloud, a następnie kliknij 'Create altUrl.custom.305.patch'. Łatka zostanie automatycznie pobrana.",
+            "hintPatchPort": "Wpisz port, z którym Toniebox ma się łączyć, i kliknij 'Utwórz altPort.custom.patch'. Poprawka zostanie automatycznie pobrana.",
             "hostname": "Nazwa hosta TeddyCloud:",
             "hostnameTooLong": "Nazwa hosta nie może przekraczać 12 znaków.",
             "installBootloader": "Zainstaluj niestandardowy bootloader HackieboxNG",
@@ -2617,6 +2900,8 @@
             "next": "Dalej",
             "patches": "Łatki",
             "patchesMoreInformationLink": "Więcej informacji o niestandardowych łatkach",
+            "port": "Port TeddyCloud:",
+            "portInvalid": "Port musi mieścić się w zakresie od 1 do 65535.",
             "predefinedUrlPatches": "Predefiniowane łatki URL",
             "predefinedUrlPatchesIntro": "Dla boxów CC3200 zaleca się użycie łatki altUrl. HackieboxNG zawiera dwie predefiniowane, gotowe do użycia łatki altUrl:",
             "previous": "Wstecz",
@@ -2627,7 +2912,6 @@
             "usingThinWiresAsTagConnector": "Cienkie przewody użyte jako konektor"
         },
         "cc3235BoxFlashing": {
-            "certificatesDumpedCAreplacementFlashed": "Certyfikaty wyodrębnione, a zastępczy CA wgrany",
             "CH341AProgrammer": {
                 "CH341AProgrammer": "Skonfiguruj połączenie programatora CH341A",
                 "CH341AProgrammerClampConnection": "Programator CH341A z klipsem SOP8 podłączonym do pamięci Flash IS25LP032D",
@@ -2644,13 +2928,14 @@
                 "prep2": "W razie potrzeby przytnij plastik na klipsie CH341A, aby pasował do pamięci flash IS25LP032D.",
                 "prep3": "Upewnij się, że zarówno PCB, jak i akumulator są odłączone.",
                 "prep4": "Podłącz CH341A do komputera i potwierdź, że został rozpoznany. Możesz to zrobić w następujący sposób:",
-                "preparation": "Wymagane tylko wtedy, gdy planujesz flashowanie za pomocą programatora CH341A",
                 "prepConclusions1": "Jeśli wynik różni się, mały mostek między pinami 1 i 2 na CH341A może nie być ustawiony. Po potwierdzeniu odłącz CH341A od portu USB. Ta kontrola zapewnia, że wszystko jest prawidłowo podłączone.",
                 "prepConclusions2": "Upewnij się, że moduł SOP8 z zestawu CH341A i klips są połączone tak, jak pokazano na zdjęciu.",
                 "prepConclusions3": "Dopiero po zakończeniu przygotowań możemy przejść do procesu ekstrakcji.",
+                "preparation": "Wymagane tylko wtedy, gdy planujesz flashowanie za pomocą programatora CH341A",
                 "readingFlash": "Odczyt Flasha za pomocą programatora CH341A",
                 "writingFlash": "Zapis Flasha za pomocą programatora CH341A"
             },
+            "certificatesDumpedCAreplacementFlashed": "Certyfikaty wyodrębnione, a zastępczy CA wgrany",
             "checkBoxes": "Pokaż dostępne boxy",
             "dnsBeware": "Uwaga!",
             "dnsBewareText": "Spowoduje to odcięcie połączenia wszystkich tonieboxów w Twojej sieci, które nie zostały spatchowane Twoim zastępczym CA!",
@@ -2662,15 +2947,15 @@
             "dumpCertificatesCC3235": "Musisz ręcznie wyodrębnić je z pamięci flash boxa za pomocą klipsa SOP8 bezpośrednio z pamięci lub poprzez wylutowanie. Odczyt in-circuit może być trudny, ale możliwy. Zalecamy do tego flashrom. Może być konieczne użycie jego nowszej wersji.",
             "dumpCertificatesLink": "Znajdź instrukcje zrzucania certyfikatów tutaj",
             "extractCertificates": "Wyodrębnij certyfikaty",
-            "flashCAreplacement": "Wgraj zastępczy CA dla TeddyCloud",
             "flashCAReplacementDescription1": "Niestety certyfikat CA wygenerowany przez TeddyCloud podczas jego początkowej konfiguracji może czasami powodować błąd BAD_CERTIFICATE przy łączeniu Tonieboxa CC3235 z TeddyCloud. Aby rozwiązać ten problem, spróbuj ręcznie wygenerować certyfikat za pomocą starszego",
             "flashCAReplacementDescription2": "skryptu z zainstalowanym faketime. Skopiuj wygenerowane pliki do katalogu certs/server w folderze instalacyjnym TeddyCloud.",
             "flashCAReplacementDescription3": "Pamiętaj, że nowe certyfikaty serwera, w tym nowo wygenerowany certyfikat CA, mogą zakłócić połączenia z już podłączonymi Tonieboxami. Aby zapewnić nieprzerwaną obsługę, zaktualizuj plik zastępczego CA na wszystkich swoich Tonieboxach nowo wygenerowanym certyfikatem.",
+            "flashCAReplacementTitle": "Uwaga: problemy ze zgodnością certyfikatu CA TeddyCloud",
+            "flashCAreplacement": "Wgraj zastępczy CA dla TeddyCloud",
             "flashCAreplacementLink": "Znajdź instrukcje flashowania tutaj",
             "flashCAreplacementText1": "Zastąp oryginalny CA w swoim zrzucie flasha zastępczym CA i wgraj go ponownie na boxa.",
             "flashCAreplacementText2": "Jeśli boxa w ogóle się nie łączy (hasło owl), możesz spróbować użyć starego gencerts.sh, aby wygenerować nowe certyfikaty i ponownie wgrać boxa.",
             "flashCAreplacementText3": "Uwaga: plik ca.der, do którego odnosi się fragment kodu, musi być zastępczym CA TeddyCloud!",
-            "flashCAReplacementTitle": "Uwaga: problemy ze zgodnością certyfikatu CA TeddyCloud",
             "flashCollapse": {
                 "cc3235flash": "Pamięć flash z pinami",
                 "cc3235flashWithSMDGrippers": "Pamięć flash z podłączonymi chwytakami SMD",
@@ -2682,17 +2967,16 @@
             "hint2": "Następnie postępuj zgodnie ze ścieżką CC3235:",
             "hwToolSpecific": "Przygotowania zależne od sprzętu",
             "hwToolSpecificText": "W zależności od sprzętu, którego planujesz użyć do flashowania Tonieboxa, wymagane są dodatkowe przygotowania. Wybierz opcję, którą będziesz stosować:",
+            "installSerprogFirmware": "Zainstaluj firmware serprog",
             "installflashromtool": "Zainstaluj Flashrom",
             "installflashromtoolLink": "Odwiedź stronę domową narzędzia po więcej informacji",
             "installflashromtoolText": "Upewnij się, że na komputerze, którego używasz do flashowania, zainstalowany jest flashrom. Jeśli nie, zainstaluj go za pomocą następujących poleceń:",
-            "installSerprogFirmware": "Zainstaluj firmware serprog",
             "linkGeneral": "Patchowanie Tonieboxa do użytku z TeddyCloud",
             "linkSpecific": "Konfiguracja specyficzna dla CC3235",
             "locateFlashMemory": "Zlokalizuj układ pamięci flash",
             "locateFlashMemoryText": "Zidentyfikuj układ pamięci flash IS25LP032D na płytce; znajduje się on na prawo od stacji dokującej ładowania.",
             "navigationTitle": "CC3235",
             "next": "Dalej",
-            "portHint": "Pudełka CC3235 zawsze łączą się z portem 443: nie ma dla nich łatki portu, więc TeddyCloud musi być dostępny na porcie 443 (proxy może je kierować tylko według IP).",
             "pico": {
                 "preparation": "Wymagane tylko wtedy, gdy planujesz flashowanie za pomocą Raspberry Pi Pico",
                 "readingFlash": "Odczyt Flasha za pomocą Raspberry Pi Pico",
@@ -2700,6 +2984,7 @@
                 "readingFlashText2": "Zalecane jest wykonanie wielu odczytów i porównanie wyników.",
                 "writingFlash": "Zapis Flasha za pomocą Raspberry Pi Pico"
             },
+            "portHint": "Pudełka CC3235 zawsze łączą się z portem 443: nie ma dla nich łatki portu, więc TeddyCloud musi być dostępny na porcie 443 (proxy może je kierować tylko według IP).",
             "previous": "Wstecz",
             "serprogFirmwareLink": "Znajdź instrukcje instalacji tutaj",
             "title": "Flashowanie boxa CC3235",
@@ -2771,8 +3056,8 @@
                 "confirmFlashDialog": "Czy na pewno chcesz zflashować swojego Tonieboxa? Upewnij się, że masz stabilne połączenie i nie przerywaj procesu!",
                 "confirmFlashDialogHint": "Aby Twój Toniebox działał prawidłowo, podana instancja TeddyCloud jest absolutnie niezbędna. Jeśli Twój TeddyCloud jest offline, Twój Toniebox nie będzie mógł uzyskać dostępu do nowej zawartości!",
                 "confirmFlashModal": "Zflashuj Tonieboxa spatchowanym firmware",
-                "connected": "Połączono",
                 "connectESPCollapseTitle": "Pomoc: podłącz UART do Tonieboxa",
+                "connected": "Połączono",
                 "connectingReadFlash": "Łączenie w celu odczytu Flasha...",
                 "connectingReadMac": "Łączenie w celu odczytu adresu MAC...",
                 "connectingTo": "Łączenie z",
@@ -2817,6 +3102,7 @@
                 "hintFlashESP32RevvoxFlasher": "Kliknij \"Flash ESP32\", w razie potrzeby wybierz port COM i poczekaj, aż krok się zakończy!",
                 "hintPatchFlash": "Aby zastosować wybrany/odczytany flash z certyfikatem CA TeddyCloud i ewentualnie wprowadzić inne zmiany, takie jak nazwa hosta TeddyCloud i/lub dane Wi-Fi, kliknij 'Patch' po wprowadzeniu informacji lub przejdź do następnego kroku bez patchowania.",
                 "hintPatchHost": "Wprowadź żądaną nazwę hosta dla swojej instancji TeddyCloud.",
+                "hintPatchPort": "Port, z którym łączy się Toniebox. Pozostaw 443, chyba że Toniebox ma łączyć się z TeddyCloud przez inny port, np. przez proxy kierujące ruch według portu. Toniebox z CC3235 i Toniebox 2 nie można załatać: zawsze łączą się z portem 443.",
                 "hintPatchWifi": "Opcjonalnie wprowadź dane Wi-Fi dla swojego Tonieboxa. Ustaw to tylko, jeśli rzeczywiście musisz - zazwyczaj, jeśli Twój Toniebox był podłączony do Twojej sieci Wi-Fi bezpośrednio przed patchowaniem, nie jest to konieczne.",
                 "hintReadESP32ImportFlash": "Teraz odłącz źródło zasilania swojego Tonieboxa. Upewnij się, że UART działa w trybie 3,3V. Podłącz swój UART do komputera i Tonieboxa. Zewrzyj otwory pinów J100. Następnie podłącz Tonieboxa do zasilania. Kliknij \"Read Flash\" lub \"Load File\", a następnie wybierz port COM. Na koniec poczekaj, aż krok się zakończy!",
                 "hintSaveLog": "Zapisz dane wyjściowe logu do pliku w celu dalszej analizy w razie problemów.",
@@ -2824,9 +3110,6 @@
                 "hostname": "Nazwa hosta TeddyCloud:",
                 "hostnameSettings": "Nazwa hosta TeddyCloud",
                 "hostnameTooLong": "Jeśli chcesz później podłączyć Tonieboxa CC3200, nazwa hosta nie może przekraczać 12 znaków (ograniczenie firmware).",
-                "hintPatchPort": "Port, z którym łączy się Toniebox. Pozostaw 443, chyba że Toniebox ma łączyć się z TeddyCloud przez inny port, np. przez proxy kierujące ruch według portu. Toniebox z CC3235 i Toniebox 2 nie można załatać: zawsze łączą się z portem 443.",
-                "port": "Port TeddyCloud:",
-                "portInvalid": "Port musi mieścić się w zakresie od 1 do 32767.",
                 "importanceBackup": "Przed wprowadzeniem jakichkolwiek zmian w Tonieboxie pobierz i bezpiecznie przechowaj kopię oryginalnego firmware. Zapewni to możliwość przywrócenia Tonieboxa do stanu fabrycznego, jeśli coś pójdzie nie tak. Zapisz ją w kilku miejscach, np. na głównym komputerze lub laptopie, zewnętrznym dysku twardym lub pendrivie i/lub w zaufanej usłudze przechowywania w chmurze (np. Google Drive, Dropbox, OneDrive). Nigdy nie przechowuj jedynej kopii wyłącznie na serwerze TeddyCloud.",
                 "infoTable": "Informacje ESP32",
                 "invalidFlashData": "Odczytany/wczytany flash składa się wyłącznie z 0x00 lub 0xFF! Sprawdź połączenie lub wczytany plik i spróbuj ponownie!",
@@ -2842,6 +3125,8 @@
                 "patchingFlashImage": "Patchowanie obrazu flasha...",
                 "patchingSuccessful": "Patchowanie zakończone pomyślnie, gotowe do wgrania {{size}} MiB.",
                 "payloadReceived": "Otrzymano dane",
+                "port": "Port TeddyCloud:",
+                "portInvalid": "Port musi mieścić się w zakresie od 1 do 32767.",
                 "portOpenFailedInUse": "Nie udało się otworzyć tego portu. Może jest już używany?",
                 "preparingFlash": "Przygotowywanie {{size}} MiB flasha",
                 "previous": "Wstecz",
@@ -2862,14 +3147,14 @@
                 "titlePreparations": "Przygotowania i ważne uwagi",
                 "titleReadESP32ImportFlash": "Odczytaj ESP32/Importuj Flash",
                 "uploadFailed": "Przesyłanie nie powiodło się",
-                "uploading": "Przesyłanie...",
                 "uploadSuccessful": "Przesyłanie zakończone pomyślnie, zapisano jako",
+                "uploading": "Przesyłanie...",
                 "verifyingReadFlash": "Weryfikowanie odczytanego flasha...",
                 "verifyingWrittenFlash": "Weryfikowanie zapisanego flasha...",
                 "wifiCredentialsIncomplete": "Niekompletne dane Wi-Fi! Wprowadź zarówno SSID, JAK i hasło, albo pozostaw oba pola puste!",
                 "wifiPassword": "Hasło Wi-Fi:",
-                "wifiSettings": "Dane Wi-Fi (opcjonalnie):",
                 "wifiSSID": "SSID Wi-Fi:",
+                "wifiSettings": "Dane Wi-Fi (opcjonalnie):",
                 "writingFinished": "Zapis zakończony",
                 "writingFlash": "Zapisywanie {{size}} MiB flasha..."
             },
@@ -2950,26 +3235,13 @@
         "title": "Twoje Tonieboxy",
         "uploadTonieboxCertificatesModal": {
             "AttentionGeneralPath": "(UWAGA: domyślna ścieżka!)",
-            "boxSpecific": " (nadpisane dla Tonieboxa)",
             "Label": "Certyfikaty",
+            "boxSpecific": " (nadpisane dla Tonieboxa)",
             "uploadPath": "Ścieżka przesyłania (certDir):",
             "uploadTonieboxCertificates": "Prześlij certyfikaty dla Tonieboxa {{name}}"
         },
         "warningUseAtYourOwnRisk": "Ostrzeżenie: używasz na własne ryzyko!",
-        "warningUseAtYourOwnRiskText": "Flashowanie Tonieboxa spatchowanym firmware unieważni gwarancję i może doprowadzić do uszkodzenia boxa. Postępuj dokładnie zgodnie z instrukcjami i upewnij się, że rozumiesz związane z tym ryzyko.",
-        "boxCertificate": {
-            "title": "Sprawdzanie certyfikatu",
-            "status": "Status",
-            "presented": "Przedstawiony certyfikat (SHA-256)",
-            "pin": "Przypięty certyfikat (SHA-256)",
-            "nextConnection": "Status zostanie zaktualizowany przy następnym połączeniu Toniebox.",
-            "statusText": {
-                "none": "Jeszcze nie sprawdzono",
-                "trusted": "Certyfikat wystawiony przez TeddyCloud",
-                "pinned": "Przypięty certyfikat",
-                "mismatch": "Inny certyfikat niż przypięty!"
-            }
-        }
+        "warningUseAtYourOwnRiskText": "Flashowanie Tonieboxa spatchowanym firmware unieważni gwarancję i może doprowadzić do uszkodzenia boxa. Postępuj dokładnie zgodnie z instrukcjami i upewnij się, że rozumiesz związane z tym ryzyko."
     },
     "tonies": {
         "addNewCustomTonie": "Utwórz nowy model",
@@ -3137,8 +3409,8 @@
                 "title": "Zmień nazwę modelu"
             },
             "renameFailed": "Zmiana nazwy nie powiodła się",
-            "savedState": "Wszystkie zmiany zapisane",
             "saveSuccessWithCount": "tonies.custom.json zapisany ({{count}} wpisów). Uruchomiono kopię zapasową i ponowne wczytanie.",
+            "savedState": "Wszystkie zmiany zapisane",
             "sections": {
                 "audio": "Przypisanie audio",
                 "audioAssignment": "Przypisanie audio",
@@ -3236,11 +3508,18 @@
             "uploadFailedDetails": "Podczas przesyłania wystąpił błąd: ",
             "uploadFiles": "Wybierz plik(i)",
             "uploadHint": "Przeciągnij tutaj pliki audio!",
-            "uploading": "Przesyłanie...",
-            "uploadingDetails": "Przesyłanie pliku \"{{file}}\"...",
             "uploadSuccessful": "Kodowanie pliku zakończone pomyślnie!",
             "uploadSuccessfulDetails": "Pliki zostały zakodowane jako \"{{file}}\" i dodane do biblioteki pomyślnie!",
-            "uploadText": "Kliknij lub przeciągnij do {{maxFiles}} plików audio, które chcesz przekonwertować na plik taf, aby je przesłać w tym obszarze"
+            "uploadText": "Kliknij lub przeciągnij do {{maxFiles}} plików audio, które chcesz przekonwertować na plik taf, aby je przesłać w tym obszarze",
+            "uploading": "Przesyłanie...",
+            "uploadingDetails": "Przesyłanie pliku \"{{file}}\"...",
+            "outputSingle": "Jeden TAF",
+            "outputPlaylist": "Osobne utwory + playlista",
+            "outputPlaylistTooltip": "„Osobne utwory + playlista”: każdy plik staje się osobnym TAF w folderze o nazwie TAF, do tego playlista, która łączy je w tej kolejności w TAF. Utwory można potem przestawiać, usuwać lub dodawać.",
+            "creatingPlaylist": "Tworzenie osobnych utworów i playlisty...",
+            "playlistCreatedDetails": "Utworzono „{{file}}”, jego {{count}} utworów zapisano osobno wraz z playlistą w „{{folder}}”.",
+            "playlistFailed": "Nie utworzono playlisty",
+            "playlistFailedDetails": "Utworzono „{{file}}”, ale nie osobne utwory i playlistę:"
         },
         "errorFetchingSystemSounds": "Błąd podczas pobierania dźwięków systemowych",
         "errorFetchingTonies": "Błąd podczas pobierania Tonies",
@@ -3368,17 +3647,6 @@
             "valid": "Prawidłowy:",
             "yes": "Tak"
         },
-        "tafDownload": {
-            "asOneFile": "Pobierz jako jeden plik *.ogg",
-            "downloadCount": "Pobierz utwory ({{count}}) jako *.ogg",
-            "downloadOne": "Pobierz 1 utwór jako *.ogg",
-            "duration": "Czas",
-            "modalTitle": "Pobierz utwory jako *.ogg",
-            "selectAll": "Zaznacz wszystkie utwory",
-            "selectedCount": "Wybrano {{selected}} z {{total}}",
-            "track": "Utwór",
-            "unnamedTrack": "Utwór {{number}}"
-        },
         "informationModal": {
             "hideTag": "Ukryj Tonie/Tag",
             "ok": "OK",
@@ -3474,12 +3742,24 @@
             "navigationTitle": "Dźwięki systemowe",
             "title": "Dźwięki systemowe"
         },
+        "tafDownload": {
+            "asOneFile": "Pobierz jako jeden plik *.ogg",
+            "downloadCount": "Pobierz utwory ({{count}}) jako *.ogg",
+            "downloadOne": "Pobierz 1 utwór jako *.ogg",
+            "duration": "Czas",
+            "modalTitle": "Pobierz utwory jako *.ogg",
+            "selectAll": "Zaznacz wszystkie utwory",
+            "selectedCount": "Wybrano {{selected}} z {{total}}",
+            "track": "Utwór",
+            "unnamedTrack": "Utwór {{number}}"
+        },
         "tafHeaderInvalid": "Nieprawidłowy TAF",
         "tafHeaderOf": "Nagłówek TAF dla ",
         "tafHeaderToniesJsonHint": "Nie wolno edytować tych danych podczas przesyłania ich do tonies-json. Dotyczy to również liczby ścieżek, nawet jeśli różni się ona od liczby ścieżek w polu track-desc!",
         "tap": {
             "navigationTitle": "Playlisty TeddyAudio",
-            "title": "Playlisty TeddyAudio"
+            "title": "Playlisty TeddyAudio",
+            "info": "Playlista (.tap) łączy kilka plików audio w jeden TAF, każdy plik staje się rozdziałem. Jeśli wszystkie są plikami TAF, TAF powstaje od razu przy zapisie i bez ponownego kodowania; inne formaty są kodowane przy pierwszym odtworzeniu. Do tonie można przypisać samą playlistę lub jej TAF."
         },
         "tapEditor": {
             "addFile": "Dodaj plik",
@@ -3493,7 +3773,7 @@
             "filePathContentFileRequired": "Ścieżka pliku musi być ustawiona",
             "filePathContentFileTooltip": "Ustawia ścieżkę do zasobu audio (musi być zgodna z ffmpeg)",
             "filePathRequired": "Ścieżka pliku playlisty musi być ustawiona",
-            "filePathTooltip": "Ustawia ścieżkę pliku TAF, który zostanie utworzony przez ffmpeg",
+            "filePathTooltip": "Tu zapisywany jest TAF złożony z playlisty",
             "name": "Nazwa TAP",
             "nameRequired": "Nazwa TAP musi być ustawiona",
             "nameTooltip": "Ustawia nazwę playlisty",
@@ -3526,8 +3806,8 @@
                 "modal": {
                     "clearSelection": "Wyczyść wszystko",
                     "confirm": "Dodaj {{count}} do arkusza",
-                    "itemsUnit": "tonies",
                     "itemUnit": "tonie",
+                    "itemsUnit": "tonies",
                     "leftTitle": "tonies.json",
                     "notFound": "Brak pasujących tonies",
                     "resultsTruncated": "Wyświetlono pierwsze {{shown}} z {{total}} — wpisz więcej, aby zawęzić",

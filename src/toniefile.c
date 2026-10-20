@@ -55,7 +55,7 @@ static void toniefile_comment_add(uint8_t *buffer, size_t *length, const char *s
     *length += strlen(str);
 }
 
-static size_t toniefile_header(uint8_t *buffer, size_t length, TonieboxAudioFileHeader *tafHeader)
+size_t toniefile_header(uint8_t *buffer, size_t length, TonieboxAudioFileHeader *tafHeader)
 {
     uint16_t proto_frame_size = TONIEFILE_FRAME_SIZE - 4;
 

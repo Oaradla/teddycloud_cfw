@@ -113,6 +113,11 @@ error_t load_content_json(const char *content_path, contentJson_t *content_json,
                         error_t tap_error = looks_like_tap ? tap_load(content_json->_source_resolved, &content_json->_tap) : ERROR_INVALID_FILE;
                         if (tap_error == NO_ERROR && content_json->_tap._valid)
                         {
+                            /* TAF files are put together right away; anything else gets encoded while the box plays it */
+                            if (!content_json->_tap._cached && tap_can_remux(&content_json->_tap))
+                            {
+                                tap_build(content_json->_source_resolved, &content_json->_tap);
+                            }
                             if (content_json->_tap._cached)
                             {
                                 content_json->_source_type = CT_SOURCE_TAP_CACHED;

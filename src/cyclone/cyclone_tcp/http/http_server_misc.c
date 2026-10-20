@@ -500,6 +500,140 @@ void httpParseHeaderField(HttpConnection *connection,
    {
       connection->request.cfwBuild = (uint32_t)osStrtoul(value, NULL, 10);
    }
+   else if (osStrcasecmp(name, "Origin") == 0)
+   {
+      strSafeCopy(connection->request.origin, value, sizeof(connection->request.origin));
+   }
+   else if (osStrcasecmp(name, "Sec-Fetch-Site") == 0)
+   {
+      strSafeCopy(connection->request.secFetchSite, value, sizeof(connection->request.secFetchSite));
+   }
+   else if (osStrcasecmp(name, "X-Forwarded-For") == 0)
+   {
+      httpAppendForwardedFor(connection, value);
+   }
+   else if (osStrcasecmp(name, "X-Forwarded-Proto") == 0)
+   {
+      strSafeCopy(connection->request.forwardedProto, value, sizeof(connection->request.forwardedProto));
+   }
+   else if (osStrcasecmp(name, "X-Forwarded-Host") == 0)
+   {
+      strSafeCopy(connection->request.forwardedHost, value, sizeof(connection->request.forwardedHost));
+   }
+
+   if (osStrcasecmp(name, "Host") == 0)
+   {
+      strSafeCopy(connection->request.hostFull, value, sizeof(connection->request.hostFull));
+   }
+#if (HTTP_SERVER_COOKIE_SUPPORT == ENABLED)
+   else if (osStrcasecmp(name, "Cookie") == 0)
+   {
+      httpExtractSessionCookie(connection, value);
+   }
+#endif
+}
+
+/**
+ * @brief Collects X-Forwarded-For headers; when too long only the rightmost
+ * hops are kept, as those are the ones added by trusted proxies
+ **/
+
+void httpAppendForwardedFor(HttpConnection *connection, const char_t *value)
+{
+   char_t *dst = connection->request.forwardedFor;
+   size_t size = sizeof(connection->request.forwardedFor);
+   size_t cur = osStrlen(dst);
+   size_t add = osStrlen(value);
+   size_t sep = cur > 0 ? 2 : 0;
+
+   if (cur + sep + add < size)
+   {
+      if (sep)
+      {
+         osStrcat(dst, ", ");
+      }
+      osStrcat(dst, value);
+      return;
+   }
+   //too long: keep the right end, the hops added by the proxies, never the left one
+   char_t tail[sizeof(connection->request.forwardedFor)];
+   size_t room = size - 1;
+   size_t n = 0;
+   if (add >= room)
+   {
+      osMemcpy(tail, value + add - room, room);
+      n = room;
+   }
+   else
+   {
+      size_t keep = room - add - sep;
+      if (keep > cur)
+      {
+         keep = cur;
+      }
+      osMemcpy(tail, dst + cur - keep, keep);
+      n = keep;
+      if (sep)
+      {
+         osMemcpy(tail + n, ", ", 2);
+         n += 2;
+      }
+      osMemcpy(tail + n, value, add);
+      n += add;
+   }
+   tail[n] = '\0';
+   //the first hop is cut, mark it so it can not be read as an address
+   const char_t *comma = osStrchr(tail, ',');
+   //the marker must not push the right end out of the buffer
+   while (comma != NULL && osStrlen("truncated") + osStrlen(comma) >= size)
+   {
+      comma = osStrchr(comma + 1, ',');
+   }
+   osSnprintf(dst, size, "truncated%s", comma != NULL ? comma : "");
+}
+
+/**
+ * @brief Finds the web UI session cookie in a Cookie header of any length
+ **/
+
+void httpExtractSessionCookie(HttpConnection *connection, const char_t *value)
+{
+   static const char_t name[] = "tc_web_session=";
+   static const char_t host_name[] = "__Host-tc_web_session=";
+   const char_t *p = value;
+   while (p != NULL && *p)
+   {
+      while (*p == ' ' || *p == ';')
+      {
+         p++;
+      }
+      char_t *dst = NULL;
+      if (!osStrncmp(p, host_name, sizeof(host_name) - 1))
+      {
+         p += sizeof(host_name) - 1;
+         dst = connection->request.webSessionCookieHost;
+      }
+      else if (!osStrncmp(p, name, sizeof(name) - 1))
+      {
+         p += sizeof(name) - 1;
+         dst = connection->request.webSessionCookie;
+      }
+      if (dst != NULL)
+      {
+         size_t n = 0;
+         while (p[n] && p[n] != ';' && p[n] != ' ')
+         {
+            n++;
+         }
+         //the first one counts, browsers send the most specific cookie first
+         if (n < sizeof(connection->request.webSessionCookie) && dst[0] == '\0')
+         {
+            osMemcpy(dst, p, n);
+            dst[n] = '\0';
+         }
+      }
+      p = osStrchr(p, ';');
+   }
 }
 
 
@@ -921,6 +1055,15 @@ error_t httpFormatResponseHeader(HttpConnection *connection, char_t *buffer)
    if (allowOrigin != NULL && osStrlen(allowOrigin) > 0)
    {
       p += osSprintf(p, "Access-Control-Allow-Origin: %s\r\n", allowOrigin);
+   }
+
+   //Hardening headers for the web UI (not sent to the boxes)
+   if (!connection->private.api_access_only)
+   {
+      p += osSprintf(p, "X-Content-Type-Options: nosniff\r\n");
+      p += osSprintf(p, "X-Frame-Options: SAMEORIGIN\r\n");
+      p += osSprintf(p, "Content-Security-Policy: frame-ancestors 'self'\r\n");
+      p += osSprintf(p, "Referrer-Policy: same-origin\r\n");
    }
 
    //Valid content type?

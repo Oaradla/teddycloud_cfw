@@ -8,6 +8,7 @@
 #include "version.h"
 #include "debug.h"
 #include "settings.h"
+#include "web_auth_net.h"
 #include "mutex_manager.h"
 #include "tls_adapter.h"
 
@@ -184,6 +185,8 @@ static void option_map_init(uint8_t settingsId)
     OPTION_STRING("core.server_cert.file.ca_key", &settings->core.server_cert.file.ca_key, "certs/server/ca-key.pem", "CA key", "CA key", LEVEL_EXPERT)
     OPTION_STRING("core.server_cert.file.crt", &settings->core.server_cert.file.crt, "certs/server/teddy-cert.pem", "Server certificate", "Server certificate", LEVEL_EXPERT)
     OPTION_STRING("core.server_cert.file.key", &settings->core.server_cert.file.key, "certs/server/teddy-key.pem", "Server key", "Server key", LEVEL_EXPERT)
+    OPTION_STRING("core.server_cert.file.web_crt", &settings->core.server_cert.file.web_crt, "", "Web certificate", "Certificate chain (PEM, e.g. fullchain.pem of Let's Encrypt) for the HTTPS web port. Empty uses the server certificate. Reloaded when the file changes.", LEVEL_EXPERT)
+    OPTION_STRING("core.server_cert.file.web_key", &settings->core.server_cert.file.web_key, "", "Web certificate key", "Private key (PEM) of the web certificate.", LEVEL_EXPERT)
     OPTION_TREE_DESC("core.server_cert.data", "Raw certificates", LEVEL_EXPERT)
     OPTION_STRING("core.server_cert.data.ca", &settings->core.server_cert.data.ca, "", "CA certificate data", "CA certificate data", LEVEL_EXPERT)
     OPTION_INTERNAL_STRING("core.server_cert.data.ca_key", &settings->core.server_cert.data.ca_key, "", "CA key data", LEVEL_EXPERT)
@@ -392,6 +395,20 @@ static void option_map_init(uint8_t settingsId)
     OPTION_BOOL("frontend.check_cc3200_cfw", &settings->frontend.check_cc3200_cfw, FALSE, "Check for CFW on CC3200 box", "Enable detection of CFW on CC3200 boxes to link MAC addresses to IPs.", LEVEL_DETAIL)
     OPTION_ENUM("frontend.default_ui", &settings->frontend.default_ui, 0, 1, "Default web interface", "What the address of teddyCloud opens: the classic web interface, or web2 (the new one, under /web/v2/) when it is installed", "0=Classic|1=web2", LEVEL_BASIC)
     OPTION_BOOL("frontend.web_auth_enabled", &settings->frontend.web_auth_enabled, FALSE, "Web UI login", "Require a login for the web interface. Manage users in the web UI. Disabled by default. Set TEDDYCLOUD_WEB_AUTH_DISABLE=1 to bypass.", LEVEL_BASIC)
+
+    OPTION_TREE_DESC("web_auth", "Web login security", LEVEL_DETAIL)
+    OPTION_BOOL("web_auth.require_2fa", &settings->web_auth.require_2fa, FALSE, "Require 2FA", "Every web user must set up two-factor authentication (TOTP) at the next login.", LEVEL_DETAIL)
+    OPTION_UNSIGNED("web_auth.password_min_length", &settings->web_auth.password_min_length, 10, 8, 128, "Minimum password length", "Minimum length of new web user passwords. Existing passwords keep working.", LEVEL_DETAIL)
+    OPTION_UNSIGNED("web_auth.session_days", &settings->web_auth.session_days, 14, 1, 365, "Session lifetime (days)", "A login expires after this many days at the latest.", LEVEL_DETAIL)
+    OPTION_UNSIGNED("web_auth.session_idle_hours", &settings->web_auth.session_idle_hours, 72, 0, 8760, "Session idle timeout (hours)", "A login expires after this many hours without use. 0 disables the idle timeout.", LEVEL_DETAIL)
+    OPTION_UNSIGNED("web_auth.lockout_attempts", &settings->web_auth.lockout_attempts, 5, 1, 100, "Failed logins before lockout", "Failed logins from one address before it is locked. Each further lockout doubles the time (max. 24 hours).", LEVEL_DETAIL)
+    OPTION_UNSIGNED("web_auth.lockout_minutes", &settings->web_auth.lockout_minutes, 10, 1, 1440, "Lockout time (minutes)", "Duration of the first lockout after failed logins.", LEVEL_DETAIL)
+    OPTION_STRING("web_auth.trusted_proxies", &settings->web_auth.trusted_proxies, "", "Trusted reverse proxies", "Addresses or networks (e.g. 172.18.0.0/16) of reverse proxies whose X-Forwarded-For and X-Forwarded-Proto headers are trusted. Leave empty without a proxy.", LEVEL_DETAIL)
+    OPTION_STRING("web_auth.lan_networks", &settings->web_auth.lan_networks, WEB_AUTH_DEFAULT_LAN_NETWORKS, "Local networks", "Networks treated as local (LAN). Users marked as LAN only can log in from these networks only.", LEVEL_EXPERT)
+    OPTION_BOOL("web_auth.remote_access", &settings->web_auth.remote_access, TRUE, "Web UI from outside", "Allow the web UI from addresses outside the local networks. If disabled, only local networks and the allowed networks can reach it.", LEVEL_DETAIL)
+    OPTION_BOOL("web_auth.remote_https_only", &settings->web_auth.remote_https_only, FALSE, "HTTPS only from outside", "Reject plain HTTP to the web UI from addresses outside the local networks (direct TLS or a trusted proxy with X-Forwarded-Proto: https).", LEVEL_DETAIL)
+    OPTION_STRING("web_auth.allow_networks", &settings->web_auth.allow_networks, "", "Allowed networks", "Additional networks (e.g. a VPN) that may reach the web UI when access from outside is disabled.", LEVEL_EXPERT)
+    OPTION_STRING("web_auth.deny_networks", &settings->web_auth.deny_networks, "", "Blocked networks", "Addresses or networks that may never reach the web UI.", LEVEL_EXPERT)
 
     OPTION_TREE_DESC("toniebox", "Toniebox", LEVEL_BASIC)
     OPTION_BOOL("toniebox.api_access", &settings->toniebox.api_access, TRUE, "API access", "Grant access to the API (default value for new boxes)", LEVEL_EXPERT)

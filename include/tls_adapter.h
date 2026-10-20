@@ -16,6 +16,8 @@ extern YarrowContext yarrowContext;
 
 void tls_context_key_log_init(TlsContext *context);
 error_t load_cert(const char *dest_var, const char *src_file, const char *src_var, uint8_t settingsId);
+/* reads a PEM or DER file as PEM text; the buffer is freed with free() */
+error_t read_certificate(const char_t *filename, char_t **buffer, size_t *length);
 
 /* SHA-256 (hex) and subject common name of a PEM certificate */
 bool tls_cert_fingerprint(const char_t *pem, char_t sha256[65], char_t *subject, size_t subjectSize);

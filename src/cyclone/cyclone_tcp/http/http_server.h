@@ -537,6 +537,15 @@ typedef struct
 #if (HTTP_SERVER_COOKIE_SUPPORT == ENABLED)
    char_t cookie[HTTP_SERVER_COOKIE_MAX_LEN + 1];            ///<Cookie header field
 #endif
+   // headers of the web UI login (see handler_web_auth.c), parsed in full
+   char_t webSessionCookie[64 + 1];                          ///<value of the tc_web_session cookie
+   char_t webSessionCookieHost[64 + 1];                      ///<value of the __Host-tc_web_session cookie
+   char_t hostFull[128 + 1];                                 ///<Host header, not truncated like host
+   char_t origin[128 + 1];                                   ///<Origin header
+   char_t secFetchSite[24 + 1];                              ///<Sec-Fetch-Site header
+   char_t forwardedFor[256 + 1];                             ///<X-Forwarded-For, the rightmost part if longer
+   char_t forwardedProto[16 + 1];                            ///<X-Forwarded-Proto
+   char_t forwardedHost[128 + 1];                            ///<X-Forwarded-Host
 } HttpRequest;
 
 

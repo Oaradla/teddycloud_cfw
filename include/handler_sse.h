@@ -23,6 +23,8 @@ typedef struct
     HttpConnection *connection;
     time_t lastConnection;
     uint8_t channel;
+    /* the events carry no box, so users who are no admins only get the keep-alives */
+    bool restricted;
 } SseSubscriptionContext;
 
 error_t handleApiSse(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *ctx);

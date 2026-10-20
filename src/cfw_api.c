@@ -1,3 +1,4 @@
+#include "web_acl.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -286,6 +287,11 @@ error_t handleApiCfwBoxes(HttpConnection *connection, const char_t *uri, const c
         {
             continue;
         }
+        /* users see the boxes they own or that are shared with them */
+        if (!web_acl_box_allowed(connection, settings->internal.overlayUniqueId, "box.view"))
+        {
+            continue;
+        }
         cfw_lock();
         cfw_box_t *found = cfw_box_get(settings);
         cfw_box_t box;
@@ -440,6 +446,10 @@ error_t handleApiCfwTags(HttpConnection *connection, const char_t *uri, const ch
         }
         char text[17];
         cfw_format_ruid(ruids[i], text);
+        if (!web_acl_tonie_allowed(connection, text, "tonie.view"))
+        {
+            continue;
+        }
         cJSON *entry = cJSON_CreateObject();
         cJSON_AddStringToObject(entry, "ruid", text);
         cJSON_AddStringToObject(entry, "kind", file[4] == CFW_TBS_KIND_EVENT ? "event" : "profile");

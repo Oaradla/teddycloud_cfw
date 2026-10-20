@@ -63,6 +63,10 @@ typedef struct
     bool_t authenticated;
     pcaplog_t pcap_data;
     bool api_access_only;
+    /* web UI user of the current request, set by web_auth_gate when the login is on */
+    bool web_user_known;
+    uint8_t web_level;
+    char web_user[33];
 } http_connection_private_t;
 
 #define CONTENT_LENGTH_MAX (INT32_MAX)

@@ -43,6 +43,15 @@ static const test_case_t tests[] = {
     {"cfw_battery_model_learns", test_cfw_battery_model_learns},
     {"box_cert_id", test_box_cert_id},
     {"box_cert_issuer_known", test_box_cert_issuer_known},
+    {"web_auth_totp", test_web_auth_totp},
+    {"web_auth_base32", test_web_auth_base32},
+    {"web_auth_password", test_web_auth_password},
+    {"web_auth_seal", test_web_auth_seal},
+    {"web_auth_ip", test_web_auth_ip},
+    {"web_auth_ip_resolve", test_web_auth_ip_resolve},
+    {"web_acl_patterns", test_web_acl_patterns},
+    {"web_acl_decisions", test_web_acl_decisions},
+    {"web_acl_paths", test_web_acl_paths},
 };
 
 int main(void)

@@ -96,6 +96,8 @@ void httpParseRangeField(HttpConnection *connection,
    char_t *value);
 
 void httpParseCookieField(HttpConnection *connection, char_t *value);
+void httpAppendForwardedFor(HttpConnection *connection, const char_t *value);
+void httpExtractSessionCookie(HttpConnection *connection, const char_t *value);
 
 error_t httpReadChunkSize(HttpConnection *connection);
 

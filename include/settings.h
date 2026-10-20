@@ -126,6 +126,22 @@ typedef struct
 
 typedef struct
 {
+    bool require_2fa;
+    uint32_t password_min_length;
+    uint32_t session_days;
+    uint32_t session_idle_hours;
+    uint32_t lockout_attempts;
+    uint32_t lockout_minutes;
+    char *trusted_proxies;
+    char *lan_networks;
+    bool remote_access;
+    bool remote_https_only;
+    char *allow_networks;
+    char *deny_networks;
+} settings_web_auth_t;
+
+typedef struct
+{
     bool enabled;
     char *hostname;
     uint32_t port;
@@ -188,6 +204,9 @@ typedef struct
     char *crt;
     char *key;
     char *cert_chain;
+    /* own certificate of the HTTPS web port (file settings only) */
+    char *web_crt;
+    char *web_key;
 } settings_cert_t;
 
 typedef struct
@@ -460,6 +479,7 @@ typedef struct
     settings_cloud_t cloud;
     settings_encode_t encode;
     settings_frontend_t frontend;
+    settings_web_auth_t web_auth;
     settings_mqtt_t mqtt;
     settings_mqtt_server_t mqtt_server;
     settings_hass_t hass;

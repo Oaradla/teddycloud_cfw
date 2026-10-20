@@ -7,6 +7,20 @@
 #include "cJSON.h"
 #include "json_helper.h"
 #include "handler.h"
+#include "taf_remux.h"
+#include "date_time.h"
+
+static OsMutex tap_build_mutex;
+
+void tap_init(void)
+{
+    osCreateMutex(&tap_build_mutex);
+}
+
+void tap_deinit(void)
+{
+    osDeleteMutex(&tap_build_mutex);
+}
 
 /* Upper bound on playlist entries, matching the fixed source array the
    ffmpeg encoder (ffmpeg_stream/ffmpeg_convert) operates on. */
@@ -24,6 +38,56 @@ bool_t is_valid_tap_file(char *filename)
         return true;
     }
     return false;
+}
+
+/* playlists only point into the library (and, for files, to tonie content); the
+   path must not leave it */
+static bool_t tap_path_allowed(const char *path, bool_t output)
+{
+    if (path == NULL || osStrstr(path, "..") != NULL)
+    {
+        return false;
+    }
+    if (osStrncmp(path, "lib://", 6) == 0)
+    {
+        return true;
+    }
+    return !output && osStrncmp(path, "content://", 10) == 0;
+}
+
+static bool_t has_taf_extension(const char *path)
+{
+    size_t len = osStrlen(path);
+    return len >= 4 && osStrcasecmp(&path[len - 4], ".taf") == 0;
+}
+
+/* the modification time of a file, 0 when it is missing */
+static time_t file_mtime(const char *path)
+{
+    FsFileStat stat;
+    if (fsGetFileStat(path, &stat) != NO_ERROR)
+    {
+        return 0;
+    }
+    return convertDateToUnixTime(&stat.modified);
+}
+
+/* the playlist TAF is current when it is no older than the playlist and every file in it */
+static bool_t tap_is_current(const char *filename, tonie_audio_playlist_t *tap)
+{
+    time_t built = file_mtime(tap->_filepath_resolved);
+    if (built == 0 || file_mtime(filename) > built)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < tap->filesCount; i++)
+    {
+        if (file_mtime(tap->files[i]._filepath_resolved) > built)
+        {
+            return false;
+        }
+    }
+    return true;
 }
 
 error_t tap_load(char *filename, tonie_audio_playlist_t *tap)
@@ -73,6 +137,24 @@ error_t tap_load(char *filename, tonie_audio_playlist_t *tap)
         {
             tap->audio_id = jsonGetUInt32(tapJson, "audio_id");
             tap->filepath = jsonGetString(tapJson, "filepath");
+            if (!has_taf_extension(tap->filepath))
+            {
+                /* older editors stored a directory here: the playlist TAF then goes next to the playlist */
+                char *lib = get_settings()->internal.librarydirfull;
+                size_t lib_len = osStrlen(lib);
+                size_t len = osStrlen(filename);
+                if (osStrncmp(filename, lib, lib_len) == 0 && len > lib_len + 4)
+                {
+                    TRACE_WARNING("TAP %s has no TAF as filepath, using the playlist name\r\n", filename);
+                    osFreeMem(tap->filepath);
+                    tap->filepath = custom_asprintf("lib://%.*s.taf", (int)(len - lib_len - 1 - 4), &filename[lib_len + 1]);
+                }
+            }
+            if (!tap_path_allowed(tap->filepath, true) || !has_taf_extension(tap->filepath))
+            {
+                TRACE_ERROR("TAP %s: filepath must be a .taf in lib://\r\n", filename);
+                error = ERROR_INVALID_FILE;
+            }
 
             tap->_filepath_resolved = strdup(tap->filepath);
             resolveSpecialPathPrefix(&tap->_filepath_resolved, get_settings());
@@ -99,6 +181,11 @@ error_t tap_load(char *filename, tonie_audio_playlist_t *tap)
                         break;
                     }
                     tap->files[i].filepath = jsonGetString(fileJson, "filepath");
+                    if (!tap_path_allowed(tap->files[i].filepath, false))
+                    {
+                        TRACE_ERROR("TAP %s: file %s is not in lib:// or content://\r\n", filename, tap->files[i].filepath);
+                        error = ERROR_INVALID_FILE;
+                    }
                     tap->files[i]._filepath_resolved = strdup(tap->files[i].filepath);
                     resolveSpecialPathPrefix(&tap->files[i]._filepath_resolved, get_settings());
                     tap->files[i].name = jsonGetString(fileJson, "name");
@@ -115,10 +202,9 @@ error_t tap_load(char *filename, tonie_audio_playlist_t *tap)
     cJSON_Delete(tapJson);
     if (error == NO_ERROR)
     {
-        if (isValidTaf(tap->_filepath_resolved, get_settings()->core.tap_taf_validation))
+        if (isValidTaf(tap->_filepath_resolved, get_settings()->core.tap_taf_validation) && tap_is_current(filename, tap))
         {
             tap->_cached = true;
-            // TODO check audio id if different and check settings.
         }
         tap->_valid = true;
     }
@@ -206,12 +292,14 @@ error_t tap_generate_taf(tonie_audio_playlist_t *tap, size_t *current_source, bo
     if (force || !tonieInfo->valid || tonieInfo->tafHeader->audio_id != tap->audio_id)
     {
         char *tmp_taf = custom_asprintf("%s.tmp", tap->_filepath_resolved);
-        char source[TAP_MAX_FILES][PATH_LEN];
-        if (tap->filesCount == 0 || tap->filesCount > TAP_MAX_FILES)
+        /* ~400 KB: never on the stack of the stream task (see ffmpeg_stream_task) */
+        char(*source)[PATH_LEN] = osAllocMem(sizeof(char[TAP_MAX_FILES][PATH_LEN]));
+        if (source == NULL || tap->filesCount == 0 || tap->filesCount > TAP_MAX_FILES)
         {
+            osFreeMem(source);
             osFreeMem(tmp_taf);
             freeTonieInfo(tonieInfo);
-            return ERROR_INVALID_FILE;
+            return source == NULL ? ERROR_OUT_OF_MEMORY : ERROR_INVALID_FILE;
         }
 
         for (size_t i = 0; i < tap->filesCount; i++)
@@ -220,7 +308,13 @@ error_t tap_generate_taf(tonie_audio_playlist_t *tap, size_t *current_source, bo
         }
         // toniefile_t *taf = toniefile_create(tmp_taf, tap->audio_id, false, 0);
         error = ffmpeg_stream(source, tap->filesCount, current_source, tmp_taf, 0, active, &sweep, false, false);
-        // toniefile_close(taf);
+        osFreeMem(source);
+        if (error == NO_ERROR && *current_source < tap->filesCount)
+        {
+            /* playback stopped before the end: never keep a cut off playlist as its TAF */
+            TRACE_INFO("TAP encoding aborted at file %" PRIuSIZE "/%" PRIuSIZE "\r\n", *current_source + 1, tap->filesCount);
+            error = ERROR_ABORTED;
+        }
         if (error != NO_ERROR)
         {
             fsDeleteFile(tmp_taf);
@@ -243,4 +337,79 @@ void tap_generate_task(void *param)
     stream_ctx->error = tap_generate_taf(tap_ctx->tap, &stream_ctx->current_source, &stream_ctx->active, tap_ctx->force);
     stream_ctx->quit = true;
     osDeleteTask((OsTaskId) OS_SELF_TASK_ID);
+}
+
+bool_t tap_can_remux(tonie_audio_playlist_t *tap)
+{
+    if (tap->filesCount == 0)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < tap->filesCount; i++)
+    {
+        if (!isValidTaf(tap->files[i]._filepath_resolved, false))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+error_t tap_build(char *filename, tonie_audio_playlist_t *tap)
+{
+    if (!tap->_valid || tap->filesCount == 0)
+    {
+        return ERROR_INVALID_FILE;
+    }
+
+    osAcquireMutex(&tap_build_mutex);
+
+    /* another request may have built it meanwhile */
+    error_t error = NO_ERROR;
+    if (!(isValidTaf(tap->_filepath_resolved, false) && tap_is_current(filename, tap)))
+    {
+        const char **sources = osAllocMem(tap->filesCount * sizeof(char *));
+        char *tmp_taf = custom_asprintf("%s.build", tap->_filepath_resolved);
+        if (sources == NULL)
+        {
+            error = ERROR_OUT_OF_MEMORY;
+        }
+        else
+        {
+            for (size_t i = 0; i < tap->filesCount; i++)
+            {
+                sources[i] = tap->files[i]._filepath_resolved;
+            }
+
+            /* a new audio id, so boxes notice the changed content */
+            uint32_t audio_id = (uint32_t)(time(NULL) - TEDDY_BENCH_AUDIO_ID_DEDUCT);
+            tonie_info_t *old = getTonieInfo(tap->_filepath_resolved, false, get_settings());
+            if (old->valid && old->tafHeader != NULL && old->tafHeader->audio_id >= audio_id)
+            {
+                audio_id = old->tafHeader->audio_id + 1;
+            }
+            freeTonieInfo(old);
+
+            TRACE_INFO("Build TAP %s (%" PRIuSIZE " files) into %s\r\n", filename, tap->filesCount, tap->_filepath_resolved);
+            error = taf_remux_concat(sources, tap->filesCount, tmp_taf, audio_id);
+            if (error == NO_ERROR)
+            {
+                error = fsMoveFile(tmp_taf, tap->_filepath_resolved, true);
+            }
+            if (error != NO_ERROR)
+            {
+                TRACE_ERROR("Could not build TAP %s: %s\r\n", filename, error2text(error));
+                fsDeleteFile(tmp_taf);
+            }
+            osFreeMem(sources);
+        }
+        osFreeMem(tmp_taf);
+    }
+    if (error == NO_ERROR)
+    {
+        tap->_cached = true;
+    }
+
+    osReleaseMutex(&tap_build_mutex);
+    return error;
 }

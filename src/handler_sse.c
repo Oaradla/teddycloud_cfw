@@ -2,6 +2,7 @@
 
 #include "mutex_manager.h"
 #include "handler_sse.h"
+#include "web_acl.h"
 
 static SseSubscriptionContext sseSubs[SSE_MAX_CHANNELS];
 static uint8_t sseSubscriptionCount = 0;
@@ -56,6 +57,7 @@ error_t handleApiSse(HttpConnection *connection, const char_t *uri, const char_t
     }
 
     sseCtx->lastConnection = time(NULL);
+    sseCtx->restricted = !web_acl_is_admin(connection);
     sseCtx->connection = connection;
     sseCtx->active = TRUE;
     sseCtx->error = NO_ERROR;
@@ -163,7 +165,7 @@ error_t sse_rawData(const char *content)
     for (uint8_t channel = 0; channel < SSE_MAX_CHANNELS; channel++)
     {
         SseSubscriptionContext *sseCtx = &sseSubs[channel];
-        if (!sseCtx->active)
+        if (!sseCtx->active || sseCtx->restricted)
         {
             continue;
         }

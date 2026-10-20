@@ -404,7 +404,8 @@ def test_remote_control_through_mqtt(box, box_id, start):
         pause = f"/box/{box_id}/CfwPause/set".lower()
         wait_until(lambda: any(t.lower().endswith(pause) for t in list(broker.subscribed)), timeout=30)
         base = next(t for t in list(broker.subscribed) if t.lower().endswith(pause))[: -len("/CfwPause/set")]
-        wait_until(lambda: any("CfwVolume" in t and t.endswith("/config") for t in list(broker.published)))
+        # the discovery of every box known so far comes first: as long as the subscription above
+        wait_until(lambda: any("CfwVolume" in t and t.endswith("/config") for t in list(broker.published)), timeout=30)
 
         sock = box.rtnl(cfw.hello(BUILD, CAPS_ALL, **start.next()), keep_open=True)
         reader = cfw.FrameReader(sock)

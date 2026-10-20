@@ -22,6 +22,7 @@
 #include "handler_security_mit.h" // for handleSecMitRobotsTxt, checkSecMit...
 #include "handler_sse.h"          // for handleApiSse, sse_init
 #include "handler_web_auth.h"     // for web_auth_init, web_auth_requires_login
+#include "web_acl.h"
 #include "http/http_common.h"     // for HTTP_AUTH_MODE_DIGEST
 #include "http/http_server.h"     // for _HttpConnection, HttpServerSettings
 #include "mutex_manager.h"        // for mutex_unlock, mutex_lock, MUTEX_CL...
@@ -41,6 +42,7 @@
 #include "toniebox_state.h"       // for get_toniebox_state, get_toniebox_s...
 #include "toniebox_state_type.h"  // for toniebox_state_box_t, toniebox_sta...
 #include "toniesJson.h"           // for tonieboxes_update, tonies_deinit
+#include "tonie_audio_playlist.h" // for tap_init, tap_deinit
 #include "compiler_port.h"        // for char_t, PRIuTIME
 #include "core/net.h"             // for ipStringToAddr, IpAddr
 #include "core/socket.h"          // for _Socket
@@ -121,6 +123,7 @@ request_type_t request_paths[] = {
     {REQ_GET, "/content/json/", SERTY_WEB, &handleApiContentJson},
     {REQ_GET, "/content/", SERTY_WEB, &handleApiContent},
     /* auth API */
+    {REQ_POST, "/api/auth/login2fa", SERTY_WEB, &handleApiAuthLogin2fa},
     {REQ_POST, "/api/auth/login", SERTY_WEB, &handleApiAuthLogin},
     {REQ_GET, "/api/auth/logout", SERTY_WEB, &handleApiAuthLogout},
     {REQ_POST, "/api/auth/refresh-token", SERTY_WEB, &handleApiAuthRefreshToken},
@@ -130,6 +133,24 @@ request_type_t request_paths[] = {
     {REQ_POST, "/api/auth/users/delete", SERTY_WEB, &handleApiAuthUsersDelete},
     {REQ_POST, "/api/auth/users/updatePassword", SERTY_WEB, &handleApiAuthUsersPassword},
     {REQ_POST, "/api/auth/enabled", SERTY_WEB, &handleApiAuthEnabled},
+    {REQ_POST, "/api/auth/users/update", SERTY_WEB, &handleApiAuthUsersUpdate},
+    {REQ_POST, "/api/auth/2fa/setup", SERTY_WEB, &handleApiAuth2faSetup},
+    {REQ_POST, "/api/auth/2fa/enable", SERTY_WEB, &handleApiAuth2faEnable},
+    {REQ_POST, "/api/auth/2fa/disable", SERTY_WEB, &handleApiAuth2faDisable},
+    {REQ_POST, "/api/auth/2fa/recoveryCodes", SERTY_WEB, &handleApiAuth2faRecoveryCodes},
+    {REQ_GET, "/api/auth/sessions/get", SERTY_WEB, &handleApiAuthSessionsGet},
+    {REQ_POST, "/api/auth/sessions/revoke", SERTY_WEB, &handleApiAuthSessionsRevoke},
+    {REQ_GET, "/api/auth/events/get", SERTY_WEB, &handleApiAuthEventsGet},
+    {REQ_POST, "/api/auth/unlock", SERTY_WEB, &handleApiAuthUnlock},
+    {REQ_POST, "/api/auth/confirm", SERTY_WEB, &handleApiAuthConfirm},
+    {REQ_GET, "/api/acl/catalog", SERTY_WEB, &handleApiAclCatalog},
+    {REQ_GET, "/api/acl/mine", SERTY_WEB, &handleApiAclMine},
+    {REQ_GET, "/api/acl/users", SERTY_WEB, &handleApiAclUsers},
+    {REQ_GET, "/api/acl/get", SERTY_WEB, &handleApiAclGet},
+    {REQ_POST, "/api/acl/levels/set", SERTY_WEB, &handleApiAclLevelsSet},
+    {REQ_POST, "/api/acl/groups/set", SERTY_WEB, &handleApiAclGroupsSet},
+    {REQ_POST, "/api/acl/groups/delete", SERTY_WEB, &handleApiAclGroupsDelete},
+    {REQ_POST, "/api/acl/set", SERTY_WEB, &handleApiAclSet},
     /* plugins API */
     {REQ_GET, "/api/plugins/get", SERTY_WEB, &handleApiPluginsGet},
     /* custom API */
@@ -145,6 +166,8 @@ request_type_t request_paths[] = {
     {REQ_GET, "/api/esp32/patchFirmware", SERTY_WEB, &handleApiESP32PatchFirmware},
     {REQ_POST, "/api/fileUpload", SERTY_WEB, &handleApiFileUpload},
     {REQ_POST, "/api/fileEncode", SERTY_WEB, &handleApiEncodeFile},
+    {REQ_POST, "/api/tapBuild", SERTY_WEB, &handleApiTapBuild},
+    {REQ_POST, "/api/tafSplit", SERTY_WEB, &handleApiTafSplit},
     {REQ_POST, "/api/pcmUpload", SERTY_WEB, &handleApiPcmUpload},
     {REQ_POST, "/api/tafUpload", SERTY_WEB, &handleApiTafUpload},
     {REQ_GET, "/api/fileIndexV2", SERTY_WEB, &handleApiFileIndexV2},
@@ -564,8 +587,15 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
     {
         bool handled = false;
 
+        if (!connection->private.api_access_only && web_auth_gate(connection, uri, &error))
+        {
+            break;
+        }
+
         checkSecMitHandlers(connection, uri, connection->request.queryString, client_ctx);
-        if (isSecMitIncident(connection) && get_settings()->security_mit.lockAccess)
+        /* the lock keeps an unprotected teddyCloud from being used publicly; with the web login
+         * it would only let anyone lock out the owners until a restart (the warning stays) */
+        if (isSecMitIncident(connection) && get_settings()->security_mit.lockAccess && !web_auth_requires_login())
         {
             error = handleSecMitLock(connection, uri, connection->request.queryString, client_ctx);
             break;
@@ -588,12 +618,6 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
         if (!connection->private.api_access_only && !osStrcasecmp(connection->request.method, "OPTIONS"))
         {
             error = handleCorsOptions(connection, uri, connection->request.queryString, client_ctx);
-            break;
-        }
-
-        if (!connection->private.api_access_only && web_auth_requires_login() && !web_auth_is_public_request(uri, connection->request.method) && !web_auth_is_authenticated(connection, NULL, 0))
-        {
-            error = web_auth_unauthorized(connection);
             break;
         }
 
@@ -838,10 +862,133 @@ static error_t httpServerConfigureTls(
 
     return NO_ERROR;
 }
+/*
+ * Own certificate of the HTTPS web port (e.g. Let's Encrypt), so the web UI can be
+ * reached without a reverse proxy. The files are read again when they change.
+ */
+typedef struct
+{
+    char *chain;
+    char *key;
+    char crt_path[256];
+    char key_path[256];
+    FsFileStat crt_stat;
+    FsFileStat key_stat;
+    systime_t checked;
+} web_cert_t;
+
+static web_cert_t web_cert;
+static OsMutex web_cert_mutex;
+static bool web_cert_mutex_ready = false;
+
+static bool web_cert_changed(const char *path, FsFileStat *known)
+{
+    FsFileStat now;
+    if (fsGetFileStat(path, &now) != NO_ERROR)
+    {
+        return true;
+    }
+    bool changed = now.size != known->size || osMemcmp(&now.modified, &known->modified, sizeof(now.modified)) != 0;
+    *known = now;
+    return changed;
+}
+
+/*
+ * tlsLoadCertificate keeps pointers to the PEM text and parses it again during the
+ * handshake, which may still run on other connections after a reload. So replaced
+ * buffers are never freed: a few KiB per certificate renewal.
+ */
+static void web_cert_retire(void)
+{
+    web_cert.chain = NULL;
+    web_cert.key = NULL;
+}
+
+/* loads the web certificate into the context; false if none is configured or it can not be used */
+static bool httpServerLoadWebCertificate(TlsContext *tlsContext)
+{
+    const char *crt = settings_get_string("core.server_cert.file.web_crt");
+    const char *key = settings_get_string("core.server_cert.file.web_key");
+    if (crt == NULL || key == NULL || crt[0] == '\0' || key[0] == '\0')
+    {
+        return false;
+    }
+    if (!web_cert_mutex_ready)
+    {
+        return false;
+    }
+    char *crt_full = osAllocMem(256);
+    char *key_full = osAllocMem(256);
+    if (crt_full == NULL || key_full == NULL)
+    {
+        osFreeMem(crt_full);
+        osFreeMem(key_full);
+        return false;
+    }
+    osAcquireMutex(&web_cert_mutex);
+    settings_resolve_dir(&crt_full, (char *)crt, get_settings()->internal.basedirfull);
+    settings_resolve_dir(&key_full, (char *)key, get_settings()->internal.basedirfull);
+    systime_t now = osGetSystemTime();
+    bool paths_changed = osStrcmp(crt_full, web_cert.crt_path) != 0 || osStrcmp(key_full, web_cert.key_path) != 0;
+    bool due = paths_changed || web_cert.chain == NULL || timeCompare(now, web_cert.checked + 60000) >= 0;
+    if (due)
+    {
+        web_cert.checked = now;
+        if (paths_changed)
+        {
+            osMemset(&web_cert.crt_stat, 0, sizeof(web_cert.crt_stat));
+            osMemset(&web_cert.key_stat, 0, sizeof(web_cert.key_stat));
+        }
+        bool crt_changed = web_cert_changed(crt_full, &web_cert.crt_stat);
+        bool key_changed = web_cert_changed(key_full, &web_cert.key_stat);
+        if (paths_changed || crt_changed || key_changed || web_cert.chain == NULL)
+        {
+            char *chain = NULL;
+            char *pem_key = NULL;
+            size_t len = 0;
+            web_cert_retire();
+            if (read_certificate(crt_full, &chain, &len) == NO_ERROR && read_certificate(key_full, &pem_key, &len) == NO_ERROR)
+            {
+                web_cert.chain = chain;
+                web_cert.key = pem_key;
+                TRACE_INFO("Web certificate loaded from '%s'\r\n", crt_full);
+            }
+            else
+            {
+                if (chain)
+                {
+                    osFreeMem(chain);
+                }
+                if (pem_key)
+                {
+                    osFreeMem(pem_key);
+                }
+                TRACE_ERROR("Web certificate '%s' or key '%s' could not be read, using the server certificate\r\n", crt_full, key_full);
+            }
+            osSnprintf(web_cert.crt_path, sizeof(web_cert.crt_path), "%s", crt_full);
+            osSnprintf(web_cert.key_path, sizeof(web_cert.key_path), "%s", key_full);
+        }
+    }
+    bool ok = false;
+    if (web_cert.chain != NULL && web_cert.key != NULL)
+    {
+        error_t error = tlsLoadCertificate(tlsContext, 0, web_cert.chain, osStrlen(web_cert.chain), web_cert.key, osStrlen(web_cert.key), NULL);
+        if (error)
+        {
+            TRACE_ERROR("Web certificate could not be used: %s\r\n", error2text(error));
+        }
+        ok = !error;
+    }
+    osFreeMem(crt_full);
+    osFreeMem(key_full);
+    osReleaseMutex(&web_cert_mutex);
+    return ok;
+}
+
 error_t httpServerTlsInitCallback(HttpConnection *connection, TlsContext *tlsContext)
 {
     error_t error = httpServerConfigureTls(tlsContext, TLS_CLIENT_AUTH_NONE);
-    if (!error)
+    if (!error && !httpServerLoadWebCertificate(tlsContext))
     {
         error = httpServerLoadCertificate(tlsContext, FALSE);
     }
@@ -948,6 +1095,7 @@ void server_init(bool test)
     }
 
     mutex_manager_init();
+    tap_init();
     if (!sanityChecks())
     {
         return;
@@ -955,6 +1103,8 @@ void server_init(bool test)
     settings_set_bool("internal.exit", FALSE);
     sse_init();
     web_auth_init();
+    web_acl_init();
+    web_cert_mutex_ready = osCreateMutex(&web_cert_mutex);
 
     HttpServerSettings http_settings;
     HttpServerSettings https_web_settings;
@@ -1153,6 +1303,7 @@ void server_init(bool test)
     cfw_deinit();
     tonies_deinit();
     cache_deinit();
+    tap_deinit();
     mutex_manager_deinit();
 
     pcaplog_close();

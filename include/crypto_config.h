@@ -247,7 +247,7 @@
 // HKDF support
 #define HKDF_SUPPORT DISABLED
 // PBKDF support
-#define PBKDF_SUPPORT DISABLED
+#define PBKDF_SUPPORT ENABLED
 // bcrypt support
 #define BCRYPT_SUPPORT DISABLED
 // scrypt support

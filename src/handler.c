@@ -1,5 +1,6 @@
 #include "handler.h"
 #include "cfw.h"
+#include "web_acl.h"
 #include "toniesJson.h"
 #include "server_helpers.h"
 #include "fs_ext.h"
@@ -1158,6 +1159,8 @@ void setLastRuid(char ruid[17], settings_t *settings)
 {
     if (get_settings() != settings)
     {
+        /* a tag without owner goes to the owners of the box it is placed on */
+        web_acl_tag_placed(ruid, settings->internal.overlayUniqueId);
         if (osStrcmp(settings->internal.last_ruid, ruid) != 0)
         {
             for (size_t i = 0; ruid[i] != '\0'; i++)

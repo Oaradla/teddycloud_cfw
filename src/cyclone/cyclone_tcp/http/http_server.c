@@ -472,6 +472,11 @@ void httpConnectionTask(void *param)
             // Clear response header
             osMemset(&connection->response, 0, sizeof(HttpResponse));
             osMemset(connection->private.web_bearer_token, 0, sizeof(connection->private.web_bearer_token));
+            // the box token belongs to one request as well, a later one on the same connection must send its own
+            osMemset(connection->private.authentication_token, 0, sizeof(connection->private.authentication_token));
+            // the web user is determined again for every request
+            connection->private.web_user_known = FALSE;
+            connection->private.web_user[0] = '\0';
 
             // Read the HTTP request header and parse its contents
             error = httpReadRequestHeader(connection);

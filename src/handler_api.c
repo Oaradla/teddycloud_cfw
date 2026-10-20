@@ -15,6 +15,7 @@
 #include "handler.h"
 #include "handler_api.h"
 #include "cfw.h"
+#include "web_acl.h"
 #include "handler_cloud.h"
 #include "settings.h"
 #include "stats.h"
@@ -28,6 +29,8 @@
 #include "esp32.h"
 #include "cache.h"
 #include "libraryMeta.h"
+#include "taf_remux.h"
+#include "tonie_audio_playlist.h"
 
 error_t parsePostData(HttpConnection *connection, char_t *post_data, size_t buffer_size)
 {
@@ -399,6 +402,13 @@ error_t handleApiGetIndex(HttpConnection *connection, const char_t *uri, const c
             continue;
         }
 
+        /* users see the settings of a box they may change */
+        bool writable = web_acl_setting_allowed(connection, overlay, opt->option_name, true);
+        if (!writable && !web_acl_is_admin(connection))
+        {
+            continue;
+        }
+
         cJSON *jsonEntry = cJSON_CreateObject();
         cJSON_AddStringToObject(jsonEntry, "ID", opt->option_name);
         cJSON_AddStringToObject(jsonEntry, "shortname", opt->option_name);
@@ -407,6 +417,7 @@ error_t handleApiGetIndex(HttpConnection *connection, const char_t *uri, const c
         cJSON_AddBoolToObject(jsonEntry, "overlayed", opt->overlayed);
         cJSON_AddBoolToObject(jsonEntry, "internal", opt->internal);
         cJSON_AddNumberToObject(jsonEntry, "level", opt->level);
+        cJSON_AddBoolToObject(jsonEntry, "writable", writable);
 
         switch (opt->type)
         {
@@ -498,6 +509,10 @@ error_t handleApiGetBoxes(HttpConnection *connection, const char_t *uri, const c
     {
         settings_t *settings = get_settings_id(i);
         if (!settings->internal.config_used)
+        {
+            continue;
+        }
+        if (!web_acl_box_allowed(connection, settings->internal.overlayUniqueId, "box.view"))
         {
             continue;
         }
@@ -717,6 +732,96 @@ error_t handleApiSettingsReset(HttpConnection *connection, const char_t *uri, co
     return httpWriteResponseString(connection, response, false);
 }
 
+static bool_t library_name_ends(const char *name, const char *ext)
+{
+    size_t len = osStrlen(name);
+    size_t ext_len = osStrlen(ext);
+    return len > ext_len && !osStrcasecmp(&name[len - ext_len], ext);
+}
+
+/* the model of a playlist: by its own audio id, else that of the TAF it builds (which may be gone) */
+static toniesJson_item_t *library_tap_item(const char *tapPath, settings_t *settings)
+{
+    tonie_audio_playlist_t tap;
+    osMemset(&tap, 0, sizeof(tap));
+    toniesJson_item_t *item = NULL;
+    if (tap_load((char *)tapPath, &tap) == NO_ERROR && tap._valid)
+    {
+        item = tonies_byAudioId((uint32_t)tap.audio_id);
+        if (item == NULL && tap._filepath_resolved != NULL && fsFileExists(tap._filepath_resolved))
+        {
+            tonie_info_t *info = getTonieInfo(tap._filepath_resolved, false, settings);
+            if (info->valid)
+            {
+                item = tonies_byAudioIdHashModel(info->tafHeader->audio_id, info->tafHeader->sha1_hash.data, info->json.tonie_model);
+            }
+            freeTonieInfo(info);
+        }
+    }
+    tap_free(&tap);
+    return item;
+}
+
+/* the picture of a library folder: the one picture of the playlists and TAFs directly in it, when
+   they have just one (an album split into chapters, or a single TAF); NULL otherwise */
+#define LIBRARY_FOLDER_PICTURE_MAX_FILES 64
+static const char *library_folder_picture(const char *dirPath, settings_t *settings)
+{
+    FsDir *dir = fsOpenDir(dirPath);
+    if (dir == NULL)
+    {
+        return NULL;
+    }
+    const char *picture = NULL;
+    bool_t ambiguous = false;
+    size_t seen = 0;
+    FsDirEntry entry;
+    while (!ambiguous && fsReadDir(dir, &entry) == NO_ERROR)
+    {
+        bool_t taf = library_name_ends(entry.name, ".taf");
+        bool_t tap = library_name_ends(entry.name, ".tap");
+        if ((entry.attributes & FS_FILE_ATTR_DIRECTORY) || (!taf && !tap))
+        {
+            continue;
+        }
+        if (++seen > LIBRARY_FOLDER_PICTURE_MAX_FILES)
+        {
+            ambiguous = true; /* too many to look at for a picture */
+            break;
+        }
+        char *path = custom_asprintf("%s%c%s", dirPath, PATH_SEPARATOR, entry.name);
+        toniesJson_item_t *item = NULL;
+        if (tap)
+        {
+            item = library_tap_item(path, settings);
+        }
+        else
+        {
+            tonie_info_t *info = getTonieInfo(path, false, settings);
+            if (info->valid)
+            {
+                item = tonies_byAudioIdHashModel(info->tafHeader->audio_id, info->tafHeader->sha1_hash.data, info->json.tonie_model);
+            }
+            freeTonieInfo(info);
+        }
+        osFreeMem(path);
+        if (item == NULL || item->picture == NULL || item->picture[0] == '\0')
+        {
+            continue;
+        }
+        if (picture == NULL)
+        {
+            picture = item->picture;
+        }
+        else if (osStrcmp(picture, item->picture) != 0)
+        {
+            ambiguous = true;
+        }
+    }
+    fsCloseDir(dir);
+    return ambiguous ? NULL : picture;
+}
+
 error_t handleApiFileIndexV2(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
     char overlay[16];
@@ -776,6 +881,16 @@ error_t handleApiFileIndexV2(HttpConnection *connection, const char_t *uri, cons
             continue;
         }
         bool isDir = (entry.attributes & FS_FILE_ATTR_DIRECTORY);
+        /* folders the user may not see are left out (private folders of others) */
+        if (isDir && osStrcmp(entry.name, "..") != 0 && !web_acl_folder_visible(connection, path, entry.name))
+        {
+            continue;
+        }
+        /* in a folder that is only on the way to a visible one, the files stay hidden */
+        if (!isDir && !web_acl_folder_allowed(connection, path, "folder.read"))
+        {
+            continue;
+        }
         char *filePathAbsolute = custom_asprintf("%s%c%s", pathAbsolute, PATH_SEPARATOR, entry.name);
         pathSafeCanonicalize(filePathAbsolute);
 
@@ -899,6 +1014,19 @@ error_t handleApiFileIndexV2(HttpConnection *connection, const char_t *uri, cons
                     cJSON_AddBoolToObject(jsonEntry, "has_cloud_auth", true);
                 }
                 free_content_json(&contentJson);
+            }
+        }
+        bool_t library = !osStrcmp(special, "library");
+        if (library && !isDir && item == NULL && library_name_ends(entry.name, ".tap"))
+        {
+            item = library_tap_item(filePathAbsolute, client_ctx->settings);
+        }
+        if (library && isDir && osStrcmp(entry.name, ".."))
+        {
+            const char *picture = library_folder_picture(filePathAbsolute, client_ctx->settings);
+            if (picture != NULL)
+            {
+                cJSON_AddStringToObject(jsonEntry, "folderPicture", picture);
             }
         }
         if (item != NULL)
@@ -1034,6 +1162,10 @@ error_t handleApiFileIndex(HttpConnection *connection, const char_t *uri, const 
                 continue;
             }
             bool isDir = (entry.attributes & FS_FILE_ATTR_DIRECTORY);
+            if ((isDir && !web_acl_folder_visible(connection, path, entry.name)) || (!isDir && !web_acl_folder_allowed(connection, path, "folder.read")))
+            {
+                continue;
+            }
             char dateString[64];
 
             osSnprintf(dateString, sizeof(dateString), " %04" PRIu16 "-%02" PRIu8 "-%02" PRIu8 ",  %02" PRIu8 ":%02" PRIu8 ":%02" PRIu8,
@@ -1927,6 +2059,26 @@ error_t handleApiESP32PatchFirmware(HttpConnection *connection, const char_t *ur
     return error;
 }
 
+/* library uploads remember the last playlist, the user must be allowed to use its files */
+typedef struct
+{
+    file_save_ctx base;
+    char tap[PATH_LEN];
+} library_save_ctx;
+
+static error_t file_save_end_library(void *in_ctx)
+{
+    library_save_ctx *ctx = (library_save_ctx *)in_ctx;
+    const char *name = ctx->base.filename;
+    size_t len = name ? osStrlen(name) : 0;
+    if (ctx->base.file && len > 4 && !osStrcasecmp(&name[len - 4], ".tap"))
+    {
+        osStrncpy(ctx->tap, name, sizeof(ctx->tap) - 1);
+        ctx->tap[sizeof(ctx->tap) - 1] = '\0';
+    }
+    return file_save_end(in_ctx);
+}
+
 error_t handleApiFileUpload(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
     char overlay[16];
@@ -1965,17 +2117,17 @@ error_t handleApiFileUpload(HttpConnection *connection, const char_t *uri, const
     else
     {
         multipart_cbr_t cbr;
-        file_save_ctx ctx;
+        library_save_ctx ctx;
 
         osMemset(&cbr, 0x00, sizeof(cbr));
         osMemset(&ctx, 0x00, sizeof(ctx));
 
         cbr.multipart_start = &file_save_start;
         cbr.multipart_add = &file_save_add;
-        cbr.multipart_end = &file_save_end;
+        cbr.multipart_end = &file_save_end_library;
 
-        ctx.root_path = pathAbsolute;
-        ctx.overlay = overlay;
+        ctx.base.root_path = pathAbsolute;
+        ctx.base.overlay = overlay;
 
         switch (multipart_handle(connection, &cbr, &ctx))
         {
@@ -1986,6 +2138,21 @@ error_t handleApiFileUpload(HttpConnection *connection, const char_t *uri, const
         default:
             statusCode = 500;
             break;
+        }
+
+        const char *lib = get_settings()->internal.librarydirfull;
+        size_t lib_len = osStrlen(lib);
+        if (statusCode == 200 && ctx.tap[0] != '\0' && !osStrncmp(ctx.tap, lib, lib_len) && ctx.tap[lib_len] == PATH_SEPARATOR)
+        {
+            char *source = custom_asprintf("lib://%s", &ctx.tap[lib_len + 1]);
+            bool_t allowed = web_acl_source_allowed(connection, source);
+            osFreeMem(source);
+            if (!allowed)
+            {
+                fsDeleteFile(ctx.tap);
+                osFreeMem(pathAbsolute);
+                return web_acl_forbidden(connection);
+            }
         }
     }
 
@@ -2668,6 +2835,10 @@ error_t handleApiEncodeFile(HttpConnection *connection, const char_t *uri, const
         return ERROR_INVALID_REQUEST;
     }
     sanitizePath(target, false);
+    if (!web_acl_folder_allowed(connection, target, "folder.write"))
+    {
+        return web_acl_forbidden(connection);
+    }
     char *targetAbsolute = custom_asprintf("%s%c%s", rootPath, PATH_SEPARATOR, target);
     sanitizePath(targetAbsolute, false);
 
@@ -2695,6 +2866,12 @@ error_t handleApiEncodeFile(HttpConnection *connection, const char_t *uri, const
                queryGetMulti(post_data, "source", source, sizeof(source), multisource_size))
         {
             sanitizePath(source, false);
+            if (!web_acl_folder_allowed(connection, source, "folder.read"))
+            {
+                osFreeMem(targetAbsolute);
+                osFreeMem(multisource);
+                return web_acl_forbidden(connection);
+            }
             int_t written = osSnprintf(multisource[multisource_size], PATH_LEN, "%s%c%s", rootPath, PATH_SEPARATOR, source);
             if (written < 0 || written >= PATH_LEN)
             {
@@ -2961,6 +3138,14 @@ error_t handleApiTafUpload(HttpConnection *connection, const char_t *uri, const 
     return httpWriteResponseString(connection, message, false);
 }
 
+/* the ACL folder entries describe the library only */
+static bool special_is_library(const char_t *queryString)
+{
+    char special[32] = "";
+    queryGet(queryString, "special", special, sizeof(special));
+    return !osStrcmp(special, "library");
+}
+
 error_t handleApiDirectoryCreate(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
     char overlay[16];
@@ -2984,6 +3169,10 @@ error_t handleApiDirectoryCreate(HttpConnection *connection, const char_t *uri, 
 
     /* first canonicalize path, then merge to prevent directory traversal bugs */
     sanitizePath(path, true);
+    if (!web_acl_folder_allowed(connection, path, "folder.write"))
+    {
+        return web_acl_forbidden(connection);
+    }
     char *pathAbsolute = custom_asprintf("%s%c%s", rootPath, PATH_SEPARATOR, path);
     sanitizePath(pathAbsolute, true);
 
@@ -3033,6 +3222,10 @@ error_t handleApiDirectoryDelete(HttpConnection *connection, const char_t *uri, 
 
     /* first canonicalize path, then merge to prevent directory traversal bugs */
     sanitizePath(path, true);
+    if (!web_acl_folder_tree_writable(connection, path))
+    {
+        return web_acl_forbidden(connection);
+    }
     char *pathAbsolute = custom_asprintf("%s%c%s", rootPath, PATH_SEPARATOR, path);
     sanitizePath(pathAbsolute, true);
 
@@ -3044,6 +3237,10 @@ error_t handleApiDirectoryDelete(HttpConnection *connection, const char_t *uri, 
     osSnprintf(message, sizeof(message), "OK");
 
     error_t err = fsRemoveDir(pathAbsolute);
+    if (special_is_library(queryString) && !fsDirExists(pathAbsolute))
+    {
+        web_acl_folder_removed(path);
+    }
 
     if (err != NO_ERROR)
     {
@@ -3082,6 +3279,10 @@ error_t handleApiFileDelete(HttpConnection *connection, const char_t *uri, const
 
     /* first canonicalize path, then merge to prevent directory traversal bugs */
     sanitizePath(path, false);
+    if (!web_acl_folder_tree_writable(connection, path))
+    {
+        return web_acl_forbidden(connection);
+    }
     char *pathAbsolute = custom_asprintf("%s%c%s", rootPath, PATH_SEPARATOR, path);
     sanitizePath(pathAbsolute, false);
 
@@ -3144,6 +3345,12 @@ error_t handleApiFileMove(HttpConnection *connection, const char_t *uri, const c
     sanitizePath(sourceAbsolute, false);
 
     sanitizePath(target, false);
+    /* a moved folder takes the folders below along: all of them must be writable */
+    if (!web_acl_folder_tree_writable(connection, source) || !web_acl_folder_allowed(connection, target, "folder.write"))
+    {
+        osFreeMem(sourceAbsolute);
+        return web_acl_forbidden(connection);
+    }
     char *targetAbsolute = custom_asprintf("%s%c%s", rootPath, PATH_SEPARATOR, target);
     sanitizePath(targetAbsolute, false);
 
@@ -3156,6 +3363,10 @@ error_t handleApiFileMove(HttpConnection *connection, const char_t *uri, const c
     osSnprintf(message, sizeof(message), "OK");
 
     error_t err = fsMoveFile(sourceAbsolute, targetAbsolute, false);
+    if (special_is_library(queryString) && !fsFileExists(sourceAbsolute) && !fsDirExists(sourceAbsolute))
+    {
+        web_acl_folder_moved(source, target);
+    }
 
     if (err != NO_ERROR)
     {
@@ -4423,7 +4634,8 @@ static bool isContentBaseOrJsonName(const char *name)
     return false;
 }
 
-static error_t updateContentJsonFilesForRename(const char *fromModel, const char *toModel, settings_t *settings)
+/* calls change for the content JSON of every tonie; one it changed (returns true for) is saved */
+static error_t updateContentJsonFiles(bool (*change)(contentJson_t *contentJson, void *arg), void *arg, settings_t *settings)
 {
     const char *contentDir = settings->internal.contentdirfull;
     if (contentDir == NULL || contentDir[0] == '\0')
@@ -4490,22 +4702,14 @@ static error_t updateContentJsonFilesForRename(const char *fromModel, const char
 
             contentJson_t contentJson = {0};
             error_t loadErr = load_content_json(contentPath, &contentJson, false, settings);
-            if (loadErr == NO_ERROR && contentJson._valid && contentJson.tonie_model != NULL)
+            if (loadErr == NO_ERROR && contentJson._valid && change(&contentJson, arg))
             {
-                if (osStrlen(contentJson.tonie_model) > 0 && osStrcasecmp(contentJson.tonie_model, fromModel) == 0)
+                contentJson._updated = true;
+                char *jsonPath = custom_asprintf("%s.json", contentPath);
+                if (jsonPath != NULL)
                 {
-                    osFreeMem(contentJson.tonie_model);
-                    contentJson.tonie_model = strdup(toModel);
-                    if (contentJson.tonie_model != NULL)
-                    {
-                        contentJson._updated = true;
-                        char *jsonPath = custom_asprintf("%s.json", contentPath);
-                        if (jsonPath != NULL)
-                        {
-                            save_content_json(jsonPath, &contentJson);
-                            osFreeMem(jsonPath);
-                        }
-                    }
+                    save_content_json(jsonPath, &contentJson);
+                    osFreeMem(jsonPath);
                 }
             }
             free_content_json(&contentJson);
@@ -4516,6 +4720,59 @@ static error_t updateContentJsonFilesForRename(const char *fromModel, const char
     }
     fsCloseDir(dir);
     return NO_ERROR;
+}
+
+typedef struct
+{
+    const char *from;
+    const char *to;
+} contentJsonReplace_t;
+
+static bool contentJsonModelRenamed(contentJson_t *contentJson, void *arg)
+{
+    contentJsonReplace_t *r = arg;
+    if (contentJson->tonie_model == NULL || osStrlen(contentJson->tonie_model) == 0 || osStrcasecmp(contentJson->tonie_model, r->from) != 0)
+    {
+        return false;
+    }
+    char *model = strdup(r->to);
+    if (model == NULL)
+    {
+        return false;
+    }
+    osFreeMem(contentJson->tonie_model);
+    contentJson->tonie_model = model;
+    return true;
+}
+
+static error_t updateContentJsonFilesForRename(const char *fromModel, const char *toModel, settings_t *settings)
+{
+    contentJsonReplace_t r = {fromModel, toModel};
+    return updateContentJsonFiles(contentJsonModelRenamed, &r, settings);
+}
+
+static bool contentJsonSourceMoved(contentJson_t *contentJson, void *arg)
+{
+    contentJsonReplace_t *r = arg;
+    if (contentJson->source == NULL || osStrcmp(contentJson->source, r->from) != 0)
+    {
+        return false;
+    }
+    char *source = strdup(r->to);
+    if (source == NULL)
+    {
+        return false;
+    }
+    osFreeMem(contentJson->source);
+    contentJson->source = source;
+    return true;
+}
+
+/* tonies whose source is the library file from (lib://...) get to instead, after the file moved */
+static void updateContentJsonSourcesForMove(const char *from, const char *to, settings_t *settings)
+{
+    contentJsonReplace_t r = {from, to};
+    updateContentJsonFiles(contentJsonSourceMoved, &r, settings);
 }
 
 error_t handleApiToniesCustomJsonRename(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
@@ -4907,6 +5164,30 @@ error_t handleApiContentJsonSet(HttpConnection *connection, const char_t *uri, c
         return error;
     }
 
+    /* the audio of a tonie needs "assign" and a source the user may read; the rest "edit" */
+    {
+        const char *ruid = osStrlen(uri) >= 34 ? &uri[osStrlen(uri) - 16] : "";
+        char value[256];
+        bool allowed = true;
+        if (queryGet(post_data, "source", value, sizeof(value)))
+        {
+            allowed = web_acl_tonie_allowed(connection, ruid, "tonie.assign") && web_acl_source_allowed(connection, value);
+        }
+        static const char *const edit_fields[] = {"tonie_model", "live", "nocloud", "hide", "claimed", NULL};
+        for (int f = 0; allowed && edit_fields[f] != NULL; f++)
+        {
+            if (queryGet(post_data, edit_fields[f], value, sizeof(value)))
+            {
+                allowed = web_acl_tonie_allowed(connection, ruid, "tonie.edit");
+            }
+        }
+        if (!allowed)
+        {
+            osFreeMem(contentPath);
+            return web_acl_forbidden(connection);
+        }
+    }
+
     contentJson_t content_json;
     load_content_json(contentPath, &content_json, true, client_ctx->settings);
 
@@ -5260,6 +5541,10 @@ error_t handleApiTagIndex(HttpConnection *connection, const char_t *uri, const c
                 ruid[i] = tolower(ruid[i]);
             }
 
+            if (!web_acl_tonie_allowed(connection, ruid, "tonie.view"))
+            {
+                continue;
+            }
             if (getTagInfoJson(ruid, jsonArray, client_ctx) == NO_ERROR)
             {
                 break;
@@ -5426,4 +5711,338 @@ error_t handleApiPluginsGet(HttpConnection *connection, const char_t *uri, const
         return httpWriteResponseString(connection, pluginJson, true);
     }
     return ERROR_FAILURE;
+}
+
+static error_t tap_api_reply(HttpConnection *connection, uint_t statusCode, cJSON *json)
+{
+    char *jsonString = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    if (jsonString == NULL)
+    {
+        return ERROR_OUT_OF_MEMORY;
+    }
+    httpPrepareHeader(connection, "application/json; charset=utf-8", osStrlen(jsonString));
+    connection->response.statusCode = statusCode;
+    error_t error = httpWriteResponseString(connection, jsonString, false);
+    osFreeMem(jsonString);
+    return error;
+}
+
+static error_t tap_api_error(HttpConnection *connection, uint_t statusCode, const char *message)
+{
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddStringToObject(json, "error", message);
+    return tap_api_reply(connection, statusCode, json);
+}
+
+/* the absolute path of a file in the library from the post field "path"; NULL if it has not the extension */
+static char *tap_api_library_path(const char *post_data, const char *extension)
+{
+    char path[PATH_LEN];
+    if (!queryGet(post_data, "path", path, sizeof(path)))
+    {
+        return NULL;
+    }
+    sanitizePath(path, false);
+    size_t len = osStrlen(path);
+    size_t ext_len = osStrlen(extension);
+    if (len <= ext_len || osStrcasecmp(&path[len - ext_len], extension) != 0)
+    {
+        return NULL;
+    }
+    char *absolute = custom_asprintf("%s%c%s", get_settings()->internal.librarydirfull, PATH_SEPARATOR, path);
+    sanitizePath(absolute, false);
+    return absolute;
+}
+
+/* POST path=<playlist in the library>: puts the TAF of the playlist together when all its files are TAFs */
+error_t handleApiTapBuild(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
+{
+    char_t *post_data = osAllocMem(POST_BUFFER_SIZE);
+    if (post_data == NULL)
+    {
+        return ERROR_OUT_OF_MEMORY;
+    }
+    error_t error = parsePostData(connection, post_data, POST_BUFFER_SIZE);
+    char *tapPath = (error == NO_ERROR) ? tap_api_library_path(post_data, ".tap") : NULL;
+    osFreeMem(post_data);
+    if (tapPath == NULL)
+    {
+        return tap_api_error(connection, 400, "path to a .tap in the library missing");
+    }
+
+    char *source = custom_asprintf("lib://%s", &tapPath[osStrlen(get_settings()->internal.librarydirfull) + 1]);
+    bool_t allowed = web_acl_source_allowed(connection, source);
+    osFreeMem(source);
+    if (!allowed)
+    {
+        osFreeMem(tapPath);
+        return web_acl_forbidden(connection);
+    }
+
+    tonie_audio_playlist_t tap;
+    osMemset(&tap, 0, sizeof(tap));
+    error = fsFileExists(tapPath) ? tap_load(tapPath, &tap) : ERROR_FILE_NOT_FOUND;
+    if (error != NO_ERROR || !tap._valid)
+    {
+        tap_free(&tap);
+        osFreeMem(tapPath);
+        return tap_api_error(connection, 400, "invalid playlist");
+    }
+
+    cJSON *json = cJSON_CreateObject();
+    uint_t statusCode = 200;
+    bool_t remux = tap_can_remux(&tap);
+    cJSON_AddBoolToObject(json, "remux", remux);
+    if (tap._cached)
+    {
+        cJSON_AddBoolToObject(json, "built", true);
+    }
+    else if (remux)
+    {
+        error = tap_build(tapPath, &tap);
+        cJSON_AddBoolToObject(json, "built", error == NO_ERROR);
+        if (error != NO_ERROR)
+        {
+            statusCode = 500;
+            cJSON_AddStringToObject(json, "error", error2text(error));
+        }
+    }
+    else
+    {
+        /* other audio files are encoded when a box plays the playlist */
+        cJSON_AddBoolToObject(json, "built", false);
+    }
+    cJSON_AddStringToObject(json, "filepath", tap.filepath);
+
+    tap_free(&tap);
+    osFreeMem(tapPath);
+    return tap_api_reply(connection, statusCode, json);
+}
+
+/* a file name from a chapter title */
+static void tap_api_file_title(const char *in, char *out, size_t out_len)
+{
+    size_t j = 0;
+    for (size_t i = 0; in[i] != '\0' && j + 1 < out_len; i++)
+    {
+        unsigned char c = (unsigned char)in[i];
+        out[j++] = (c < 0x20 || osStrchr("/\\:*?\"<>|", c) != NULL) ? '_' : (char)c;
+    }
+    /* no leading dots (hidden files, "..") and no trailing dots or blanks */
+    out[j] = '\0';
+    while (j > 0 && (out[j - 1] == '.' || out[j - 1] == ' '))
+    {
+        out[--j] = '\0';
+    }
+    size_t lead = 0;
+    while (out[lead] == '.' || out[lead] == ' ')
+    {
+        lead++;
+    }
+    memmove(out, &out[lead], j - lead + 1);
+}
+
+/* POST path=<TAF in the library>[&title=...]: writes every chapter as a TAF of its own into a
+   folder named like the TAF, and a playlist there that puts them together into the TAF again */
+error_t handleApiTafSplit(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
+{
+    char_t *post_data = osAllocMem(POST_BUFFER_SIZE);
+    if (post_data == NULL)
+    {
+        return ERROR_OUT_OF_MEMORY;
+    }
+    error_t error = parsePostData(connection, post_data, POST_BUFFER_SIZE);
+    char *tafPath = (error == NO_ERROR) ? tap_api_library_path(post_data, ".taf") : NULL;
+    if (tafPath == NULL)
+    {
+        osFreeMem(post_data);
+        return tap_api_error(connection, 400, "path to a .taf in the library missing");
+    }
+
+    {
+        /* reads the TAF, writes next to it */
+        const char *relative = &tafPath[osStrlen(get_settings()->internal.librarydirfull) + 1];
+        char *dir = strdup(relative);
+        char *slash = strrchr(dir, PATH_SEPARATOR);
+        *(slash ? slash : dir) = '\0';
+        bool_t allowed = web_acl_folder_allowed(connection, relative, "folder.read") && web_acl_folder_allowed(connection, dir, "folder.write");
+        osFreeMem(dir);
+        if (!allowed)
+        {
+            osFreeMem(post_data);
+            osFreeMem(tafPath);
+            return web_acl_forbidden(connection);
+        }
+    }
+
+    tonie_info_t *tafInfo = getTonieInfo(tafPath, false, get_settings());
+    if (!tafInfo->valid || tafInfo->tafHeader == NULL || tafInfo->tafHeader->n_track_page_nums == 0 || !taf_remux_possible(tafPath))
+    {
+        freeTonieInfo(tafInfo);
+        osFreeMem(post_data);
+        osFreeMem(tafPath);
+        return tap_api_error(connection, 400, "not a TAF that can be split");
+    }
+    size_t chapters = tafInfo->tafHeader->n_track_page_nums;
+    uint32_t audio_id = tafInfo->tafHeader->audio_id;
+    toniesJson_item_t *tonieItem = tonies_byAudioId(audio_id);
+    freeTonieInfo(tafInfo);
+    if (chapters > TAF_REMUX_MAX_CHAPTERS)
+    {
+        osFreeMem(post_data);
+        osFreeMem(tafPath);
+        return tap_api_error(connection, 400, "too many chapters");
+    }
+
+    /* the folder: next to the TAF and named like it, with a number if that is taken */
+    const char *lib = get_settings()->internal.librarydirfull;
+    size_t lib_len = osStrlen(lib);
+    char *base = strdup(tafPath);
+    base[osStrlen(base) - 4] = '\0';
+    char *folder = NULL;
+    for (int n = 1; n < 100 && folder == NULL; n++)
+    {
+        char *candidate = (n == 1) ? strdup(base) : custom_asprintf("%s (%d)", base, n);
+        if (fsDirExists(candidate) || fsFileExists(candidate))
+        {
+            osFreeMem(candidate);
+        }
+        else
+        {
+            folder = candidate;
+        }
+    }
+    const char *name = strrchr(base, PATH_SEPARATOR) ? strrchr(base, PATH_SEPARATOR) + 1 : base;
+    if (folder == NULL || fsCreateDir(folder) != NO_ERROR)
+    {
+        osFreeMem(folder);
+        osFreeMem(base);
+        osFreeMem(post_data);
+        osFreeMem(tafPath);
+        return tap_api_error(connection, 500, "cannot create the folder");
+    }
+
+    tonie_audio_playlist_t tap;
+    osMemset(&tap, 0, sizeof(tap));
+    tap.audio_id = audio_id;
+    tap.filepath = custom_asprintf("lib://%s", &tafPath[lib_len + 1]);
+    tap.name = strdup(name);
+    tap.files = osAllocMem(chapters * sizeof(tap_file_t));
+    osMemset(tap.files, 0, chapters * sizeof(tap_file_t));
+
+    uint32_t chapter_audio_id = (uint32_t)(time(NULL) - TEDDY_BENCH_AUDIO_ID_DEDUCT);
+    for (size_t i = 0; i < chapters && error == NO_ERROR; i++)
+    {
+        char given[256];
+        char title[128];
+        if (queryGetMulti(post_data, "title", given, sizeof(given), i) && given[0] != '\0')
+        {
+            tap_api_file_title(given, title, sizeof(title));
+        }
+        else if (tonieItem != NULL && i < tonieItem->tracks_count && tonieItem->tracks[i] != NULL)
+        {
+            tap_api_file_title(tonieItem->tracks[i], title, sizeof(title));
+        }
+        else
+        {
+            title[0] = '\0';
+        }
+        if (title[0] == '\0')
+        {
+            osSnprintf(title, sizeof(title), "Chapter %" PRIuSIZE, i + 1);
+        }
+
+        char *file = custom_asprintf("%s%c%02" PRIuSIZE " - %s.taf", folder, PATH_SEPARATOR, i + 1, title);
+        error = taf_remux_chapter(tafPath, i, file, chapter_audio_id + (uint32_t)i);
+        if (error != NO_ERROR)
+        {
+            TRACE_ERROR("Could not write chapter %" PRIuSIZE " of %s: %s\r\n", i + 1, tafPath, error2text(error));
+        }
+        tap.files[i].filepath = custom_asprintf("lib://%s", &file[lib_len + 1]);
+        tap.files[i].name = strdup(title);
+        tap.filesCount = i + 1;
+        osFreeMem(file);
+    }
+
+    /* the original goes into the folder too, so that the album stays together; tonies with it as
+       their source follow it, and the playlist builds it there */
+    char *moved = NULL;
+    if (error == NO_ERROR)
+    {
+        char *target = custom_asprintf("%s%c%s.taf", folder, PATH_SEPARATOR, name);
+        if (target != NULL && fsMoveFile(tafPath, target, false) == NO_ERROR)
+        {
+            char *from = custom_asprintf("lib://%s", &tafPath[lib_len + 1]);
+            char *to = custom_asprintf("lib://%s", &target[lib_len + 1]);
+            if (from != NULL && to != NULL)
+            {
+                updateContentJsonSourcesForMove(from, to, get_settings());
+                osFreeMem(tap.filepath);
+                tap.filepath = strdup(to);
+            }
+            osFreeMem(from);
+            osFreeMem(to);
+            moved = target;
+        }
+        else
+        {
+            TRACE_WARNING("Could not move %s into the folder of its chapters, it stays where it is\r\n", tafPath);
+            osFreeMem(target);
+        }
+    }
+
+    char *tapPath = custom_asprintf("%s%c%s.tap", folder, PATH_SEPARATOR, name);
+    if (error == NO_ERROR)
+    {
+        error = tap_save(tapPath, &tap);
+    }
+
+    cJSON *json = cJSON_CreateObject();
+    uint_t statusCode = 200;
+    if (error == NO_ERROR)
+    {
+        cJSON_AddStringToObject(json, "folder", &folder[lib_len + 1]);
+        cJSON_AddStringToObject(json, "tap", &tapPath[lib_len + 1]);
+        cJSON_AddNumberToObject(json, "chapters", (double)chapters);
+        if (moved != NULL)
+        {
+            cJSON_AddStringToObject(json, "original", &moved[lib_len + 1]);
+        }
+    }
+    else
+    {
+        /* the original back where it was, with its tonies */
+        if (moved != NULL && fsMoveFile(moved, tafPath, false) == NO_ERROR)
+        {
+            char *from = custom_asprintf("lib://%s", &moved[lib_len + 1]);
+            char *to = custom_asprintf("lib://%s", &tafPath[lib_len + 1]);
+            if (from != NULL && to != NULL)
+            {
+                updateContentJsonSourcesForMove(from, to, get_settings());
+            }
+            osFreeMem(from);
+            osFreeMem(to);
+        }
+        /* leave nothing half done behind */
+        for (size_t i = 0; i < tap.filesCount; i++)
+        {
+            char *file = strdup(tap.files[i].filepath);
+            resolveSpecialPathPrefix(&file, get_settings());
+            fsDeleteFile(file);
+            osFreeMem(file);
+        }
+        fsRemoveDir(folder);
+        statusCode = 500;
+        cJSON_AddStringToObject(json, "error", error2text(error));
+    }
+
+    tap_free(&tap);
+    osFreeMem(moved);
+    osFreeMem(tapPath);
+    osFreeMem(folder);
+    osFreeMem(base);
+    osFreeMem(post_data);
+    osFreeMem(tafPath);
+    return tap_api_reply(connection, statusCode, json);
 }

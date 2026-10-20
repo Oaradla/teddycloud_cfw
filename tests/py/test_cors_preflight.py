@@ -39,7 +39,7 @@ class CorsPreflight(unittest.TestCase):
         assert status == 200, status
         status, _, _ = request("POST", "/api/auth/enabled", {"enabled": True})
         assert status == 200, status
-        status, _, text = request("POST", "/api/auth/login", {"username": USER, "password": PASSWORD})
+        status, _, text = request("POST", "/api/auth/login", {"username": USER, "password": PASSWORD, "wantToken": True})
         assert status == 200, status
         cls.token = json.loads(text)["token"]
 

@@ -154,7 +154,7 @@ GmbH; the names only say which devices the software works with.
 Changing the firmware of a box, opening it or connecting to its debug port
 is at your own risk: a box can become unusable, and it can affect claims
 against the manufacturer. The software comes without any warranty (see the
-licence). Using the manufacturer's cloud is subject to its terms of use.
+licence).
 
 ## Attribution
 The icons used are from here:

@@ -269,7 +269,9 @@ class Tap(Base, TafCheck):
 
         tap = json.loads((folder / "album.tap").read_text())
         self.assertEqual(tap["type"], "tap")
-        self.assertEqual(tap["filepath"], f"lib://{DIR}/album/album.taf")
+        # the playlist builds a TAF of its own, the original stays as it is
+        self.assertEqual(tap["filepath"], f"lib://{DIR}/album/album.tap.taf")
+        self.assertFalse((folder / "album.tap.taf").exists())
         self.assertEqual(tap["audio_id"], self.source.audio_id, "the playlist keeps the audio id, and so the cover")
         self.assertEqual([f["filepath"] for f in tap["files"]], [f"lib://{DIR}/album/{n}" for n in names])
 
@@ -294,9 +296,12 @@ class Tap(Base, TafCheck):
         self.assertEqual(result["built"], True)
         self.assertEqual(result["remux"], True)
 
-        rebuilt = Taf(LIBRARY / DIR / "album" / "album.taf")
+        rebuilt = Taf(LIBRARY / DIR / "album" / "album.tap.taf")
         self.assertValidTaf(rebuilt)
         self.assertNotEqual(rebuilt.audio_id, original_audio_id, "a changed TAF needs a new audio id")
+        self.assertEqual(Taf(LIBRARY / DIR / "album" / "album.taf").audio_id, original_audio_id, "the original is not touched")
+        # the header of the hidden TAF comes with the answer
+        self.assertEqual(result["tafHeader"], {"audioId": rebuilt.audio_id, "sha1Hash": rebuilt.sha1.hex()})
         self.assertEqual(len(rebuilt.tracks), len(TRACK_SECONDS))
         self.assertEqual(
             audio(rebuilt.audio_packets()), audio(self.source.audio_packets())
@@ -305,7 +310,7 @@ class Tap(Base, TafCheck):
         # current now: nothing to do
         status, result = self.build(f"{DIR}/album/album.tap")
         self.assertEqual((status, result["built"]), (200, True))
-        self.assertEqual(Taf(LIBRARY / DIR / "album" / "album.taf").audio_id, rebuilt.audio_id)
+        self.assertEqual(Taf(LIBRARY / DIR / "album" / "album.tap.taf").audio_id, rebuilt.audio_id)
 
     def test_reordered_playlist(self):
         self.assertEqual(self.split()[0], 200)
@@ -316,7 +321,7 @@ class Tap(Base, TafCheck):
         tap_path.write_text(json.dumps(tap))
 
         self.assertEqual(self.build(f"{DIR}/album/album.tap")[0], 200)
-        rebuilt = Taf(LIBRARY / DIR / "album" / "album.taf")
+        rebuilt = Taf(LIBRARY / DIR / "album" / "album.tap.taf")
         self.assertValidTaf(rebuilt)
         self.assertEqual(len(rebuilt.tracks), 2)
         third = Taf(LIBRARY / DIR / "album" / "03 - Chapter 3.taf").audio_packets()
@@ -355,7 +360,7 @@ class Tap(Base, TafCheck):
                 {"Content-Type": "application/x-www-form-urlencoded"},
             )
             self.assertEqual(status, 200, text)
-            rebuilt = Taf(LIBRARY / DIR / "album" / "album.taf")
+            rebuilt = Taf(LIBRARY / DIR / "album" / "album.tap.taf")
             self.assertValidTaf(rebuilt)
             self.assertEqual(len(rebuilt.tracks), 2)
         finally:
@@ -408,7 +413,7 @@ class Tap(Base, TafCheck):
             status, text = request("GET", f"/api/fileIndexV2?special=library&path={quote(DIR)}")
             entries = {e["name"]: e for e in json.loads(text)["files"]}
             self.assertEqual(entries["album"].get("folderPicture"), model["pic"])
-            # the playlist keeps it when the TAF it builds is gone
+            # the playlist keeps it when the original is gone
             (LIBRARY / DIR / "album" / "album.taf").unlink()
             status, text = request("GET", f"/api/fileIndexV2?special=library&path={quote(DIR + '/album')}")
             entries = {e["name"]: e for e in json.loads(text)["files"]}
@@ -432,6 +437,113 @@ class Tap(Base, TafCheck):
             self.assertNotIn("folderPicture", entries["album"])
         finally:
             request("POST", "/api/toniesCustomJsonDelete", json.dumps({"models": [m["model"] for m in models]}), {"Content-Type": "application/json"})
+
+    def listed(self, folder, endpoint="fileIndexV2"):
+        status, text = request("GET", f"/api/{endpoint}?special=library&path={quote(folder)}")
+        self.assertEqual(status, 200, text)
+        return {e["name"] for e in json.loads(text)["files"]}
+
+    def move(self, source, target):
+        return self.post("/api/fileMove?special=library", f"source={quote(source)}&target={quote(target)}")
+
+    def built_playlist(self):
+        self.assertEqual(self.split()[0], 200)
+        self.assertEqual(self.build(f"{DIR}/album/album.tap")[0], 200)
+        self.assertTrue((LIBRARY / DIR / "album" / "album.tap.taf").exists())
+
+    def test_the_built_taf_is_not_listed(self):
+        self.built_playlist()
+        for endpoint in ("fileIndexV2", "fileIndex"):
+            names = self.listed(f"{DIR}/album", endpoint)
+            self.assertIn("album.tap", names)
+            self.assertNotIn("album.tap.taf", names, endpoint)
+        # without its playlist it shows up again
+        (LIBRARY / DIR / "album" / "album.tap").unlink()
+        self.assertIn("album.tap.taf", self.listed(f"{DIR}/album"))
+
+    def test_renamed_playlist_takes_its_taf_along(self):
+        self.built_playlist()
+        self.assertEqual(self.move(f"{DIR}/album/album.tap", f"{DIR}/album/neu.tap")[0], 200)
+        folder = LIBRARY / DIR / "album"
+        self.assertFalse((folder / "album.tap.taf").exists())
+        self.assertTrue((folder / "neu.tap.taf").exists())
+        tap = json.loads((folder / "neu.tap").read_text())
+        self.assertEqual(tap["filepath"], f"lib://{DIR}/album/neu.tap.taf")
+        self.assertNotIn("neu.tap.taf", self.listed(f"{DIR}/album"))
+
+    def test_renamed_playlist_not_built_yet_builds_at_the_new_place(self):
+        self.assertEqual(self.split()[0], 200)
+        self.assertEqual(self.move(f"{DIR}/album/album.tap", f"{DIR}/album/neu.tap")[0], 200)
+        tap = json.loads((LIBRARY / DIR / "album" / "neu.tap").read_text())
+        self.assertEqual(tap["filepath"], f"lib://{DIR}/album/neu.tap.taf")
+
+    def test_moved_folder_keeps_playlist_and_tonie_working(self):
+        if request("GET", f"/content/json/get/{self.RUID}")[0] == 200:
+            self.skipTest(f"content JSON for {self.RUID} already exists, not touching it")
+        self.built_playlist()
+        try:
+            status, text = request(
+                "POST",
+                f"/content/json/set/{self.RUID}",
+                "source=" + quote(f"lib://{DIR}/album/album.tap"),
+                {"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            self.assertEqual(status, 200, text)
+            self.assertEqual(self.move(f"{DIR}/album", f"{DIR}/Hörspiel")[0], 200)
+
+            tap = json.loads((LIBRARY / DIR / "Hörspiel" / "album.tap").read_text())
+            self.assertEqual(tap["filepath"], f"lib://{DIR}/Hörspiel/album.tap.taf")
+            self.assertTrue(all(f["filepath"].startswith(f"lib://{DIR}/Hörspiel/") for f in tap["files"]), tap["files"])
+            status, text = request("GET", f"/content/json/get/{self.RUID}")
+            self.assertEqual(json.loads(text)["source"], f"lib://{DIR}/Hörspiel/album.tap")
+            # and it still builds from the moved chapters
+            time.sleep(1.1)
+            (LIBRARY / DIR / "Hörspiel" / "album.tap").touch()
+            status, result = self.build(f"{DIR}/Hörspiel/album.tap")
+            self.assertEqual((status, result.get("built")), (200, True), result)
+        finally:
+            request("POST", "/api/fileDelete", f"{self.RUID[:8]}/{self.RUID[8:]}.json")
+            request("POST", "/api/dirDelete", self.RUID[:8])
+
+    def test_a_folder_with_a_similar_name_is_left_alone(self):
+        self.assertEqual(self.split()[0], 200)
+        (LIBRARY / DIR / "album2").mkdir()
+        other = {"type": "tap", "audio_id": 1, "filepath": f"lib://{DIR}/album2/x.tap.taf", "name": "x",
+                 "files": [{"filepath": f"lib://{DIR}/album2/a.taf", "name": "a"}]}
+        (LIBRARY / DIR / "album2" / "x.tap").write_text(json.dumps(other))
+        self.assertEqual(self.move(f"{DIR}/album", f"{DIR}/moved")[0], 200)
+        self.assertEqual(json.loads((LIBRARY / DIR / "album2" / "x.tap").read_text()), other)
+
+    def test_deleted_playlist_takes_its_taf_along(self):
+        self.built_playlist()
+        status, text = request("POST", "/api/fileDelete?special=library", f"{DIR}/album/album.tap")
+        self.assertEqual(status, 200, text)
+        self.assertFalse((LIBRARY / DIR / "album" / "album.tap.taf").exists())
+        self.assertTrue((LIBRARY / DIR / "album" / "album.taf").exists(), "the original stays")
+
+    def test_deleting_a_folder_takes_everything_in_it(self):
+        self.built_playlist()
+        folder = LIBRARY / DIR / "album"
+        (folder / "sub").mkdir()
+        (folder / "sub" / "x.txt").write_text("x")
+        (folder / "album.taf.json").write_text("{}")  # a hidden sidecar
+        outside = LIBRARY.parent / "__keep_me.txt"
+        outside.write_text("keep")
+        os.symlink(LIBRARY.parent, folder / "link")
+        try:
+            status, text = request("POST", "/api/fileDelete?special=library", f"{DIR}/album")
+            self.assertEqual(status, 200, text)
+            self.assertFalse(folder.exists())
+            self.assertTrue(outside.exists(), "a link is removed, never followed")
+        finally:
+            outside.unlink(missing_ok=True)
+
+    def test_the_library_itself_is_never_deleted(self):
+        # (an empty body is never read by the server, nothing is deleted then either)
+        for path in ("/", ".", "/./", "x/..", "__tap/.."):
+            status, _ = request("POST", "/api/fileDelete?special=library", path)
+            self.assertNotEqual(status, 200, repr(path))
+            self.assertTrue((LIBRARY / DIR / "album.taf").exists(), repr(path))
 
     def test_rejects_paths_outside_the_library(self):
         # not a playlist, or outside the library

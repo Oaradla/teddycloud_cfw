@@ -9,6 +9,7 @@
 #include "handler.h"
 #include "taf_remux.h"
 #include "date_time.h"
+#include "path_ext.h"
 
 static OsMutex tap_build_mutex;
 
@@ -412,4 +413,160 @@ error_t tap_build(char *filename, tonie_audio_playlist_t *tap)
 
     osReleaseMutex(&tap_build_mutex);
     return error;
+}
+
+static bool_t tap_has_suffix(const char *path, const char *suffix)
+{
+    size_t len = osStrlen(path);
+    size_t suffixLen = osStrlen(suffix);
+    return len > suffixLen && !osStrcasecmp(&path[len - suffixLen], suffix);
+}
+
+bool_t tap_is_built_taf(const char *path)
+{
+    if (!tap_has_suffix(path, ".tap" TAP_BUILT_SUFFIX))
+    {
+        return false;
+    }
+    char *tapPath = strdup(path);
+    tapPath[osStrlen(tapPath) - osStrlen(TAP_BUILT_SUFFIX)] = '\0';
+    bool_t exists = fsFileExists(tapPath);
+    osFreeMem(tapPath);
+    return exists;
+}
+
+void tap_deleted(const char *tapPath)
+{
+    if (!tap_has_suffix(tapPath, ".tap"))
+    {
+        return;
+    }
+    char *built = custom_asprintf("%s%s", tapPath, TAP_BUILT_SUFFIX);
+    if (fsFileExists(built) && fsDeleteFile(built) == NO_ERROR)
+    {
+        TRACE_INFO("Deleted %s with its playlist\r\n", built);
+    }
+    osFreeMem(built);
+}
+
+/* path with the prefix from (the path itself or below it) as to + rest; NULL when it does not match */
+static char *tap_path_moved(const char *path, const char *from, const char *to)
+{
+    size_t fromLen = osStrlen(from);
+    if (path == NULL || osStrncmp(path, from, fromLen) != 0)
+    {
+        return NULL;
+    }
+    char next = path[fromLen];
+    if (next != '\0' && next != '/' && next != PATH_SEPARATOR)
+    {
+        return NULL;
+    }
+    return custom_asprintf("%s%s", to, &path[fromLen]);
+}
+
+static bool_t tap_replace_path(char **path, const char *from, const char *to)
+{
+    char *moved = tap_path_moved(*path, from, to);
+    if (moved == NULL)
+    {
+        return false;
+    }
+    osFreeMem(*path);
+    *path = moved;
+    return true;
+}
+
+/* every playlist below dir that names something under from (lib://...) names it under to now */
+static void tap_rewrite_dir(const char *dir, const char *from, const char *to, int depth)
+{
+    FsDir *fsDir = fsOpenDir(dir);
+    if (fsDir == NULL)
+    {
+        return;
+    }
+    FsDirEntry entry;
+    while (fsReadDir(fsDir, &entry) == NO_ERROR)
+    {
+        if (!osStrcmp(entry.name, ".") || !osStrcmp(entry.name, ".."))
+        {
+            continue;
+        }
+        char *path = custom_asprintf("%s%c%s", dir, PATH_SEPARATOR, entry.name);
+        if (entry.attributes & FS_FILE_ATTR_DIRECTORY)
+        {
+            if (depth < 32)
+            {
+                tap_rewrite_dir(path, from, to, depth + 1);
+            }
+        }
+        else if (tap_has_suffix(entry.name, ".tap"))
+        {
+            tonie_audio_playlist_t tap;
+            osMemset(&tap, 0, sizeof(tap));
+            if (tap_load(path, &tap) == NO_ERROR && tap._valid)
+            {
+                bool_t changed = tap_replace_path(&tap.filepath, from, to);
+                for (size_t i = 0; i < tap.filesCount; i++)
+                {
+                    changed |= tap_replace_path(&tap.files[i].filepath, from, to);
+                }
+                if (changed && tap_save(path, &tap) != NO_ERROR)
+                {
+                    TRACE_WARNING("Could not update the paths in %s\r\n", path);
+                }
+            }
+            tap_free(&tap);
+        }
+        osFreeMem(path);
+    }
+    fsCloseDir(fsDir);
+}
+
+void tap_moved(const char *fromPath, const char *toPath)
+{
+    const char *lib = get_settings()->internal.librarydirfull;
+    size_t libLen = osStrlen(lib);
+    if (osStrncmp(fromPath, lib, libLen) != 0 || fromPath[libLen] != PATH_SEPARATOR ||
+        osStrncmp(toPath, lib, libLen) != 0 || toPath[libLen] != PATH_SEPARATOR)
+    {
+        return;
+    }
+
+    /* a playlist takes the TAF it built next to itself along */
+    if (tap_has_suffix(fromPath, ".tap") && tap_has_suffix(toPath, ".tap"))
+    {
+        char *oldBuilt = custom_asprintf("%s%s", fromPath, TAP_BUILT_SUFFIX);
+        char *newBuilt = custom_asprintf("%s%s", toPath, TAP_BUILT_SUFFIX);
+        if (fsFileExists(oldBuilt))
+        {
+            if (fsMoveFile(oldBuilt, newBuilt, false) == NO_ERROR)
+            {
+                tap_moved(oldBuilt, newBuilt);
+            }
+            else
+            {
+                TRACE_WARNING("Could not move %s along with its playlist\r\n", oldBuilt);
+            }
+        }
+        else
+        {
+            /* not built yet: the playlist builds it at the new place */
+            char *from = custom_asprintf("lib://%s", &oldBuilt[libLen + 1]);
+            char *to = custom_asprintf("lib://%s", &newBuilt[libLen + 1]);
+            tap_rewrite_dir(lib, from, to, 0);
+            osFreeMem(from);
+            osFreeMem(to);
+        }
+        osFreeMem(oldBuilt);
+        osFreeMem(newBuilt);
+    }
+
+    char *from = custom_asprintf("lib://%s", &fromPath[libLen + 1]);
+    char *to = custom_asprintf("lib://%s", &toPath[libLen + 1]);
+    osAcquireMutex(&tap_build_mutex);
+    tap_rewrite_dir(lib, from, to, 0);
+    osReleaseMutex(&tap_build_mutex);
+    osFreeMem(from);
+    osFreeMem(to);
 }

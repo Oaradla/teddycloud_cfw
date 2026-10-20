@@ -48,7 +48,8 @@
         "passwordChangeTitle": "Définir un nouveau mot de passe",
         "passwordChangeHint": "Un administrateur vous demande de changer votre mot de passe avant de continuer.",
         "repeatPassword": "Répéter le nouveau mot de passe",
-        "passwordMismatch": "Les mots de passe ne correspondent pas"
+        "passwordMismatch": "Les mots de passe ne correspondent pas",
+        "passwordMin": "Au moins 4 caractères"
     },
     "cfw": {
         "saveError": "Échec de l'enregistrement",
@@ -311,14 +312,15 @@
                 "title": "Installer le firmware personnalisé sur une box",
                 "intro": "Voici comment une box qui a encore le firmware d'origine reçoit le firmware personnalisé. La méthode dépend de la puce de la box (<identify>identifier la version de la box</identify>). Le support CFW de teddyCloud doit être activé.",
                 "cc3200": {
-                    "title": "Toniebox avec puce CC3200 (carte SD)",
+                    "cardZip": "Un contenu de carte SD prêt à l'emploi fait aussi les étapes 3 à 6 (bootloader, firmware, page de configuration, serveur) : <card>créer le zip de la carte SD</card>.",
                     "step1": "La box doit déjà fonctionner avec teddyCloud et avoir le chargeur d'amorçage SD HackieboxNG. Voir <setup>Ajouter Toniebox</setup> (CC3200).",
                     "step2": "Prends le paquet de version du firmware personnalisé (<code>toniebox-cfw-….zip</code>), le même que tu charges dans la bibliothèque ci-dessous, et décompresse-le sur ton ordinateur.",
                     "step3": "Le firmware personnalisé a besoin du chargeur d'amorçage HackieboxNG adapté, avec démarrage d'essai et retour automatique lors des mises à jour. Il se trouve dans le paquet sous <code>cc3200/ngbootloader.bin</code> : copie-le sur <code>/revvox/boot/ngbootloader.bin</code> de la carte SD.",
                     "step4": "Copie sur la carte SD : <code>cc3200/ng-cfw.bin</code> vers <code>/revvox/boot/ng-cfw1.bin</code> et <code>setup.htm</code> vers <code>/cfw/setup.htm</code>.",
                     "step5": "Indique le serveur dans <code>/cfw/config.txt</code> : <code>host={{host}}</code> (et <code>port=</code> si besoin). Il peut aussi être modifié plus tard sur la page de configuration de la box.",
                     "step6": "Dans <code>/revvox/boot/ngCfg.json</code>, sous <code>general</code>, mets <code>\"activeImg\": \"cfw1\"</code> et <code>\"stateFile\": \"/revvox/boot/ngstate.bin\"</code>. Le firmware d'origine reste : avec l'<code>activeImg</code> précédent (souvent <code>\"ofw1\"</code>) la box démarre comme avant.",
-                    "step7": "Remets la carte et démarre la box. Elle se connecte à teddyCloud avec le firmware personnalisé et apparaît ici sous « Box ». Toutes les mises à jour suivantes passent par cette page."
+                    "step7": "Remets la carte et démarre la box. Elle se connecte à teddyCloud avec le firmware personnalisé et apparaît ici sous « Box ». Toutes les mises à jour suivantes passent par cette page.",
+                    "title": "Toniebox avec puce CC3200 (carte SD)"
                 },
                 "esp32": {
                     "title": "Toniebox avec puce ESP32 (via teddyCloud)",
@@ -703,6 +705,8 @@
         "attention": "Veuillez noter !",
         "cancel": "Annuler",
         "confirmDeleteDialog": "Êtes-vous sûr de vouloir supprimer {{fileToDelete}}?",
+        "confirmDeleteFolderDialog": "Voulez-vous vraiment supprimer le dossier {{fileToDelete}} avec tout son contenu ?",
+        "confirmDeleteFoldersNote": "Les dossiers sont supprimés avec tout leur contenu.",
         "confirmDeleteModal": "Confirmer la suppression",
         "confirmMultipleDeleteDialog": "Êtes-vous sûr de vouloir supprimer les lignes sélectionnées ?",
         "createDirectory": {
@@ -805,8 +809,8 @@
                     "title": "Renommer le fichier"
                 },
                 "splitTafToPlaylist": {
-                    "title": "Diviser le TAF en pistes",
-                    "text": "Crée un dossier avec chaque chapitre en TAF séparé et une playlist qui les réassemble dans le TAF d'origine. Dans la playlist, les pistes peuvent être réordonnées, supprimées ou insérées ; l'enregistrement réassemble le TAF sans réencodage."
+                    "text": "Crée un dossier avec chaque chapitre en TAF séparé et une playlist qui les assemble dans son propre TAF. L'original est déplacé tel quel dans le dossier. Dans la playlist, les pistes peuvent être réordonnées, supprimées ou insérées ; l'enregistrement réassemble le TAF de la playlist sans réencodage.",
+                    "title": "Diviser le TAF en pistes"
                 }
             },
             "actionItemsMulti": {
@@ -922,6 +926,19 @@
         "tafMeta": {
             "edit": "Éditer les métadonnées (modèle personnalisé)"
         },
+        "tafSplit": {
+            "action": "Diviser en pistes (playlist)",
+            "cancel": "Annuler",
+            "confirm": "Diviser",
+            "description": "Chaque chapitre devient un TAF à part dans le nouveau dossier « {{folder}} ». Une playlist y réassemble les pistes ; on peut y réordonner, supprimer ou insérer des pistes.",
+            "descriptionCount": "Les {{count}} chapitres deviennent chacun un TAF à part dans le nouveau dossier « {{folder}} ». Une playlist y réassemble les pistes ; on peut y réordonner, supprimer ou insérer des pistes.",
+            "failed": "Échec de la division",
+            "failedDetails": "« {{file}} » n'a pas pu être divisé :",
+            "originalStays": "« {{file}} » est déplacé tel quel dans le dossier ; les tonies qui y sont liés continuent de le jouer. La playlist assemble à partir des pistes son propre TAF « {{playlist}} » (masqué dans la bibliothèque), avec la pochette et les titres de l'original ; les données audio sont seulement copiées, pas réencodées. Pour qu'un tonie joue la playlist, liez-le à la playlist.",
+            "success": "TAF divisé",
+            "successDetails": "« {{file}} » a été divisé en {{count}} pistes dans « {{folder}} ».",
+            "title": "Diviser « {{file}} » en pistes"
+        },
         "tap": {
             "edit": "Modifier la playlist audio Tonie",
             "messages": {
@@ -963,19 +980,6 @@
             "uploadedFile": "Fichier téléchargé!",
             "uploadedFileFailed": "Échec du téléchargement du fichier!",
             "uploading": "Téléversement en cours..."
-        },
-        "tafSplit": {
-            "action": "Diviser en pistes (playlist)",
-            "cancel": "Annuler",
-            "confirm": "Diviser",
-            "description": "Chaque chapitre devient un TAF à part dans le nouveau dossier « {{folder}} ». Une playlist y réassemble les pistes ; on peut y réordonner, supprimer ou insérer des pistes.",
-            "descriptionCount": "Les {{count}} chapitres deviennent chacun un TAF à part dans le nouveau dossier « {{folder}} ». Une playlist y réassemble les pistes ; on peut y réordonner, supprimer ou insérer des pistes.",
-            "failed": "Échec de la division",
-            "failedDetails": "« {{file}} » n'a pas pu être divisé :",
-            "originalStays": "« {{file}} » est conservé et réassemblé à l'enregistrement de la playlist ; les tonies avec ce contenu jouent donc la playlist modifiée. Les données audio sont seulement copiées, pas réencodées.",
-            "success": "TAF divisé",
-            "successDetails": "« {{file}} » a été divisé en {{count}} pistes dans « {{folder}} ».",
-            "title": "Diviser « {{file}} » en pistes"
         }
     },
     "footer": {
@@ -2909,7 +2913,81 @@
             "proceedWithoutCustomBootloader": "Procéder sans le Custom Bootloader",
             "tagConnector": "Connecteur Tag presque attaché",
             "title": "CC3200 Flashage de la boîte",
-            "usingThinWiresAsTagConnector": "Fils fins utilisés comme connecteur"
+            "usingThinWiresAsTagConnector": "Fils fins utilisés comme connecteur",
+            "browser": {
+                "ackFw": "La box avait le firmware actuel et a joué un tonie",
+                "ackRisk": "J'ai lu l'avertissement sur les risques",
+                "ackUart": "Réglé sur 3,3 V, pilote actuel installé",
+                "acksFirst": "Confirmez d'abord les remarques ci-dessus, ensuite vous pourrez continuer.",
+                "backupDone": "Sauvegarde terminée : {{files}} fichiers, flash {{kb}} Ko. Box {{mac}}.",
+                "backupFailed": "Tous les fichiers n'ont pas pu être lus : {{list}}",
+                "backupFirst": "Téléchargez d'abord la sauvegarde, ensuite vous pourrez continuer.",
+                "bootloader": "Bootloader",
+                "bootloaderConfirm": "Écrire le bootloader dans la flash ?",
+                "bootloaderConfirmText": "Ensuite la box démarre depuis la carte SD. Sans carte adaptée, elle ne démarre pas tant que la carte n'est pas prête.",
+                "bootloaderDone": "Bootloader installé",
+                "bootloaderRun": "Installer le bootloader",
+                "bootloaderSkip": "Continuer sans le bootloader ?",
+                "bootloaderSkipText": "Le bootloader n'est pas encore installé. Sans lui, la box ne démarre pas le firmware personnalisé depuis la carte SD. N'ignorez cette étape que si HackieboxNG avec le bon preloader est déjà installé.",
+                "bootloaderText": "Déplace le bootloader d'origine vers /sys/pre-img.bin et installe le preloader du bootloader SD en tant que /sys/mcuimg.bin. Si HackieboxNG est déjà installé, seul le preloader est renouvelé.",
+                "bootloaderUpToDate": "Le preloader est déjà à jour",
+                "card": "Carte SD",
+                "cardBuilding": "assemblage du contenu de la carte …",
+                "cardDownload": "Télécharger le contenu de la carte",
+                "cardOnlyCfg": "Attention : le zip contient un nouveau /revvox/boot/ngCfg.json. Sauvegardez d'abord vos propres réglages de patch pour le firmware d'origine (p. ex. altUrl) et remettez-les ensuite.",
+                "cardOnlyText": "Pour une box qui exécute déjà HackieboxNG, ou pour refaire la carte d'une box déjà installée : seul le contenu de la carte SD est créé ici. La box a besoin du certificat de ce teddyCloud en tant que /cert/c2.der dans sa mémoire flash (avec HackieboxNG et le patch altCa, il y est généralement déjà).",
+                "cardSaved": "Contenu de la carte téléchargé",
+                "cardText": "Téléchargez le contenu de la carte et décompressez-le à la racine de la carte SD (le contenu existant reste, ngCfg.json est remplacé). Insérez la carte, remontez la box et démarrez-la : elle lance le firmware personnalisé et se connecte à teddyCloud.",
+                "certs": "Certificats et CA",
+                "certsDone": "Certificats enregistrés, CA écrite",
+                "certsRun": "Enregistrer les certificats et écrire la CA",
+                "certsSkip": "Continuer sans certificats ni CA ?",
+                "certsSkipText": "Les certificats ne sont pas encore enregistrés dans teddyCloud et la CA n'est pas encore sur la box. Sans les deux, la box ne peut pas joindre teddyCloud. N'ignorez cette étape que si c'est déjà fait.",
+                "certsText": "Enregistre les certificats de la box dans teddyCloud (sous sa MAC, par défaut seulement s'il n'y en a pas) et écrit la CA de ce teddyCloud en tant que /cert/c2.der sur la box. La CA d'origine reste pour le firmware d'origine.",
+                "connect": "Connecter et sauvegarder",
+                "connectText": "Se connecte à la box, lit toute la mémoire flash et tous les fichiers deux fois chacun et compare. Vous téléchargez ensuite la sauvegarde ; conservez-la bien, c'est le chemin du retour.",
+                "connected": "connecté",
+                "connecting": "Connexion …",
+                "debugPort": "Le port de débogage se trouve sur la face inférieure non équipée de la carte. Branchez-le avec un Tag-Connect TC2050 ou des fils fins. Pontez la broche SOP2 avec le VCC de la box. Si la LED verte reste allumée, la connexion est bonne ; si elle clignote, vérifiez les contacts.",
+                "disconnect": "Déconnecter",
+                "downloadBackup": "Télécharger la sauvegarde",
+                "hasHackiebox": "HackieboxNG est déjà installé (/sys/pre-img.bin présent).",
+                "host": "Nom d'hôte ou IP",
+                "hostHint": "Nom ou IP sous lequel la box joint directement teddyCloud, sur le port des box. Pas l'adresse d'un reverse proxy : la box vérifie le certificat de teddyCloud.",
+                "hostSeen": "Suggéré : {{host}}, les autres box joignent teddyCloud par là. Pas l'adresse d'un reverse proxy.",
+                "https": "Le navigateur n'autorise le port série qu'en HTTPS (Chrome ou Edge sur un ordinateur).",
+                "hwEsp32c3": "ESP32-C3 comme passerelle",
+                "hwTool": "Connecté via",
+                "hwUart": "Adaptateur UART",
+                "intro": "Le navigateur effectue la sauvegarde, les certificats, le remplacement de la CA et le bootloader via le port série, et propose le contenu de la carte SD en téléchargement. Il installe le firmware personnalisé ; le firmware d'origine reste sur la box.",
+                "log": "Journal",
+                "mac": "MAC de la box",
+                "macFirst": "Saisissez d'abord la MAC de la box (12 caractères).",
+                "macHint": "Lue dans le certificat de la box ; sinon recopiez-la depuis le dessous de la box.",
+                "noSerial": "Ce navigateur ne peut pas ouvrir de port série ; utilisez Chrome ou Edge sur un ordinateur, ou la voie par ligne de commande.",
+                "notConnected": "Non connecté",
+                "port": "Port",
+                "readingFile": "Lecture de {{name}} ({{i}}/{{n}})",
+                "readingFlash": "Lecture de la flash …",
+                "release": "Paquet de firmware",
+                "releaseNone": "Aucun paquet de version avec contenu de carte dans la bibliothèque. Chargez un paquet (toniebox-cfw-….zip) sous Box Update, par envoi ou depuis GitHub ; le support CFW doit être activé.",
+                "reset": "Réinitialisation de la box",
+                "resetAsk": "Reliez brièvement RST de la box à GND (SOP2 reste ponté), puis OK.",
+                "resetDtr": "Via le DTR de l'adaptateur",
+                "resetManual": "À la main",
+                "showBoxesHint": "Remontez la box, allumez-la, freshness check (appuyez sur une oreille pendant 3 s) ; elle devrait alors apparaître sous « Tonieboxes ».",
+                "skipAnyway": "Continuer quand même",
+                "statusDone": "Terminé",
+                "statusFailed": "Échec",
+                "statusIdle": "Prêt : rien n'est en cours.",
+                "statusRunning": "En cours, patientez et laissez la box connectée",
+                "statusWorking": "en cours …",
+                "stepPrepare": "Préparer",
+                "title": "CC3200 dans le navigateur",
+                "wayBrowser": "Dans le navigateur",
+                "wayCard": "Carte SD seulement",
+                "wayManual": "Ligne de commande"
+            }
         },
         "cc3235BoxFlashing": {
             "CH341AProgrammer": {
@@ -3436,6 +3514,16 @@
             "unsaved": "{{count}} modification(s) non enregistrée(s)",
             "validation": {
                 "title": "Veuillez d'abord corriger ces problèmes"
+            },
+            "optimizeImages": {
+                "button": "Optimiser les images",
+                "cancel": "Annuler",
+                "close": "Fermer",
+                "done": "{{count}} images réduites : {{before}} → {{after}}",
+                "none": "Aucune image n'est plus grande.",
+                "run": "Réduire {{count}} images",
+                "text": "Les images de custom_img de plus de {{kb}} Ko reçoivent une petite copie (512 pixels au plus, en WebP si le navigateur sait l'écrire) ; les modèles utilisent ensuite la copie. Les originaux restent dans le dossier.",
+                "title": "Optimiser les images des modèles personnalisés"
             }
         },
         "customImages": {
@@ -3519,7 +3607,27 @@
             "creatingPlaylist": "Création des pistes séparées et de la playlist...",
             "playlistCreatedDetails": "« {{file}} » a été créé, ses {{count}} pistes sont enregistrées séparément avec la playlist dans « {{folder}} ».",
             "playlistFailed": "Playlist non créée",
-            "playlistFailedDetails": "« {{file}} » a été créé, mais pas les pistes séparées ni la playlist :"
+            "playlistFailedDetails": "« {{file}} » a été créé, mais pas les pistes séparées ni la playlist :",
+            "cover": {
+                "choose": "Pochette",
+                "enable": "Créer un modèle personnalisé avec pochette et titre",
+                "episodes": "Épisode (facultatif)",
+                "failed": "Modèle personnalisé non créé",
+                "failedDetails": "Le TAF « {{file}} » a été écrit, mais son modèle personnalisé n'a pas pu être créé : ",
+                "hint": "Les noms des chapitres viennent des fichiers audio. La pochette est réduite et enregistrée dans custom_img ; le modèle peut être modifié ensuite dans l'éditeur de modèles personnalisés.",
+                "remove": "Retirer la pochette",
+                "saved": "Modèle personnalisé créé",
+                "savedDetails": "« {{file}} » a maintenant le modèle personnalisé {{model}}.",
+                "series": "Série"
+            },
+            "parts": {
+                "browserFailed": "Le navigateur n'a pas pu encoder, le serveur s'en charge",
+                "encoding": "Encodage dans le navigateur : {{done}} sur {{total}} fichiers",
+                "joining": "Assemblage du TAF ...",
+                "playlistCreated": "« {{file}} » a été créée, avec ses {{count}} pistes en TAF séparés à côté.",
+                "serverEncoding": "Le serveur encode : {{done}} sur {{total}} fichiers",
+                "uploading": "Envoi : {{done}} sur {{total}} fichiers"
+            }
         },
         "errorFetchingSystemSounds": "Erreur lors de la récupération des sons du système",
         "errorFetchingTonies": "Erreur lors de la récupération des Tonies",
@@ -3768,12 +3876,13 @@
             "cancel": "Annuler",
             "create": "Créer",
             "fileNameContentFile": "Description",
-            "filePath": "Chemin du fichier Playlist",
+            "filePath": "TAF cible (facultatif)",
             "filePathContentFile": "Chemin du fichier",
             "filePathContentFileRequired": "Le chemin du fichier doit être défini",
             "filePathContentFileTooltip": "Définit le chemin vers la ressource audio (doit être compatible avec ffmpeg)",
+            "filePathDefault": "Vide : la playlist assemble « <nom>.tap.taf » à côté d'elle ; la bibliothèque ne l'affiche pas, il suit la playlist quand elle est déplacée ou supprimée.",
             "filePathRequired": "Le chemin du fichier Playlist doit être défini",
-            "filePathTooltip": "Le TAF assemblé à partir de la playlist est enregistré ici",
+            "filePathTooltip": "Le TAF assemblé à partir de la playlist est enregistré ici. Sans nom, il reste masqué à côté de la playlist.",
             "name": "Nom TAP",
             "nameRequired": "Le nom TAP doit être défini",
             "nameTooltip": "Définit le nom de la playlist",
@@ -3799,6 +3908,9 @@
         },
         "teddystudio": {
             "adaptLabelsHint": "Tu peux adapter les textes et images des étiquettes en cliquant sur le bouton d'édition de chaque groupe d'étiquettes.",
+            "addFailed": "Impossible d'ajouter les tonies",
+            "addMine": "Ajouter mes tonies",
+            "added": "Ajoutés à la feuille : {{count}}",
             "addedCustomImageHint": "L'image personnalisée a été ajoutée.",
             "addedHint": "« {{title}} » a été ajouté.",
             "bulkAdd": {
@@ -3831,6 +3943,7 @@
             "customImageHint": "Tu peux ajouter des images temporairement – elles ne seront PAS ajoutées à la bibliothèque et sont utilisées uniquement pour cette feuille.",
             "customImageTitle": "Saisis un titre à imprimer",
             "customImageUpload": "Ajouter image temporaire (sans Bibliothèque)",
+            "cutLines": "Lignes de découpe (SVG)",
             "diameter": "Diamètre intérieur",
             "empty": "Vide - Sélectionne d'abord des Tonies ou Tags ou ajoute une image personnalisée !",
             "episodes": "Épisodes",
@@ -3896,7 +4009,14 @@
             "textFontSize": "Taille du texte",
             "title": "TeddyStudio",
             "trackTitles": "Titres (un par ligne)",
-            "width": "Largeur"
+            "width": "Largeur",
+            "addFolder": {
+                "button": "Ajouter un dossier de la bibliothèque",
+                "cancel": "Annuler",
+                "confirm": "Ajouter",
+                "text": "Chaque TAF et playlist avec un titre dans ce dossier et ses sous-dossiers est ajouté à la feuille ; ceux qui sont masqués ou déjà présents sont ignorés.",
+                "title": "Ajouter un dossier de la bibliothèque"
+            }
         },
         "title": "Tonies",
         "tonies": {

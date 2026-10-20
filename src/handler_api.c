@@ -913,6 +913,12 @@ error_t handleApiFileIndexV2(HttpConnection *connection, const char_t *uri, cons
                     continue;
                 }
             }
+            /* the TAF a playlist builds next to itself belongs to the playlist */
+            if (tap_is_built_taf(filePathAbsolute))
+            {
+                osFreeMem(filePathAbsolute);
+                continue;
+            }
         }
 
         cJSON *jsonEntry = cJSON_CreateObject();
@@ -1174,6 +1180,12 @@ error_t handleApiFileIndex(HttpConnection *connection, const char_t *uri, const 
 
             char *filePathAbsolute = custom_asprintf("%s%c%s", pathAbsolute, PATH_SEPARATOR, entry.name);
             pathSafeCanonicalize(filePathAbsolute);
+            /* the TAF a playlist builds next to itself belongs to the playlist */
+            if (!isDir && tap_is_built_taf(filePathAbsolute))
+            {
+                osFreeMem(filePathAbsolute);
+                continue;
+            }
 
             cJSON *jsonEntry = cJSON_CreateObject();
             cJSON_AddStringToObject(jsonEntry, "name", entry.name);
@@ -3293,7 +3305,17 @@ error_t handleApiFileDelete(HttpConnection *connection, const char_t *uri, const
 
     osSnprintf(message, sizeof(message), "OK");
 
-    error_t err = fsDeleteFile(pathAbsolute);
+    /* a folder goes with everything in it, never the root folder itself */
+    bool_t isDir = fsDirExists(pathAbsolute);
+    char *rootCanonical = strdup(rootPath);
+    sanitizePath(rootCanonical, false);
+    bool_t isRoot = !osStrcmp(rootCanonical, pathAbsolute) || path[strspn(path, "/\\.")] == '\0';
+    osFreeMem(rootCanonical);
+    error_t err = isRoot ? ERROR_ACCESS_DENIED : isDir ? fsRemoveTree(pathAbsolute) : fsDeleteFile(pathAbsolute);
+    if (err == NO_ERROR && !isDir)
+    {
+        tap_deleted(pathAbsolute);
+    }
 
     if (err != NO_ERROR)
     {
@@ -3308,6 +3330,8 @@ error_t handleApiFileDelete(HttpConnection *connection, const char_t *uri, const
 
     return httpWriteResponseString(connection, message, false);
 }
+static void libraryMoved(const char *fromAbsolute, const char *toAbsolute, settings_t *settings);
+
 error_t handleApiFileMove(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
     char overlay[16];
@@ -3366,6 +3390,10 @@ error_t handleApiFileMove(HttpConnection *connection, const char_t *uri, const c
     if (special_is_library(queryString) && !fsFileExists(sourceAbsolute) && !fsDirExists(sourceAbsolute))
     {
         web_acl_folder_moved(source, target);
+    }
+    if (err == NO_ERROR)
+    {
+        libraryMoved(sourceAbsolute, targetAbsolute, client_ctx->settings);
     }
 
     if (err != NO_ERROR)
@@ -4754,11 +4782,18 @@ static error_t updateContentJsonFilesForRename(const char *fromModel, const char
 static bool contentJsonSourceMoved(contentJson_t *contentJson, void *arg)
 {
     contentJsonReplace_t *r = arg;
-    if (contentJson->source == NULL || osStrcmp(contentJson->source, r->from) != 0)
+    size_t fromLen = osStrlen(r->from);
+    if (contentJson->source == NULL || osStrncmp(contentJson->source, r->from, fromLen) != 0)
     {
         return false;
     }
-    char *source = strdup(r->to);
+    /* the file itself, or one in the moved folder */
+    char next = contentJson->source[fromLen];
+    if (next != '\0' && next != '/' && next != PATH_SEPARATOR)
+    {
+        return false;
+    }
+    char *source = custom_asprintf("%s%s", r->to, &contentJson->source[fromLen]);
     if (source == NULL)
     {
         return false;
@@ -4768,11 +4803,30 @@ static bool contentJsonSourceMoved(contentJson_t *contentJson, void *arg)
     return true;
 }
 
-/* tonies whose source is the library file from (lib://...) get to instead, after the file moved */
+/* tonies whose source is the library file or folder from (lib://...) or below it get the path under
+   to instead, after it moved */
 static void updateContentJsonSourcesForMove(const char *from, const char *to, settings_t *settings)
 {
     contentJsonReplace_t r = {from, to};
     updateContentJsonFiles(contentJsonSourceMoved, &r, settings);
+}
+
+/* after a file or folder in the library moved: playlists and tonies follow it */
+static void libraryMoved(const char *fromAbsolute, const char *toAbsolute, settings_t *settings)
+{
+    const char *lib = settings->internal.librarydirfull;
+    size_t libLen = osStrlen(lib);
+    if (osStrncmp(fromAbsolute, lib, libLen) != 0 || fromAbsolute[libLen] != PATH_SEPARATOR ||
+        osStrncmp(toAbsolute, lib, libLen) != 0 || toAbsolute[libLen] != PATH_SEPARATOR)
+    {
+        return;
+    }
+    tap_moved(fromAbsolute, toAbsolute);
+    char *from = custom_asprintf("lib://%s", &fromAbsolute[libLen + 1]);
+    char *to = custom_asprintf("lib://%s", &toAbsolute[libLen + 1]);
+    updateContentJsonSourcesForMove(from, to, settings);
+    osFreeMem(from);
+    osFreeMem(to);
 }
 
 error_t handleApiToniesCustomJsonRename(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
@@ -5814,6 +5868,24 @@ error_t handleApiTapBuild(HttpConnection *connection, const char_t *uri, const c
         cJSON_AddBoolToObject(json, "built", false);
     }
     cJSON_AddStringToObject(json, "filepath", tap.filepath);
+    /* the built TAF is not in the file lists: its header is told here (for a custom model) */
+    if (tap._filepath_resolved != NULL && fsFileExists(tap._filepath_resolved))
+    {
+        tonie_info_t *built = getTonieInfo(tap._filepath_resolved, false, get_settings());
+        if (built->valid && built->tafHeader != NULL)
+        {
+            char sha1Hash[41];
+            sha1Hash[0] = '\0';
+            for (size_t pos = 0; pos < built->tafHeader->sha1_hash.len && pos < 20; pos++)
+            {
+                osSprintf(&sha1Hash[pos * 2], "%02x", built->tafHeader->sha1_hash.data[pos]);
+            }
+            cJSON *header = cJSON_AddObjectToObject(json, "tafHeader");
+            cJSON_AddNumberToObject(header, "audioId", built->tafHeader->audio_id);
+            cJSON_AddStringToObject(header, "sha1Hash", sha1Hash);
+        }
+        freeTonieInfo(built);
+    }
 
     tap_free(&tap);
     osFreeMem(tapPath);
@@ -5926,7 +5998,8 @@ error_t handleApiTafSplit(HttpConnection *connection, const char_t *uri, const c
     tonie_audio_playlist_t tap;
     osMemset(&tap, 0, sizeof(tap));
     tap.audio_id = audio_id;
-    tap.filepath = custom_asprintf("lib://%s", &tafPath[lib_len + 1]);
+    /* the playlist builds a TAF of its own next to it; the original is never written to */
+    tap.filepath = custom_asprintf("lib://%s%c%s.tap" TAP_BUILT_SUFFIX, &folder[lib_len + 1], PATH_SEPARATOR, name);
     tap.name = strdup(name);
     tap.files = osAllocMem(chapters * sizeof(tap_file_t));
     osMemset(tap.files, 0, chapters * sizeof(tap_file_t));
@@ -5966,7 +6039,7 @@ error_t handleApiTafSplit(HttpConnection *connection, const char_t *uri, const c
     }
 
     /* the original goes into the folder too, so that the album stays together; tonies with it as
-       their source follow it, and the playlist builds it there */
+       their source follow it and keep playing it */
     char *moved = NULL;
     if (error == NO_ERROR)
     {
@@ -5978,8 +6051,6 @@ error_t handleApiTafSplit(HttpConnection *connection, const char_t *uri, const c
             if (from != NULL && to != NULL)
             {
                 updateContentJsonSourcesForMove(from, to, get_settings());
-                osFreeMem(tap.filepath);
-                tap.filepath = strdup(to);
             }
             osFreeMem(from);
             osFreeMem(to);

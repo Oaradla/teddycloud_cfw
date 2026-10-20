@@ -10,6 +10,10 @@
 #include "debug.h"           // for TRACE_INFO, TRACE_ERROR, TRACE_LEVEL_INFO
 #include "fs_port_config.h"  // for PATH_SEPARATOR
 #include "os_port.h"         // for osStrlen
+#include "fs_port.h"         // for fsOpenDir, fsReadDir, fsRemoveDir
+#ifndef _WIN32
+#include <sys/stat.h> // for lstat
+#endif
 
 #define FILE_COPY_BUFFER_SIZE 4096 // You can adjust this buffer size as needed
 
@@ -191,6 +195,20 @@ error_t fsCopyFileRange(FILE *src, uint32_t offset, uint32_t end, FILE *dst)
 }
 error_t fsMoveFile(const char_t *source_path, const char_t *target_path, bool_t overwrite)
 {
+    if (fsDirExists(source_path))
+    {
+        /* a folder is only renamed, never copied; it never replaces anything */
+        if (fsFileExists(target_path) || fsDirExists(target_path))
+        {
+            return ERROR_NOT_WRITABLE;
+        }
+        error_t error = fsRenameFile(source_path, target_path);
+        if (error == NO_ERROR && (fsDirExists(source_path) || !fsDirExists(target_path)))
+        {
+            error = ERROR_FAILURE;
+        }
+        return error;
+    }
     if (!overwrite && fsFileExists(target_path)) {
         return ERROR_NOT_WRITABLE;
     }
@@ -269,4 +287,58 @@ error_t fsRemoveFilename(char *dir)
     }
     *last_slash = '\0';
     return NO_ERROR;
+}
+
+/* true for a symbolic link (POSIX); a link is removed itself, never what it points to */
+static bool_t fsIsLink(const char_t *path)
+{
+#ifndef _WIN32
+    struct stat st;
+    return lstat(path, &st) == 0 && S_ISLNK(st.st_mode);
+#else
+    (void)path;
+    return false;
+#endif
+}
+
+error_t fsRemoveTree(const char_t *path)
+{
+    if (fsIsLink(path) || !fsDirExists(path))
+    {
+        return fsDeleteFile(path);
+    }
+    FsDir *dir = fsOpenDir(path);
+    if (dir == NULL)
+    {
+        return ERROR_FILE_NOT_FOUND;
+    }
+    error_t error = NO_ERROR;
+    FsDirEntry entry;
+    while (fsReadDir(dir, &entry) == NO_ERROR)
+    {
+        if (!osStrcmp(entry.name, ".") || !osStrcmp(entry.name, ".."))
+        {
+            continue;
+        }
+        size_t len = osStrlen(path) + 1 + osStrlen(entry.name) + 1;
+        char_t *child = malloc(len);
+        if (child == NULL)
+        {
+            error = ERROR_OUT_OF_MEMORY;
+            break;
+        }
+        osSnprintf(child, len, "%s%c%s", path, PATH_SEPARATOR, entry.name);
+        error_t childError = fsRemoveTree(child);
+        free(child);
+        if (childError != NO_ERROR)
+        {
+            error = childError;
+        }
+    }
+    fsCloseDir(dir);
+    if (error == NO_ERROR)
+    {
+        error = fsRemoveDir(path);
+    }
+    return error;
 }

@@ -3,6 +3,8 @@
 #include "debug.h"
 
 #define TAP_TYPE_TAP "tap"
+/* the TAF a playlist builds next to itself is named after it: "<name>.tap" -> "<name>.tap.taf" */
+#define TAP_BUILT_SUFFIX ".taf"
 
 typedef struct
 {
@@ -41,3 +43,10 @@ void tap_generate_task(void *param);
 bool_t tap_can_remux(tonie_audio_playlist_t *tap);
 /* puts the playlist TAF together from TAF files unless it is current */
 error_t tap_build(char *filename, tonie_audio_playlist_t *tap);
+/* true for "<name>.tap.taf" with "<name>.tap" next to it: the TAF that playlist builds */
+bool_t tap_is_built_taf(const char *path);
+/* after a playlist was deleted: removes the TAF it built next to itself */
+void tap_deleted(const char *tapPath);
+/* after a file or folder in the library was moved or renamed: a playlist takes its TAF next to it
+   along, and all playlists name the new paths */
+void tap_moved(const char *fromPath, const char *toPath);

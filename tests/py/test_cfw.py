@@ -123,9 +123,16 @@ def files(answer, ruid):
 
 
 def box_entry(box):
-    status, data = api_json("GET", "/api/cfw/boxes")
-    assert status == 200
-    return next(entry for entry in data["boxes"] if entry["commonName"].lower() == box.mac)
+    # a new box writes its overlay to the config, and the server reloads the config file a moment
+    # later; while it does, the box may be missing from the list for a short time
+    for _ in range(50):
+        status, data = api_json("GET", "/api/cfw/boxes")
+        assert status == 200
+        entry = next((e for e in data["boxes"] if e["commonName"].lower() == box.mac), None)
+        if entry is not None:
+            return entry
+        time.sleep(0.1)
+    raise AssertionError("box %s not in /api/cfw/boxes" % box.mac)
 
 
 def ota(box, version):

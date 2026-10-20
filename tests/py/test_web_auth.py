@@ -108,6 +108,9 @@ def set_setting(client, name, value):
     else:
         status, _, _ = client.request("POST", "/api/settings/set/" + name, str(value).lower() if isinstance(value, bool) else str(value), raw=True)
     assert status == 200
+    # written to the config at once: a reload of the config file (after a change of the login
+    # settings, for instance) would otherwise drop the value again
+    assert client.get("/api/triggerWriteConfig")[0] == 200
     for _ in range(50):
         current = client.get("/api/settings/get/" + name)[1]
         if current == value or (isinstance(current, dict) and current.get("_text", "").strip() == str(value)):

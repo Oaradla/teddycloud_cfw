@@ -2,6 +2,7 @@
 #pragma once
 #include <stdint.h>
 #include "fs_ext.h"
+#include "proto/toniebox.pb.taf-header.pb-c.h"
 
 #define OPUS_FRAME_SIZE_MS OPUS_FRAMESIZE_60_MS
 #define OPUS_SAMPLING_RATE 48000
@@ -56,9 +57,9 @@ typedef struct
     bool_t sweep;
 } ffmpeg_stream_ctx_t;
 
-struct _TonieboxAudioFileHeader;
-/* packs the header into the 4092 bytes after the length field, returns its size or 0 */
-size_t toniefile_header(uint8_t *buffer, size_t length, struct _TonieboxAudioFileHeader *tafHeader);
+/* packs the header into the 4092 bytes after the length field, returns its size or 0; the type
+   comes from the generated header, whose struct tag differs between protobuf-c versions */
+size_t toniefile_header(uint8_t *buffer, size_t length, TonieboxAudioFileHeader *tafHeader);
 toniefile_t *toniefile_create(const char *fullPath, uint32_t audio_id, bool append, int32_t size);
 error_t toniefile_close(toniefile_t *ctx);
 error_t toniefile_encode(toniefile_t *ctx, int16_t *sample_buffer, size_t samples_available);

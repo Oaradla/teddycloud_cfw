@@ -61,6 +61,7 @@
         "locked": "Verrouillé",
         "unlocked": "Déverrouillé",
         "minutes": "min",
+        "idleMinutesHint": "0 = 10 min comme l'original, jusqu'à 65535 min (env. 45 jours)",
         "speakerLimit": "Limite du volume du haut-parleur",
         "headphoneLimit": "Limite du volume du casque",
         "ledLevelLabel": "Luminosité de la LED",
@@ -124,7 +125,9 @@
             "slapLockGlobal": "Verrouillage de la tape de la box",
             "tiltLockGlobal": "Verrouillage de l'inclinaison de la box",
             "volumeLockGlobal": "Verrouillage du volume de la box",
-            "bothEarsOff": "Éteindre avec les deux oreilles"
+            "bothEarsOff": "Éteindre avec les deux oreilles",
+            "idleOffBattery": "Délai d'extinction sur batterie",
+            "idleOffStation": "Délai d'extinction sur la station de charge"
         },
         "mode": {
             "0": "Basculer",
@@ -145,6 +148,7 @@
             "badgeTooltip": "Firmware personnalisée, build {{build}}",
             "batteryTooltip": "Batterie signalée pour la dernière fois : {{time}}",
             "batteryTooltipStation": "Batterie signalée pour la dernière fois : {{time}} · sur la station de charge",
+            "batteryRemaining": "Encore environ {{time}} de lecture au volume actuel",
             "connected": "connectée",
             "notConnected": "non connectée"
         },
@@ -263,9 +267,15 @@
             "notes": "Notes",
             "added": "Ajoutée",
             "deleteConfirm": "Supprimer l'image {{build}} ?",
+            "deleteManyConfirm": "Supprimer {{n}} image(s) ?",
+            "deleteSelected": "Supprimer la sélection ({{n}})",
+            "deleteOld": "Supprimer les anciennes images ({{n}})",
+            "deletedCount": "{{n}} image(s) supprimée(s)",
+            "deleteFailed": "{{n}} image(s) non supprimée(s)",
             "deleted": "Image supprimée",
             "noImages": "Aucune image pour le moment",
             "github": "Téléchargement depuis GitHub",
+            "olderReleases": "Versions plus anciennes sur GitHub ({{n}})",
             "githubRepo": "Dépôt",
             "githubAuto": "Télécharger automatiquement",
             "githubAutoValues": {
@@ -508,7 +518,8 @@
                     "pluginName": "Le titre affiché dans les menus (obligatoire)",
                     "standalone": "Indicateur booléen précisant si le plugin doit être exécuté en mode autonome (sans en-tête, sans barre latérale, sans pied de page). Important : la valeur true et false ne doit pas être entre guillemets.",
                     "teddyCloudSection": "Section souhaitée où le plugin doit être ajouté à la navigation (valeurs valides : home, tonies, tonieboxes, settings, community)",
-                    "version": "Version du plugin"
+                    "version": "Version du plugin",
+                    "hideInNav": "Indicateur précisant si le plugin doit être masqué dans la navigation (true/false)"
                 },
                 "fieldsTitle": "Champs :",
                 "folderStructureTitle": "Structure du dossier du plugin :",
@@ -537,7 +548,12 @@
                 "warningUploadingPlugin": "Veuillez sélectionner un fichier",
                 "warningUploadingPluginDetails": "Veuillez sélectionner un fichier plugin compressé avant de cliquer sur \"Ajouter un plugin\""
             },
-            "visitHomepage": "Visiter la page du plugin"
+            "visitHomepage": "Visiter la page du plugin",
+            "hidden": "Masqué",
+            "pagination": {
+                "pageSelector": "Plugins par page",
+                "showAll": "Afficher tout"
+            }
         },
         "supportRequestGuide": {
             "actions": {
@@ -692,6 +708,7 @@
         }
     ],
     "fileBrowser": {
+        "searchSubfolders": "Chercher aussi dans les sous-dossiers",
         "actions": "Actions",
         "assignToTonie": {
             "action": "Assigner à une Tonie",
@@ -980,7 +997,8 @@
             "uploadedFile": "Fichier téléchargé!",
             "uploadedFileFailed": "Échec du téléchargement du fichier!",
             "uploading": "Téléversement en cours..."
-        }
+        },
+        "deleteOrphanModels": "Supprimer aussi les tonies personnalisés utilisés nulle part ailleurs ({{n}}), avec leurs images"
     },
     "footer": {
         "sponsor": "Parraine maintenant !",
@@ -1403,6 +1421,7 @@
         "zh-tw": "Chinois (Taiwan)"
     },
     "radioStreamSearch": {
+        "preview": "Écouter",
         "failedToFetchSearchResults": "Échec de la récupération des résultats de recherche des stations de radio",
         "failedToFetchSearchResultsDetails": "Échec de la récupération des résultats de recherche des stations de radio : ",
         "noResults": "Aucune entrée trouvée pour la recherche.",
@@ -2015,6 +2034,14 @@
                 "label": "Verrouillage du volume",
                 "description": "Un appui bref sur une oreille ne modifie pas le volume"
             },
+            "cfw_box_idle_off_battery": {
+                "label": "Délai d'extinction sur batterie",
+                "description": "Minutes après lesquelles la box inactive s'éteint lorsqu'elle n'est pas sur la station de charge (1 à 65535, env. 45 jours). Les box sans la firmware personnalisée s'éteignent toujours après 10 minutes"
+            },
+            "cfw_box_idle_off_station": {
+                "label": "Délai d'extinction sur la station de charge",
+                "description": "Minutes après lesquelles la box inactive s'éteint lorsqu'elle est sur la station de charge (1 à 65535, env. 45 jours). Les box sans la firmware personnalisée s'éteignent toujours après 10 minutes"
+            },
             "cfw_update_enabled": {
                 "label": "Mise à jour de la firmware",
                 "description": "Proposer les images de la firmware personnalisée à la box"
@@ -2202,6 +2229,11 @@
                 "1": "50%",
                 "2": "75%",
                 "3": "100%"
+            },
+            "toniebox_boxGeneration": {
+                "0": "Inconnue",
+                "1": "Toniebox 1",
+                "2": "Toniebox 2"
             },
             "toniebox_max_vol_hdp": {
                 "0": "25%",
@@ -2445,6 +2477,9 @@
             "you": "vous",
             "tree": {
                 "all": "Tous les droits",
+                "cfwBoxes": "boîtes CFW uniquement",
+                "plainBoxes": "boîtes sans CFW uniquement",
+                "flexTonie": "Tonie flex",
                 "settings": "Paramètres",
                 "search": "Rechercher",
                 "extra": "En plus (conservé) :",
@@ -2462,7 +2497,18 @@
             "denyTitle": "Droits de {{username}}",
             "mustChangePassword": "Doit définir un nouveau mot de passe à la prochaine connexion",
             "mustChangePasswordPending": "Changement de mot de passe en attente",
-            "mustChangePasswordHint": "Après la connexion, l'utilisateur peut seulement changer son mot de passe. Le x annule l'exigence."
+            "mustChangePasswordHint": "Après la connexion, l'utilisateur peut seulement changer son mot de passe. Le x annule l'exigence.",
+            "owned": {
+                "title": "Appartient à {{username}}",
+                "none": "Rien n'appartient à cet utilisateur et rien n'est partagé avec lui.",
+                "boxes": "Tonieboxes",
+                "tonies": "Tonies",
+                "folders": "Dossiers de la bibliothèque",
+                "models": "Tonies personnalisés",
+                "images": "Images",
+                "owner": "Propriétaire",
+                "shared": "Partagé : {{rights}}"
+            }
         }
     },
     "sharing": {
@@ -2483,7 +2529,8 @@
         "pickUser": "Utilisateur",
         "remove": "Retirer",
         "rights": {
-            "box.cfw": "Télécommande / firmware",
+            "box.cfw": "Télécommande",
+            "box.update": "Mise à jour du firmware",
             "box.settings": "Tous les paramètres",
             "box.view": "Voir",
             "folder.read": "Lire",
@@ -2811,9 +2858,8 @@
             "connectToTonieboxProceed": "Tu es maintenant prêt à continuer !",
             "connectToTonieboxText": "La LED verte de la carte principale de la Toniebox doit rester allumée en continu (sans clignoter). Si ce n'est pas le cas, tes connexions pourraient être mal fixées ou incorrectes. Déconnecte le programmeur, vérifie toutes les connexions et essaie à nouveau. Si tu travailles avec des fils fins, pense à utiliser de la colle chaude pour les fixer et éviter qu'ils ne bougent. De plus, assure-toi que la Toniebox est alimentée via son chargeur.",
             "connectToTonieboxTextUart": "Assure-toi que l'UART est configuré à 3,3V avant de connecter le programmeur UART à ton ordinateur via USB.",
-            "createPatch": "Créer altUrl.custom.305.patch",
             "createPortPatch": "Créer altPort.custom.patch",
-            "customPortPatch": "Optionnel : créer un patch de port (altPort.custom.json)",
+            "customPortPatch": "Optionnel : Créer un patch de port (altPort.custom.json)",
             "customPortPatchHint": "Nécessaire uniquement si la Toniebox doit joindre TeddyCloud sur un autre port que 443, par exemple via un proxy qui route selon le port. Le patch fonctionne avec les versions de firmware 3.1.0 BF2, 3.3.0 et 3.4.0. hackiebox-ng fournit déjà altPort.json pour le port 10443 ; crée ton propre patch uniquement pour un autre port. Les Toniebox CC3235 et la Toniebox 2 ne peuvent pas être patchées : elles se connectent toujours au port 443.",
             "customUrlPatch": "Créer un patch URL personnalisé (altUrl.custom.305.json)",
             "customUrlPatchHint": "Veuillez créer ce patch uniquement si les patches prédéfinis altUrl.tc.fritz.box.json et altUrl.305.json ne fonctionnent pas avec votre configuration actuelle de TeddyCloud. S'ils répondent à vos besoins, vous pouvez continuer en cliquant sur 'Suivant'.",
@@ -2922,6 +2968,7 @@
                 "backupDone": "Sauvegarde terminée : {{files}} fichiers, flash {{kb}} Ko. Box {{mac}}.",
                 "backupFailed": "Tous les fichiers n'ont pas pu être lus : {{list}}",
                 "backupFirst": "Téléchargez d'abord la sauvegarde, ensuite vous pourrez continuer.",
+                "backupStored": "Le dump de la flash est enregistré sur le serveur dans le dossier firmware : {{name}}",
                 "bootloader": "Bootloader",
                 "bootloaderConfirm": "Écrire le bootloader dans la flash ?",
                 "bootloaderConfirmText": "Ensuite la box démarre depuis la carte SD. Sans carte adaptée, elle ne démarre pas tant que la carte n'est pas prête.",
@@ -2987,7 +3034,8 @@
                 "wayBrowser": "Dans le navigateur",
                 "wayCard": "Carte SD seulement",
                 "wayManual": "Ligne de commande"
-            }
+            },
+            "createHostNamePatch": "Créer altUrl.custom.305.patch"
         },
         "cc3235BoxFlashing": {
             "CH341AProgrammer": {
@@ -3178,7 +3226,7 @@
                 "hintESP32FirmwareFlashed": "Le patchage est terminé. Déconnecte la Toniebox de l'UART, retire le court-circuit du J100 et redémarre la box. Elle devrait maintenant pouvoir se connecter à TeddyCloud !",
                 "hintESP32FirmwareReseted": "La réinitialisation devrait être terminée. Veuillez déconnecter la Toniebox du UART, retirer le court-circuit de J100 et redémarrer la box. Elle ne devrait plus être connectée à ton Teddycloud. Fais une vérification de fraîcheur pour tester si tout fonctionne correctement.",
                 "hintFlashESP32RevvoxFlasher": "Clique sur « Flasher l'ESP32 », choisis le port COM si nécessaire et attends que l'étape soit terminée.",
-                "hintPatchFlash": "Pour appliquer le flash sélectionné/lu avec le certificat CA de votre TeddyCloud et éventuellement effectuer d'autres ajustements tels que le nom d'hôte de TeddyCloud et/ou les identifiants WiFi, cliquez sur 'Patch' après avoir entré les informations ou passez à l'étape suivante sans patch.",
+                "hintPatchFlash": "Pour appliquer le flash sélectionné/lu avec le certificat CA de votre TeddyCloud et éventuellement effectuer d'autres ajustements tels que le nom d'hôte et le port de TeddyCloud et/ou les identifiants WiFi, cliquez sur 'Patch' après avoir entré les informations ou passez à l'étape suivante sans patch.",
                 "hintPatchHost": "Entrez le nom d'hôte souhaité pour votre instance TeddyCloud.",
                 "hintPatchPort": "Port auquel la Toniebox se connecte. Garde 443, sauf si la Toniebox doit joindre TeddyCloud sur un autre port, par exemple via un proxy qui route selon le port. Les Toniebox CC3235 et la Toniebox 2 ne peuvent pas être patchées : elles se connectent toujours au port 443.",
                 "hintPatchWifi": "Entrez optionnellement les identifiants WiFi pour votre Toniebox. Merci de ne le faire que si c'est vraiment nécessaire - normalement, si votre Toniebox était connectée à votre WiFi juste avant la mise à jour, ce n'est pas nécessaire.",
@@ -3437,7 +3485,8 @@
                 "confirm": "Supprimer",
                 "deleted": "Le modèle \"{{model}}\" a été supprimé.",
                 "description": "Voulez-vous vraiment supprimer \"{{model}}\" ? Cette action est irréversible.",
-                "title": "Supprimer le modèle"
+                "title": "Supprimer le modèle",
+                "alsoPicture": "Supprimer aussi l'image, aucune autre figurine ne l'affiche"
             },
             "duplicateTitleSuffix": "Copie",
             "editModalTitle": "Modifier le modèle {{current}} sur {{total}}",
@@ -3524,7 +3573,8 @@
                 "run": "Réduire {{count}} images",
                 "text": "Les images de custom_img de plus de {{kb}} Ko reçoivent une petite copie (512 pixels au plus, en WebP si le navigateur sait l'écrire) ; les modèles utilisent ensuite la copie. Les originaux restent dans le dossier.",
                 "title": "Optimiser les images des modèles personnalisés"
-            }
+            },
+            "readOnly": "Quelqu'un d'autre a ajouté cette figurine. Tu peux la voir, mais pas la modifier."
         },
         "customImages": {
             "navigationTitle": "Images",
@@ -3744,7 +3794,8 @@
             "sourceCustom": "Personnalisé",
             "sourceOriginal": "Original",
             "title": "Bibliothèque : Sélectionner et télécharger des images",
-            "titleSelect": "Sélectionner une image"
+            "titleSelect": "Sélectionner une image",
+            "deleteShownBy": "Figurines affichant cette image : {{count}}. Elles perdront leur image."
         },
         "infoModal": {
             "download": "Télécharger TAF en *.ogg",
@@ -4016,7 +4067,8 @@
                 "confirm": "Ajouter",
                 "text": "Chaque TAF et playlist avec un titre dans ce dossier et ses sous-dossiers est ajouté à la feuille ; ceux qui sont masqués ou déjà présents sont ignorés.",
                 "title": "Ajouter un dossier de la bibliothèque"
-            }
+            },
+            "downloadPdf": "Télécharger le PDF"
         },
         "title": "Tonies",
         "tonies": {

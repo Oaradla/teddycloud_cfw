@@ -448,6 +448,8 @@ typedef struct
     bool slap_lock;
     bool tilt_lock;
     bool volume_lock;
+    uint32_t idle_off_battery;
+    uint32_t idle_off_station;
 } settings_cfw_box_t;
 
 typedef struct

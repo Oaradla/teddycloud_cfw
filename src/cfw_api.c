@@ -194,10 +194,11 @@ static void event_to_json(const uint8_t *file, cJSON *json)
         if (record.key == CFW_RECORD_ACTION && record.length == 3)
         {
             uint16_t parameter = record.value[1] | (record.value[2] << 8);
+            bool minutes = record.value[0] == 17 || record.value[0] == 18; /* idle power-off times: no mode */
             cJSON *action = cJSON_CreateObject();
             cJSON_AddNumberToObject(action, "action", record.value[0]);
-            cJSON_AddNumberToObject(action, "mode", parameter >> 14);
-            cJSON_AddNumberToObject(action, "value", parameter & 0x3FFF);
+            cJSON_AddNumberToObject(action, "mode", minutes ? 0 : parameter >> 14);
+            cJSON_AddNumberToObject(action, "value", minutes ? parameter : parameter & 0x3FFF);
             cJSON_AddItemToArray(actions, action);
         }
         else if (record.key == 0x11 && record.length == 1)
@@ -224,12 +225,18 @@ static bool json_to_event(const cJSON *json, uint8_t *body, size_t *bodyLength, 
         uint32_t number;
         uint32_t mode;
         uint32_t value;
-        if (!json_uint(cJSON_GetObjectItemCaseSensitive(action, "action"), 16, &number) || number == 0 || !json_uint(cJSON_GetObjectItemCaseSensitive(action, "mode"), 3, &mode) || !json_uint(cJSON_GetObjectItemCaseSensitive(action, "value"), 0x3FFF, &value))
+        if (!json_uint(cJSON_GetObjectItemCaseSensitive(action, "action"), 18, &number) || number == 0 || !json_uint(cJSON_GetObjectItemCaseSensitive(action, "mode"), 3, &mode))
         {
-            osSnprintf(message, messageSize, "an action needs action 1 to 16, mode 0 to 3 and value 0 to 16383");
+            osSnprintf(message, messageSize, "an action needs action 1 to 18 and mode 0 to 3");
             return false;
         }
-        uint16_t parameter = (mode << 14) | value;
+        bool minutes = number == 17 || number == 18; /* idle power-off times: the whole parameter, no mode */
+        if (!json_uint(cJSON_GetObjectItemCaseSensitive(action, "value"), minutes ? 0xFFFF : 0x3FFF, &value))
+        {
+            osSnprintf(message, messageSize, "an action needs value 0 to 16383 (actions 17 and 18: minutes 0 to 65535)");
+            return false;
+        }
+        uint16_t parameter = minutes ? value : (mode << 14) | value;
         body[n++] = CFW_RECORD_ACTION;
         body[n++] = 3;
         body[n++] = number;

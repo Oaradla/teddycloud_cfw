@@ -38,3 +38,4 @@ void test_cfw_battery_model_curve(void);
 void test_cfw_battery_model_report(void);
 void test_cfw_battery_model_learns(void);
 void test_cfw_battery_model_start(void);
+void test_zip_write_stored(void);

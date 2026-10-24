@@ -414,7 +414,7 @@ static void option_map_init(uint8_t settingsId)
     OPTION_BOOL("toniebox.api_access", &settings->toniebox.api_access, TRUE, "API access", "Grant access to the API (default value for new boxes)", LEVEL_EXPERT)
     OPTION_STRING("toniebox.certPin", &settings->toniebox.certPin, "", "Certificate pin", "SHA-256 of the certificate this box is known by. Empty: taken on the next connection, from the uploaded client.der of the box or from the box itself", LEVEL_EXPERT)
     OPTION_BOOL("toniebox.overrideCloud", &settings->toniebox.overrideCloud, TRUE, "Override cloud settings", "Override tonies cloud settings for the toniebox with those set here", LEVEL_BASIC)
-    OPTION_UNSIGNED("toniebox.boxGeneration", &settings->toniebox.boxGeneration, GENERATION_UNKNOWN, GENERATION_UNKNOWN, GENERATION_TB2, "Box Generation", "Generation of the box (TB1/TB2)", LEVEL_EXPERT)
+    OPTION_ENUM("toniebox.boxGeneration", &settings->toniebox.boxGeneration, GENERATION_UNKNOWN, GENERATION_TB2, "Box Generation", "Generation of the box: 0=unknown, 1=TB1, 2=TB2", "0=Unknown|1=Toniebox 1|2=Toniebox 2", LEVEL_EXPERT)
     // TB1 specific
     OPTION_ENUM("toniebox.max_vol_spk", &settings->toniebox.max_vol_spk, 3, 3, "Limit speaker volume", "0=25%, 1=50%, 2=75%, 3=100%", "0=25%|1=50%|2=75%|3=100%", LEVEL_BASIC)
     OPTION_ENUM("toniebox.max_vol_hdp", &settings->toniebox.max_vol_hdp, 3, 3, "Limit headphone volume", "0=25%, 1=50%, 2=75%, 3=100%", "0=25%|1=50%|2=75%|3=100%", LEVEL_BASIC)
@@ -444,6 +444,8 @@ static void option_map_init(uint8_t settingsId)
     OPTION_BOOL("cfw.box.slap_lock", &settings->cfw.box.slap_lock, FALSE, "Slap lock", "Slaps do nothing. Boxes without the custom firmware get 'Slap to skip' off", LEVEL_BASIC)
     OPTION_BOOL("cfw.box.tilt_lock", &settings->cfw.box.tilt_lock, FALSE, "Tilt lock", "Tilting does not wind", LEVEL_BASIC)
     OPTION_BOOL("cfw.box.volume_lock", &settings->cfw.box.volume_lock, FALSE, "Volume lock", "A short ear press does not change the volume", LEVEL_BASIC)
+    OPTION_UNSIGNED("cfw.box.idle_off_battery", &settings->cfw.box.idle_off_battery, 10, 1, 65535, "Switch-off time on battery", "Minutes after which the idle box switches itself off when it is not on the charging station (1 to 65535, about 45 days). Boxes without the custom firmware always switch off after 10 minutes", LEVEL_BASIC)
+    OPTION_UNSIGNED("cfw.box.idle_off_station", &settings->cfw.box.idle_off_station, 10, 1, 65535, "Switch-off time on the charging station", "Minutes after which the idle box switches itself off while it stands on the charging station (1 to 65535, about 45 days). Boxes without the custom firmware always switch off after 10 minutes", LEVEL_BASIC)
     OPTION_TREE_DESC("cfw.update", "Firmware update", LEVEL_BASIC)
     OPTION_BOOL("cfw.update.enabled", &settings->cfw.update.enabled, TRUE, "Firmware update", "Offer custom firmware images to the box", LEVEL_BASIC)
     OPTION_ENUM("cfw.update.channel", &settings->cfw.update.channel, 1, 3, "Update channel", "Which firmware images the box takes: release only, or beta / alpha as well", "0=None|1=Release|2=Beta|3=Alpha", LEVEL_BASIC)
@@ -1010,6 +1012,23 @@ error_t settings_save()
     return err;
 }
 
+/* the time of the file as it is in memory now, so settings_loop only reloads changes from outside */
+static void settings_note_file_time(bool overlay)
+{
+    FsFileStat stat;
+    if (fsGetFileStat(overlay ? config_overlay_file_path : config_file_path, &stat) == NO_ERROR)
+    {
+        if (overlay)
+        {
+            settings_last_load_ovl = stat.modified;
+        }
+        else
+        {
+            settings_last_load = stat.modified;
+        }
+    }
+}
+
 static error_t settings_save_ovl(bool overlay)
 {
     char_t *config_path = (!overlay ? config_file_path : config_overlay_file_path);
@@ -1098,6 +1117,7 @@ static error_t settings_save_ovl(bool overlay)
         }
     }
     fsCloseFile(file);
+    settings_note_file_time(overlay);
     Settings_Overlay[0].internal.config_changed = false;
 
     return NO_ERROR;
@@ -1384,18 +1404,7 @@ static error_t settings_load_ovl(bool overlay)
         Settings_Overlay[0].internal.config_changed = false;
     }
 
-    FsFileStat stat;
-    if (fsGetFileStat(config_path, &stat) == NO_ERROR)
-    {
-        if (overlay)
-        {
-            settings_last_load_ovl = stat.modified;
-        }
-        else
-        {
-            settings_last_load = stat.modified;
-        }
-    }
+    settings_note_file_time(overlay);
 
     return NO_ERROR;
 }

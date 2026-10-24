@@ -13,8 +13,10 @@
 #define CFW_CAP_EVENT_TAGS (1 << 3)
 #define CFW_CAP_EVENT_TAG_EXT (1 << 9)
 #define CFW_CAP_REMOTE (1 << 10)
+#define CFW_CAP_IDLE_TIMES (1 << 12)
 
 #define CFW_CMD_SYNC 6
+#define CFW_CMD_HELLO 63
 #define CFW_CMD_APPLY_SETTINGS 64
 #define CFW_CMD_PAUSE 65
 #define CFW_CMD_CONTINUE 66
@@ -96,6 +98,7 @@ typedef struct
     bool syncStalled;        /* files are due but none fitted into the last answer */
     time_t lastGlobalCheck;
     const HttpConnection *connection;
+    bool helloSent; /* command 63 on that connection */
     cfw_remote_t queue[CFW_REMOTE_QUEUE];
     size_t queueCount;
     bool statusValid;

@@ -31,6 +31,7 @@
 #include "libraryMeta.h"
 #include "taf_remux.h"
 #include "tonie_audio_playlist.h"
+#include "zip_writer.h"
 
 error_t parsePostData(HttpConnection *connection, char_t *post_data, size_t buffer_size)
 {
@@ -677,6 +678,11 @@ error_t handleApiSettingsSet(HttpConnection *connection, const char_t *uri, cons
         if (success)
         {
             osStrcpy(response, "OK");
+            /* only admins may trigger the write of the config */
+            if (!web_acl_is_admin(connection))
+            {
+                settings_save();
+            }
         }
     }
 
@@ -726,6 +732,10 @@ error_t handleApiSettingsReset(HttpConnection *connection, const char_t *uri, co
     if (success)
     {
         osStrcpy(response, "OK");
+        if (!web_acl_is_admin(connection))
+        {
+            settings_save();
+        }
     }
 
     httpPrepareHeader(connection, "text/plain; charset=utf-8", osStrlen(response));
@@ -1323,6 +1333,20 @@ error_t handleApiStats(HttpConnection *connection, const char_t *uri, const char
     return httpWriteResponse(connection, jsonString, connection->response.contentLength, true);
 }
 
+static bool image_file_name(const char *name)
+{
+    static const char *const extensions[] = {".png", ".jpg", ".jpeg", ".webp", ".gif", NULL};
+    const char *dot = strrchr(name, '.');
+    for (int i = 0; dot != NULL && extensions[i] != NULL; i++)
+    {
+        if (!osStrcasecmp(dot, extensions[i]))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 error_t file_save_start(void *in_ctx, const char *name, const char *filename)
 {
     file_save_ctx *ctx = (file_save_ctx *)in_ctx;
@@ -1337,6 +1361,15 @@ error_t file_save_start(void *in_ctx, const char *name, const char *filename)
     ctx->filename = custom_asprintf("%s%c%s", ctx->root_path, PATH_SEPARATOR, filename);
     sanitizePath(ctx->filename, false);
 
+    if (ctx->image_owner != NULL)
+    {
+        if (!image_file_name(filename) || fsFileExists(ctx->filename))
+        {
+            TRACE_ERROR("'%s' is no new image file\r\n", ctx->filename);
+            return ERROR_ACCESS_DENIED;
+        }
+        web_acl_owned_created(ctx->image_owner, "images", filename);
+    }
     if (fsFileExists(ctx->filename))
     {
         TRACE_INFO("Filename '%s' already exists, overwriting\r\n", ctx->filename);
@@ -2140,6 +2173,12 @@ error_t handleApiFileUpload(HttpConnection *connection, const char_t *uri, const
 
         ctx.base.root_path = pathAbsolute;
         ctx.base.overlay = overlay;
+        char special[16];
+        /* users add pictures of custom tonies there: new image files only, it is served as it is */
+        if (!web_acl_is_admin(connection) && queryGet(queryString, "special", special, sizeof(special)) && !osStrcmp(special, "custom_img"))
+        {
+            ctx.base.image_owner = connection;
+        }
 
         switch (multipart_handle(connection, &cbr, &ctx))
         {
@@ -2187,16 +2226,25 @@ static void sanitize_track_title(const char *in, char *out, size_t out_len)
     {
         in = "";
     }
-    for (size_t i = 0; in[i] != '\0' && j + 1 < out_len; i++)
+    for (size_t i = 0; in[i] != '\0';)
     {
         unsigned char c = (unsigned char)in[i];
+        /* length of the UTF-8 sequence, so a truncated title never ends in half a character */
+        size_t len = (c >= 0xF0) ? 4 : (c >= 0xE0) ? 3 : (c >= 0xC0) ? 2 : 1;
+
+        if (j + len + 1 > out_len)
+        {
+            break;
+        }
         if (c < 0x20 || c == '/' || c == '\\' || c == '"' || c == '`' || c == '$')
         {
             out[j++] = '_';
+            i++;
+            continue;
         }
-        else
+        for (size_t k = 0; k < len && in[i] != '\0'; k++)
         {
-            out[j++] = (char)c;
+            out[j++] = in[i++];
         }
     }
     out[j] = '\0';
@@ -2276,6 +2324,7 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
     int track_numbers[TAF_TRACK_EXPORT_MAX];
     char titles[TAF_TRACK_EXPORT_MAX][96];
     char *out_paths[TAF_TRACK_EXPORT_MAX];
+    char *entry_names[TAF_TRACK_EXPORT_MAX];
     size_t page_count = 0;
     size_t track_count = 0;
     uint64_t num_bytes = 0;
@@ -2283,6 +2332,7 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
     error_t error = NO_ERROR;
 
     osMemset(out_paths, 0, sizeof(out_paths));
+    osMemset(entry_names, 0, sizeof(entry_names));
     osMemset(titles, 0, sizeof(titles));
 
     src = fopen(file_path, "rb");
@@ -2355,7 +2405,7 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
             if (end == p || value < 1 || (size_t)value > page_count)
             {
                 fclose(src);
-                return ERROR_INVALID_PARAMETER;
+                return httpSendErrorResponse(connection, 400, "Invalid track selection");
             }
             track_numbers[track_count++] = (int)value;
             p = end;
@@ -2364,7 +2414,7 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
     if (track_count == 0)
     {
         fclose(src);
-        return ERROR_INVALID_PARAMETER;
+        return httpSendErrorResponse(connection, 400, "Invalid track selection");
     }
 
     if (create_taf_temp_dir(settings, tmpdir, sizeof(tmpdir)) != NO_ERROR)
@@ -2405,6 +2455,7 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
             break;
         }
 
+        /* the title only goes into the zip entry name, the temp file name stays ASCII */
         if (titles[chapter][0] != '\0')
         {
             osSnprintf(name, sizeof(name), "%02d %s.ogg", track_numbers[i], titles[chapter]);
@@ -2413,7 +2464,7 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
         {
             osSnprintf(name, sizeof(name), "%02d.ogg", track_numbers[i]);
         }
-        osSnprintf(path, sizeof(path), "%s/%s", tmpdir, name);
+        osSnprintf(path, sizeof(path), "%s/%02d.ogg", tmpdir, track_numbers[i]);
         dst = fopen(path, "wb");
         if (dst == NULL)
         {
@@ -2434,7 +2485,8 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
             break;
         }
         out_paths[i] = strdup(path);
-        if (out_paths[i] == NULL)
+        entry_names[i] = strdup(name);
+        if (out_paths[i] == NULL || entry_names[i] == NULL)
         {
             error = ERROR_FAILURE;
             break;
@@ -2455,22 +2507,9 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
     else
     {
         char zip_path[TAF_TEMP_FILE_LEN];
-        char *argv[5 + TAF_TRACK_EXPORT_MAX + 1];
-        size_t n = 0;
 
         osSnprintf(zip_path, sizeof(zip_path), "%s/tracks.zip", tmpdir);
-        argv[n++] = "zip";
-        argv[n++] = "-j";
-        argv[n++] = "-q";
-        argv[n++] = "-X";
-        argv[n++] = zip_path;
-        for (size_t i = 0; i < track_count; i++)
-        {
-            argv[n++] = out_paths[i];
-        }
-        argv[n] = NULL;
-
-        if (osSpawnvp("zip", argv) != 0)
+        if (zipWriteStored(zip_path, track_count, (const char *const *)out_paths, (const char *const *)entry_names) != NO_ERROR)
         {
             TRACE_ERROR("Failed to zip selected TAF tracks from %s\r\n", file_path);
             error = ERROR_FAILURE;
@@ -2486,10 +2525,8 @@ cleanup:
     }
     for (size_t i = 0; i < track_count; i++)
     {
-        if (out_paths[i] != NULL)
-        {
-            free(out_paths[i]);
-        }
+        free(out_paths[i]);
+        free(entry_names[i]);
     }
     if (have_dir)
     {
@@ -2696,6 +2733,27 @@ error_t handleApiContentDownload(HttpConnection *connection, const char_t *uri, 
 
     char *path = (char *)uri + 1 + 7 + 1 + 8 + 1;
     char *pathAbsolute = custom_asprintf("%s%c%s", rootPath, PATH_SEPARATOR, path);
+
+    char tracks_param[TAF_TRACK_EXPORT_MAX * 4];
+    if (queryGet(queryString, "tracks", tracks_param, sizeof(tracks_param)))
+    {
+        /* export from the TAF the tag points to (e.g. a lib:// source), same as /content/ does */
+        tonie_info_t *tonieInfo = getTonieInfo(pathAbsolute, false, client_ctx->settings);
+        osFreeMem(pathAbsolute);
+
+        error_t export_error = ERROR_NOT_FOUND;
+        if (tonieInfo->exists && tonieInfo->valid &&
+            (tonieInfo->json._source_type == CT_SOURCE_NONE || tonieInfo->json._source_type == CT_SOURCE_TAF || tonieInfo->json._source_type == CT_SOURCE_TAP_CACHED))
+        {
+            export_error = handleApiContentTrackExport(connection, tonieInfo->contentPath, tracks_param, client_ctx->settings);
+        }
+        else
+        {
+            TRACE_ERROR("No local TAF for track export of '%s'\r\n", path);
+        }
+        freeTonieInfo(tonieInfo);
+        return export_error;
+    }
 
     char ruid[17];
 
@@ -3211,6 +3269,36 @@ error_t handleApiDirectoryCreate(HttpConnection *connection, const char_t *uri, 
     return httpWriteResponseString(connection, message, false);
 }
 
+static bool special_is(const char_t *queryString, const char *value)
+{
+    char special[32] = "";
+    queryGet(queryString, "special", special, sizeof(special));
+    return !osStrcmp(special, value);
+}
+
+static uint_t removeCustomModels(HttpConnection *connection, cJSON *models, bool pictures, char *message, size_t messageSize);
+
+/* with ?models=1 the custom tonies used only by what is deleted go with it */
+static cJSON *orphansOf(HttpConnection *connection, const char_t *queryString, const char *path)
+{
+    char models[4] = "";
+    if (!special_is(queryString, "library") || !queryGet(queryString, "models", models, sizeof(models)) || osStrcmp(models, "1"))
+    {
+        return NULL;
+    }
+    return web_acl_model_orphans(connection, &path, 1);
+}
+
+static void removeOrphans(cJSON *orphans, bool deleted)
+{
+    char message[256];
+    if (deleted && cJSON_GetArraySize(orphans) > 0)
+    {
+        removeCustomModels(NULL, orphans, true, message, sizeof(message));
+    }
+    cJSON_Delete(orphans);
+}
+
 error_t handleApiDirectoryDelete(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
     char overlay[16];
@@ -3238,6 +3326,7 @@ error_t handleApiDirectoryDelete(HttpConnection *connection, const char_t *uri, 
     {
         return web_acl_forbidden(connection);
     }
+    cJSON *orphans = orphansOf(connection, queryString, path);
     char *pathAbsolute = custom_asprintf("%s%c%s", rootPath, PATH_SEPARATOR, path);
     sanitizePath(pathAbsolute, true);
 
@@ -3253,6 +3342,7 @@ error_t handleApiDirectoryDelete(HttpConnection *connection, const char_t *uri, 
     {
         web_acl_folder_removed(path);
     }
+    removeOrphans(orphans, err == NO_ERROR);
 
     if (err != NO_ERROR)
     {
@@ -3291,10 +3381,13 @@ error_t handleApiFileDelete(HttpConnection *connection, const char_t *uri, const
 
     /* first canonicalize path, then merge to prevent directory traversal bugs */
     sanitizePath(path, false);
-    if (!web_acl_folder_tree_writable(connection, path))
+    /* a picture of a custom tonie, or a library file */
+    const char *image = special_is(queryString, "custom_img") ? path + strspn(path, "/") : NULL;
+    if (image ? !web_acl_image_allowed(connection, image) : !web_acl_folder_tree_writable(connection, path))
     {
         return web_acl_forbidden(connection);
     }
+    cJSON *orphans = orphansOf(connection, queryString, path);
     char *pathAbsolute = custom_asprintf("%s%c%s", rootPath, PATH_SEPARATOR, path);
     sanitizePath(pathAbsolute, false);
 
@@ -3316,6 +3409,15 @@ error_t handleApiFileDelete(HttpConnection *connection, const char_t *uri, const
     {
         tap_deleted(pathAbsolute);
     }
+    if (isDir && special_is_library(queryString) && !fsDirExists(pathAbsolute))
+    {
+        web_acl_folder_removed(path);
+    }
+    if (err == NO_ERROR && image)
+    {
+        web_acl_owned_renamed("images", image, NULL);
+    }
+    removeOrphans(orphans, err == NO_ERROR);
 
     if (err != NO_ERROR)
     {
@@ -3433,8 +3535,6 @@ error_t handleApiToniesJsonUpdate(HttpConnection *connection, const char_t *uri,
     httpWriteResponseString(connection, message, false);
     return tonies_update();
 }
-
-static error_t loadToniesCustomJsonRoot(const char *configDir, cJSON **outRoot);
 
 error_t handleApiToniesCustomJson(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
@@ -4240,7 +4340,7 @@ static error_t parseJsonRequestBody(HttpConnection *connection, cJSON **outJson,
     return NO_ERROR;
 }
 
-static error_t loadToniesCustomJsonRoot(const char *configDir, cJSON **outRoot)
+error_t loadToniesCustomJsonRoot(const char *configDir, cJSON **outRoot)
 {
     if (configDir == NULL || outRoot == NULL)
     {
@@ -4450,6 +4550,21 @@ static bool modelInDeleteList(cJSON *modelsArray, const char *model)
     return false;
 }
 
+/* users never give a custom tonie the audio id of an official one, it would change that one for everybody */
+static bool officialAudioId(const cJSON *entry)
+{
+    const cJSON *id = NULL;
+    cJSON_ArrayForEach(id, cJSON_GetObjectItemCaseSensitive(entry, "audio_id"))
+    {
+        uint32_t value = 0;
+        if (jsonGetUInt32Flexible((cJSON *)id, &value) && tonies_isOfficialAudioId(value))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 error_t handleApiToniesCustomJsonUpsert(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
     (void)uri;
@@ -4500,6 +4615,7 @@ error_t handleApiToniesCustomJsonUpsert(HttpConnection *connection, const char_t
         return writeApiStatusText(connection, 500, "Failed to load tonies.custom.json");
     }
 
+    cJSON *created = cJSON_CreateArray();
     size_t count = (size_t)cJSON_GetArraySize(entries);
     for (size_t i = 0; i < count; i++)
     {
@@ -4521,21 +4637,44 @@ error_t handleApiToniesCustomJsonUpsert(HttpConnection *connection, const char_t
             return writeApiStatusText(connection, 400, "Invalid payload: 'model' is required");
         }
 
+        int existingIndex = findModelIndexInArray(root, model->valuestring);
+        if (!web_acl_is_admin(connection) && officialAudioId(entry))
+        {
+            cJSON_Delete(created);
+            cJSON_Delete(root);
+            cJSON_Delete(wrappedArray);
+            cJSON_Delete(requestJson);
+            return writeApiStatusText(connection, 400, "The audio id belongs to an official tonie");
+        }
+        if (!web_acl_model_allowed(connection, existingIndex >= 0 ? cJSON_GetArrayItem(root, existingIndex) : NULL))
+        {
+            cJSON_Delete(created);
+            cJSON_Delete(root);
+            cJSON_Delete(wrappedArray);
+            cJSON_Delete(requestJson);
+            return web_acl_forbidden(connection);
+        }
+        if (existingIndex < 0)
+        {
+            cJSON_AddItemToArray(created, cJSON_CreateString(model->valuestring));
+        }
+
         cJSON *entryCopy = cJSON_Duplicate(entry, 1);
         if (entryCopy == NULL)
         {
+            cJSON_Delete(created);
             cJSON_Delete(root);
             cJSON_Delete(wrappedArray);
             cJSON_Delete(requestJson);
             return writeApiStatusText(connection, 500, "Out of memory");
         }
 
-        int existingIndex = findModelIndexInArray(root, model->valuestring);
         if (existingIndex >= 0)
         {
             if (!cJSON_ReplaceItemInArray(root, existingIndex, entryCopy))
             {
                 cJSON_Delete(entryCopy);
+                cJSON_Delete(created);
                 cJSON_Delete(root);
                 cJSON_Delete(wrappedArray);
                 cJSON_Delete(requestJson);
@@ -4549,6 +4688,15 @@ error_t handleApiToniesCustomJsonUpsert(HttpConnection *connection, const char_t
     }
 
     error_t saveError = saveToniesCustomJsonRoot(configDir, root, message, sizeof(message));
+    cJSON *name = NULL;
+    cJSON_ArrayForEach(name, created)
+    {
+        if (saveError == NO_ERROR)
+        {
+            web_acl_owned_created(connection, "models", name->valuestring);
+        }
+    }
+    cJSON_Delete(created);
     cJSON_Delete(root);
     cJSON_Delete(wrappedArray);
     cJSON_Delete(requestJson);
@@ -4558,6 +4706,90 @@ error_t handleApiToniesCustomJsonUpsert(HttpConnection *connection, const char_t
     }
 
     return writeApiStatusText(connection, 200, "OK");
+}
+
+/* a picture in custom_img that "pic" names, without a way out of it */
+static const char *customImageName(const cJSON *entry)
+{
+    const cJSON *pic = cJSON_GetObjectItemCaseSensitive(entry, "pic");
+    if (!cJSON_IsString(pic) || osStrncmp(pic->valuestring, "/custom_img/", 12) != 0 || osStrstr(pic->valuestring, "..") || strchr(pic->valuestring, '\\'))
+    {
+        return NULL;
+    }
+    return pic->valuestring + 12;
+}
+
+static bool pictureShown(cJSON *root, const char *name)
+{
+    const cJSON *entry = NULL;
+    cJSON_ArrayForEach(entry, root)
+    {
+        const char *other = customImageName(entry);
+        if (other != NULL && !osStrcmp(other, name))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* removes the models from tonies.custom.json; pictures: also their pictures no other model shows.
+   connection NULL: the caller checked the rights */
+static uint_t removeCustomModels(HttpConnection *connection, cJSON *models, bool pictures, char *message, size_t messageSize)
+{
+    const char *configDir = settings_get_string("internal.configdirfull");
+    cJSON *root = NULL;
+    if (loadToniesCustomJsonRoot(configDir, &root) != NO_ERROR)
+    {
+        osSnprintf(message, messageSize, "Failed to load tonies.custom.json");
+        return 500;
+    }
+
+    cJSON *removed = cJSON_CreateArray();
+    for (int i = cJSON_GetArraySize(root) - 1; i >= 0; i--)
+    {
+        cJSON *entry = cJSON_GetArrayItem(root, i);
+        cJSON *model = cJSON_GetObjectItemCaseSensitive(entry, "model");
+        if (cJSON_IsString(model) && model->valuestring != NULL && modelInDeleteList(models, model->valuestring))
+        {
+            if (connection != NULL && !web_acl_model_allowed(connection, entry))
+            {
+                cJSON_Delete(removed);
+                cJSON_Delete(root);
+                return 403;
+            }
+            cJSON_AddItemToArray(removed, cJSON_DetachItemFromArray(root, i));
+        }
+    }
+
+    error_t saveError = saveToniesCustomJsonRoot(configDir, root, message, messageSize);
+    cJSON *entry = NULL;
+    cJSON_ArrayForEach(entry, removed)
+    {
+        if (saveError != NO_ERROR)
+        {
+            break;
+        }
+        const char *image = customImageName(entry);
+        web_acl_owned_renamed("models", cJSON_GetObjectItemCaseSensitive(entry, "model")->valuestring, NULL);
+        if (pictures && image != NULL && !pictureShown(root, image))
+        {
+            char *file = custom_asprintf("%s%ccustom_img%c%s", settings_get_string("internal.wwwdirfull"), PATH_SEPARATOR, PATH_SEPARATOR, image);
+            if (fsDeleteFile(file) == NO_ERROR)
+            {
+                web_acl_owned_renamed("images", image, NULL);
+            }
+            osFreeMem(file);
+        }
+    }
+    cJSON_Delete(removed);
+    cJSON_Delete(root);
+    if (saveError != NO_ERROR)
+    {
+        return (saveError == ERROR_OUT_OF_MEMORY) ? 500 : 400;
+    }
+    osSnprintf(message, messageSize, "OK");
+    return 200;
 }
 
 error_t handleApiToniesCustomJsonDelete(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
@@ -4603,36 +4835,15 @@ error_t handleApiToniesCustomJsonDelete(HttpConnection *connection, const char_t
         return writeApiStatusText(connection, 400, "Invalid payload: 'models' array is required");
     }
 
-    const char *configDir = settings_get_string("internal.configdirfull");
-    cJSON *root = NULL;
-    error_t loadError = loadToniesCustomJsonRoot(configDir, &root);
-    if (loadError != NO_ERROR)
-    {
-        cJSON_Delete(modelsCopy);
-        cJSON_Delete(requestJson);
-        return writeApiStatusText(connection, 500, "Failed to load tonies.custom.json");
-    }
-
-    for (int i = cJSON_GetArraySize(root) - 1; i >= 0; i--)
-    {
-        cJSON *entry = cJSON_GetArrayItem(root, i);
-        cJSON *model = cJSON_GetObjectItemCaseSensitive(entry, "model");
-        if (cJSON_IsString(model) && model->valuestring != NULL && modelInDeleteList(models, model->valuestring))
-        {
-            cJSON_DeleteItemFromArray(root, i);
-        }
-    }
-
-    error_t saveError = saveToniesCustomJsonRoot(configDir, root, message, sizeof(message));
-    cJSON_Delete(root);
+    cJSON *pictures = cJSON_IsObject(requestJson) ? cJSON_GetObjectItemCaseSensitive(requestJson, "pictures") : NULL;
+    uint_t status = removeCustomModels(connection, models, cJSON_IsTrue(pictures), message, sizeof(message));
     cJSON_Delete(modelsCopy);
     cJSON_Delete(requestJson);
-    if (saveError != NO_ERROR)
+    if (status == 403)
     {
-        return writeApiStatusText(connection, (saveError == ERROR_OUT_OF_MEMORY) ? 500 : 400, message);
+        return web_acl_forbidden(connection);
     }
-
-    return writeApiStatusText(connection, 200, "OK");
+    return writeApiStatusText(connection, status, message);
 }
 
 static bool isHexStringLocal(const char *buf, size_t maxLen)
@@ -4892,6 +5103,12 @@ error_t handleApiToniesCustomJsonRename(HttpConnection *connection, const char_t
         cJSON_Delete(requestJson);
         return writeApiStatusText(connection, 400, "Target model already exists");
     }
+    if (!web_acl_model_allowed(connection, cJSON_GetArrayItem(root, fromIndex)) || !web_acl_model_allowed(connection, NULL))
+    {
+        cJSON_Delete(root);
+        cJSON_Delete(requestJson);
+        return web_acl_forbidden(connection);
+    }
 
     cJSON *entry = cJSON_GetArrayItem(root, fromIndex);
     cJSON *newModel = cJSON_CreateString(toModel->valuestring);
@@ -4912,6 +5129,7 @@ error_t handleApiToniesCustomJsonRename(HttpConnection *connection, const char_t
     error_t saveError = saveToniesCustomJsonRoot(configDir, root, message, sizeof(message));
     if (saveError == NO_ERROR)
     {
+        web_acl_owned_renamed("models", fromModel->valuestring, toModel->valuestring);
         /* Keep stable copies because requestJson will be freed before optional content update. */
         fromModelCopy = strdup(fromModel->valuestring);
         toModelCopy = strdup(toModel->valuestring);
@@ -4954,6 +5172,55 @@ error_t handleApiToniesCustomJsonRename(HttpConnection *connection, const char_t
     }
 
     return writeApiStatusText(connection, 200, "OK");
+}
+
+static error_t writeApiJson(HttpConnection *connection, cJSON *json)
+{
+    char *jsonString = cJSON_PrintUnformatted(json);
+    cJSON_Delete(json);
+    httpPrepareHeader(connection, "application/json; charset=utf-8", osStrlen(jsonString));
+    error_t err = httpWriteResponseString(connection, jsonString, false);
+    osFreeMem(jsonString);
+    return err;
+}
+
+/* the custom tonies that deleting these library paths would leave unused; body: array of paths */
+error_t handleApiToniesCustomJsonOrphans(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
+{
+    (void)uri;
+    (void)queryString;
+    (void)client_ctx;
+
+    char message[256];
+    cJSON *requestJson = NULL;
+    if (parseJsonRequestBody(connection, &requestJson, message, sizeof(message)) != NO_ERROR || !cJSON_IsArray(requestJson))
+    {
+        cJSON_Delete(requestJson);
+        return writeApiStatusText(connection, 400, "Invalid payload: expected array of paths");
+    }
+    size_t count = (size_t)cJSON_GetArraySize(requestJson);
+    const char **paths = osAllocMem(sizeof(char *) * (count + 1));
+    size_t n = 0;
+    cJSON *path = NULL;
+    cJSON_ArrayForEach(path, requestJson)
+    {
+        if (cJSON_IsString(path) && web_acl_folder_tree_writable(connection, path->valuestring))
+        {
+            paths[n++] = path->valuestring;
+        }
+    }
+    cJSON *names = web_acl_model_orphans(connection, paths, n);
+    osFreeMem(paths);
+    cJSON_Delete(requestJson);
+    return writeApiJson(connection, names);
+}
+
+error_t handleApiToniesCustomJsonChangeable(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
+{
+    (void)uri;
+    (void)queryString;
+    (void)client_ctx;
+    return writeApiJson(connection, web_acl_models_changeable(connection));
 }
 
 static char *getJsonString(cJSON *jsonElement, char *name)

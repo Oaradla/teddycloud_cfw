@@ -11,6 +11,7 @@
 #include "http/http_server_misc.h"
 
 #include "handler.h"
+#include "cJSON.h"
 
 typedef struct
 {
@@ -18,12 +19,17 @@ typedef struct
     const char *root_path;
     char *filename;
     FsFile *file;
+    /* set for a user's picture of a custom tonie: new image files only, owned by that user */
+    HttpConnection *image_owner;
 } file_save_ctx;
 
 #define POST_BUFFER_SIZE 1024 * 32
 
 void stats_update(const char *item, int count);
 
+error_t loadToniesCustomJsonRoot(const char *configDir, cJSON **outRoot);
+error_t handleApiToniesCustomJsonChangeable(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
+error_t handleApiToniesCustomJsonOrphans(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiUploadCert(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiGetCaDer(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiESP32UploadFirmware(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);

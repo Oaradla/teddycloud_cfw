@@ -339,6 +339,55 @@ static double json_number(cJSON *json, const char *name)
     return cJSON_IsNumber(item) ? item->valuedouble : 0;
 }
 
+/* the last line of the battery log: for boxes whose state has no battery report yet */
+static void battery_from_log(cfw_box_t *box)
+{
+    char *dir = cfw_dir(get_settings()->internal.configdirfull, "battery");
+    char *path = dir ? custom_asprintf("%s%c%s.csv", dir, PATH_SEPARATOR, box->id) : NULL;
+    osFreeMem(dir);
+    uint32_t size = 0;
+    FsFile *file = path && fsGetFileSize(path, &size) == NO_ERROR ? fsOpenFile(path, FS_FILE_MODE_READ) : NULL;
+    osFreeMem(path);
+    if (file == NULL)
+    {
+        return;
+    }
+    char tail[256] = {0};
+    size_t length = 0;
+    fsSeekFile(file, size > sizeof(tail) - 1 ? (int_t)(size - (sizeof(tail) - 1)) : 0, FS_SEEK_SET);
+    fsReadFile(file, tail, sizeof(tail) - 1, &length);
+    fsCloseFile(file);
+    tail[length] = '\0';
+    while (length > 0 && (tail[length - 1] == '\n' || tail[length - 1] == '\r'))
+    {
+        tail[--length] = '\0';
+    }
+    char *line = strrchr(tail, '\n');
+    line = line ? line + 1 : tail;
+
+    DateTime date = {0};
+    unsigned year, month, day, hours, minutes, seconds, station, low, critical, implausible, headphones;
+    uint32_t mv, reason, state, step, adc;
+    if (sscanf(line, "%4u-%2u-%2uT%2u:%2u:%2uZ,%" SCNu32 ",%u,%u,%u,%u,%" SCNu32 ",%" SCNu32 ",%" SCNu32 ",%u,%" SCNu32, &year, &month, &day,
+               &hours, &minutes, &seconds, &mv, &station, &low, &critical, &implausible, &reason, &state, &step, &headphones, &adc) != 16)
+    {
+        return;
+    }
+    date.year = year;
+    date.month = month;
+    date.day = day;
+    date.hours = hours;
+    date.minutes = minutes;
+    date.seconds = seconds;
+    box->battery[0] = mv;
+    box->battery[1] = station | low << 1 | critical << 2 | implausible << 3;
+    box->battery[2] = reason;
+    box->battery[3] = (state & 0xFF) | (step & 0xFF) << 8 | (headphones & 1) << 16;
+    box->battery[4] = adc;
+    box->batteryTime = convertDateToUnixTime(&date);
+    box->batteryValid = true;
+}
+
 static void box_load(cfw_box_t *box)
 {
     char *path = box_state_path(box->id);
@@ -373,6 +422,30 @@ static void box_load(cfw_box_t *box)
         {
             box->rolledBack[box->rolledBackCount++] = build->valuedouble;
         }
+    }
+    /* the last battery report stays shown until the next one, also after a restart */
+    cJSON *battery = cJSON_GetObjectItemCaseSensitive(json, "battery");
+    if (cJSON_GetArraySize(battery) == sizeof(box->battery) / sizeof(box->battery[0]))
+    {
+        for (size_t i = 0; i < sizeof(box->battery) / sizeof(box->battery[0]); i++)
+        {
+            box->battery[i] = cJSON_GetArrayItem(battery, i)->valuedouble;
+        }
+        box->batteryValid = true;
+        box->batteryTime = json_number(json, "batteryTime");
+    }
+    else
+    {
+        battery_from_log(box);
+    }
+    cJSON *result = cJSON_GetObjectItemCaseSensitive(json, "batteryResult");
+    if (cJSON_IsObject(result))
+    {
+        box->batteryResult.percent = json_number(result, "percent");
+        box->batteryResult.charging = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(result, "charging"));
+        box->batteryResult.remainingSec = json_number(result, "remainingSec");
+        box->batteryResult.learned = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(result, "learned"));
+        box->batteryResultValid = true;
     }
     box->globalTimestamp = json_number(json, "globalTimestamp");
     box->globalOrigin = json_number(json, "globalOrigin");
@@ -480,6 +553,23 @@ void cfw_box_save(cfw_box_t *box)
     for (size_t i = 0; i < box->rolledBackCount; i++)
     {
         cJSON_AddItemToArray(rolledBack, cJSON_CreateNumber(box->rolledBack[i]));
+    }
+    if (box->batteryValid)
+    {
+        cJSON *battery = cJSON_AddArrayToObject(json, "battery");
+        for (size_t i = 0; i < sizeof(box->battery) / sizeof(box->battery[0]); i++)
+        {
+            cJSON_AddItemToArray(battery, cJSON_CreateNumber(box->battery[i]));
+        }
+        cJSON_AddNumberToObject(json, "batteryTime", (double)box->batteryTime);
+    }
+    if (box->batteryResultValid)
+    {
+        cJSON *result = cJSON_AddObjectToObject(json, "batteryResult");
+        cJSON_AddNumberToObject(result, "percent", box->batteryResult.percent);
+        cJSON_AddBoolToObject(result, "charging", box->batteryResult.charging);
+        cJSON_AddNumberToObject(result, "remainingSec", box->batteryResult.remainingSec);
+        cJSON_AddBoolToObject(result, "learned", box->batteryResult.learned);
     }
     cJSON_AddNumberToObject(json, "globalTimestamp", box->globalTimestamp);
     cJSON_AddNumberToObject(json, "globalOrigin", box->globalOrigin);
@@ -696,6 +786,19 @@ static size_t global_body(settings_t *settings, uint8_t *body)
         body[n++] = 1;
         body[n++] = values[i][1];
     }
+    /* idle power-off minutes on battery and on the station; without a record the box keeps 10 */
+    const uint32_t minutes[] = {settings->cfw.box.idle_off_battery, settings->cfw.box.idle_off_station};
+    for (size_t i = 0; i < 2; i++)
+    {
+        if (minutes[i] == 10)
+        {
+            continue;
+        }
+        body[n++] = 0x0B + i;
+        body[n++] = 2;
+        body[n++] = minutes[i] & 0xFF;
+        body[n++] = (minutes[i] >> 8) & 0xFF;
+    }
     return n;
 }
 
@@ -908,6 +1011,7 @@ static void apply_global_report(settings_t *settings, const uint8_t *body, size_
     cfw_box_t *box = cfw_box_get(settings);
     uint8_t file[CFW_TBS_MAX];
     bool older = box == NULL || (global_file(box, settings, file) > 0 && box->globalTimestamp > timestamp);
+    bool idleTimes = box != NULL && (box->capabilities & CFW_CAP_IDLE_TIMES);
     if (box != NULL && older)
     {
         known_set(box, 0, timestamp);
@@ -931,16 +1035,22 @@ static void apply_global_report(settings_t *settings, const uint8_t *body, size_
         {0x08, "cfw.box.slap_lock", true},
         {0x09, "cfw.box.tilt_lock", true},
         {0x0A, "cfw.box.volume_lock", true},
+        {0x0B, "cfw.box.idle_off_battery", false},
+        {0x0C, "cfw.box.idle_off_station", false},
     };
     const char *overlay = settings->internal.overlayUniqueId;
     for (size_t i = 0; i < sizeof(box_settings) / sizeof(box_settings[0]); i++)
     {
+        if (box_settings[i].key >= 0x0B && !idleTimes)
+        {
+            continue; /* a box without them neither reports nor uses them */
+        }
         const uint8_t *value = NULL;
-        for (size_t pos = 0; pos + 3 <= length; pos += 3)
+        for (size_t pos = 0; pos + 2 <= length && pos + 2 + body[pos + 1] <= length; pos += 2 + body[pos + 1])
         {
             if (body[pos] == box_settings[i].key)
             {
-                value = &body[pos + 2];
+                value = &body[pos + 1];
             }
         }
         if (value == NULL)
@@ -949,11 +1059,11 @@ static void apply_global_report(settings_t *settings, const uint8_t *body, size_
         }
         else if (box_settings[i].isBool)
         {
-            settings_set_bool_ovl(box_settings[i].name, *value != 0, overlay);
+            settings_set_bool_ovl(box_settings[i].name, value[1] != 0, overlay);
         }
         else
         {
-            settings_set_unsigned_ovl(box_settings[i].name, *value, overlay);
+            settings_set_unsigned_ovl(box_settings[i].name, value[0] == 2 ? value[1] | (value[2] << 8) : value[1], overlay);
         }
     }
     settings_save();
@@ -1154,7 +1264,7 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
             uint32_t timestamp = cfw_le32(&payload[16]);
             uint8_t kind = packed & 3;
             uint8_t body[64];
-            size_t bodyLength = cfw_report_body(packed, cfw_le32(&payload[12]), body);
+            size_t bodyLength = cfw_report_body(packed, cfw_le32(&payload[12]), length >= 24 ? cfw_le32(&payload[20]) : 0, body);
             if (kind == CFW_TBS_KIND_PROFILE && ruid != 0)
             {
                 store_tag_report(box, ruid, body, bodyLength, timestamp);
@@ -1221,6 +1331,7 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
             batteryModel = cfw_battery_update(box, log2->uptime);
             batteryResult = box->batteryResult;
             osMemcpy(battery, box->battery, sizeof(battery));
+            cfw_box_save(box);
             osStrncpy(boxId, box->id, sizeof(boxId) - 1);
             boxId[sizeof(boxId) - 1] = 0;
             build = box->version;
@@ -1336,6 +1447,17 @@ static size_t next_frame(cfw_box_t *box, settings_t *settings, bool received, ui
     time_t now = time(NULL);
     bool remote = (box->capabilities & CFW_CAP_REMOTE) && settings->cfw.remote_control;
 
+    /* the hello also on each log connection, so that it does not hang on one freshness check of the start */
+    if (received && box->isCfw && !box->helloSent)
+    {
+        box->helloSent = true;
+        return build_frame(frame, CFW_CMD_HELLO, NULL, 0);
+    }
+    if (!box->helloValid)
+    {
+        return 0;
+    }
+
     /* command 6 only in reply to log data, at most every 30 s and only with files due */
     /* not when the last answer could take none of the due files, and not again after three that the box left
        without a freshness check: until the next freshness check */
@@ -1416,11 +1538,12 @@ void cfw_rtnl_poll(HttpConnection *connection, bool received)
 
     cfw_lock();
     cfw_box_t *box = cfw_box_get(settings);
-    if (box != NULL && box->helloValid)
+    if (box != NULL && (box->helloValid || box->isCfw))
     {
-        if (received)
+        if (received && box->connection != connection)
         {
             box->connection = connection;
+            box->helloSent = false;
         }
         /* an older connection of the box that has not noticed its end yet sends nothing */
         if (box->connection == connection)

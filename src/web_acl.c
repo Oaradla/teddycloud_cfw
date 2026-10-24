@@ -642,6 +642,87 @@ void web_acl_folder_removed(const char *path)
     folder_entries_change(path, NULL);
 }
 
+/* ---------- custom tonies and their pictures ---------- */
+
+#define OWNED_KEY_MAX 256
+
+/* models are compared without case, pictures are file names */
+static bool owned_key(const char *map, const char *name, char out[OWNED_KEY_MAX])
+{
+    size_t len = name != NULL ? osStrlen(name) : 0;
+    if (len == 0 || len >= OWNED_KEY_MAX)
+    {
+        return false;
+    }
+    bool fold = !osStrcmp(map, "models");
+    for (size_t i = 0; i <= len; i++)
+    {
+        out[i] = fold ? (char)tolower((unsigned char)name[i]) : name[i];
+    }
+    return true;
+}
+
+bool web_acl_owns(HttpConnection *connection, const char *map, const char *name)
+{
+    char key[OWNED_KEY_MAX];
+    acl_user_t u = current_user(connection);
+    if (!u.known || u.level == ACL_LEVEL_ADMIN)
+    {
+        return true;
+    }
+    if (!owned_key(map, name, key))
+    {
+        return false;
+    }
+    lock_acl();
+    bool ok = in_owners(cJSON_GetObjectItemCaseSensitive(obj(acl, map), key), u.user);
+    unlock_acl();
+    return ok;
+}
+
+void web_acl_owned_created(HttpConnection *connection, const char *map, const char *name)
+{
+    char key[OWNED_KEY_MAX];
+    acl_user_t u = current_user(connection);
+    if (!u.known || u.level == ACL_LEVEL_ADMIN || !owned_key(map, name, key))
+    {
+        return;
+    }
+    lock_acl();
+    cJSON *owned = obj(acl, map);
+    cJSON_DeleteItemFromObjectCaseSensitive(owned, key);
+    cJSON_AddItemToObject(owned, key, folder_entry(u.user, NULL));
+    save_unlocked();
+    unlock_acl();
+}
+
+void web_acl_owned_renamed(const char *map, const char *from, const char *to)
+{
+    char from_key[OWNED_KEY_MAX];
+    char to_key[OWNED_KEY_MAX];
+    if (!owned_key(map, from, from_key))
+    {
+        return;
+    }
+    lock_acl();
+    cJSON *owned = obj(acl, map);
+    cJSON *entry = cJSON_DetachItemFromObjectCaseSensitive(owned, from_key);
+    if (entry != NULL)
+    {
+        if (owned_key(map, to, to_key))
+        {
+            cJSON_DeleteItemFromObjectCaseSensitive(owned, to_key);
+            cJSON_AddItemToObject(owned, to_key, entry);
+        }
+        else
+        {
+            cJSON_Delete(entry);
+        }
+        save_unlocked();
+    }
+    unlock_acl();
+}
+
 /* ---------- settings ---------- */
 
 /* settings that touch the server, the files or other boxes: admins only, also per box */
@@ -668,7 +749,19 @@ static const char *const secret_settings[] = {
 /* system settings a user may read for a box (the box card shows them) */
 static const char *const box_readable_system[] = {
     "internal.ip", "internal.online", "internal.last_ruid", "internal.toniebox_firmware.", "internal.boxCertStatus",
-    "internal.version.", "core.certdir", "toniebox.api_access", NULL};
+    "internal.version.", "core.certdir", "toniebox.api_access", "cfw.update.", NULL};
+
+/* the firmware update of a box goes with box.update */
+static const char *const box_update_settings[] = {"cfw.update.enabled", "cfw.update.channel", "cfw.update.mode", "cfw.update.target",
+                                                  "cfw.update.allow_rolled_back", NULL};
+
+/* the settings of a box as its page shows them; only these can be given to users as box.setting:<name> */
+static const char *const box_settings[] = {
+    "toniebox.", "toniebox2.", "core.flex_", "cloud.enabled", "cloud.enableV1Claim", "cloud.enableV1CloudReset",
+    "cloud.enableV1FreshnessCheck", "cloud.enableV1Log", "cloud.enableV1Time", "cloud.enableV1Ota", "cloud.enableV2Content",
+    "cloud.cacheOta", "cloud.localOta", "cloud.cacheContent", "cloud.cacheToLibrary", "cloud.markCustomTagByPass",
+    "cloud.prioCustomContent", "cloud.updateOnLowerAudioId", "cloud.dumpRuidAuthContentJson", "cfw.enabled",
+    "cfw.settings_sync", "cfw.remote_control", "cfw.force_box_settings", "cfw.event_notice_language", "cfw.box.", NULL};
 
 /* key, password and certificate data in any setting name */
 static bool looks_secret(const char *name)
@@ -716,7 +809,11 @@ bool web_acl_setting_allowed(HttpConnection *connection, const char *box_id, con
         }
         return web_acl_box_allowed(connection, box_id, "box.view");
     }
-    if (has_prefix(system_settings, name))
+    if (has_prefix(box_update_settings, name))
+    {
+        return web_acl_box_allowed(connection, box_id, "box.update");
+    }
+    if (has_prefix(system_settings, name) || !has_prefix(box_settings, name))
     {
         return false;
     }
@@ -796,6 +893,7 @@ static const route_policy_t policies[] = {
     {"/api/auth/", P_HANDLER, NULL, 0, NULL},
     {"/api/acl/levels/set", P_ADMIN, NULL, 0, NULL},
     {"/api/acl/groups/", P_ADMIN, NULL, 0, NULL},
+    {"/api/acl/owned", P_ADMIN, NULL, 0, NULL},
     {"/api/acl/", P_HANDLER, NULL, 0, NULL},
     {"/api/plugins/get", P_ALLOW, NULL, 0, NULL},
     {"/api/fileIndexV2", P_LIB_LIST, NULL, 0, NULL},
@@ -804,7 +902,7 @@ static const route_policy_t policies[] = {
     {"/api/fileUpload", P_LIB_QUERY, "folder.write", 0, NULL},
     {"/api/pcmUpload", P_LIB_QUERY, "folder.write", 0, NULL},
     {"/api/tafUpload", P_LIB_QUERY, "folder.write", 0, NULL},
-    {"/api/fileDelete", P_LIB_BODY, NULL, 0, NULL},
+    {"/api/fileDelete", P_LIB_BODY, "model.create", 0, NULL},
     {"/api/fileMove", P_LIB_BODY, NULL, 0, NULL},
     {"/api/dirDelete", P_LIB_BODY, NULL, 0, NULL},
     {"/api/dirCreate", P_LIB_BODY, NULL, 0, NULL},
@@ -814,9 +912,11 @@ static const route_policy_t policies[] = {
     {"/api/toniesJsonSearch", P_ALLOW, NULL, 0, NULL},
     {"/api/toniesJsonUpdate", P_ADMIN, NULL, 0, NULL},
     {"/api/toniesJsonReload", P_ADMIN, NULL, 0, NULL},
-    {"/api/toniesCustomJsonUpsert", P_ADMIN, NULL, 0, NULL},
-    {"/api/toniesCustomJsonDelete", P_ADMIN, NULL, 0, NULL},
-    {"/api/toniesCustomJsonRename", P_ADMIN, NULL, 0, NULL},
+    {"/api/toniesCustomJsonUpsert", P_HANDLER, NULL, 0, NULL},
+    {"/api/toniesCustomJsonDelete", P_HANDLER, NULL, 0, NULL},
+    {"/api/toniesCustomJsonRename", P_HANDLER, NULL, 0, NULL},
+    {"/api/toniesCustomJsonOrphans", P_HANDLER, NULL, 0, NULL},
+    {"/api/toniesCustomJsonChangeable", P_HANDLER, NULL, 0, NULL},
     {"/api/toniesJson", P_ALLOW, NULL, 0, NULL},
     {"/api/toniesCustomJson", P_ALLOW, NULL, 0, NULL},
     {"/api/tonieboxesJson", P_ALLOW, NULL, 0, NULL},
@@ -835,7 +935,9 @@ static const route_policy_t policies[] = {
     {"/api/cfw/remote", P_BOX, "box.cfw", 0, NULL},
     {"/api/cfw/status", P_BOX, "box.view", 0, NULL},
     {"/api/cfw/battery", P_BOX, "box.view", 0, NULL},
-    {"/api/cfw/deliver", P_BOX, "box.cfw", 0, NULL},
+    {"/api/cfw/deliver", P_BOX, "box.update", 0, NULL},
+    /* the builds a box can get; changing them is the admin's */
+    {"/api/cfw/firmware", P_ALLOW, NULL, 0, "GET"},
     {"/api/", P_ADMIN, NULL, 0, NULL},
     {"/content/download/", P_TONIE_PATH, "tonie.view", 18, NULL},
     {"/content/json/get/", P_TONIE_PATH, "tonie.edit", 18, NULL},
@@ -937,6 +1039,14 @@ bool web_acl_request_allowed(HttpConnection *connection, const char_t *uri, cons
             return overlay_ok(connection, query) && web_acl_tonie_allowed(connection, value, r->right);
         case P_LIB_QUERY:
         {
+            /* pictures of custom tonies; the handler takes only new image files from users */
+            if (!osStrcmp(r->prefix, "/api/fileUpload") && query_value(query, "special", value, sizeof(value)) &&
+                !osStrcmp(value, "custom_img"))
+            {
+                query_value(query, "path", value, sizeof(value));
+                return value[strspn(value, "/")] == '\0' && overlay_ok(connection, query) &&
+                       web_acl_system_allowed(connection, "model.create");
+            }
             char name[PATH_MAX_LEN];
             /* pcmUpload/tafUpload join "name" to the path: it must stay a file name */
             if (query_value(query, "name", name, sizeof(name)) && (strchr(name, '/') || strchr(name, '\\') || !osStrcmp(name, "..")))
@@ -947,6 +1057,11 @@ bool web_acl_request_allowed(HttpConnection *connection, const char_t *uri, cons
             return library_root(query) && overlay_ok(connection, query) && web_acl_folder_allowed(connection, value, r->right);
         }
         case P_LIB_BODY:
+            /* pictures of custom tonies (r->right): the handler asks web_acl_image_allowed */
+            if (r->right != NULL && query_value(query, "special", value, sizeof(value)) && !osStrcmp(value, "custom_img"))
+            {
+                return overlay_ok(connection, query) && web_acl_system_allowed(connection, r->right);
+            }
             return library_root(query) && overlay_ok(connection, query);
         case P_LIB_LIST:
         {
@@ -1092,6 +1207,8 @@ void web_acl_user_deleted(const char *username)
     remove_user_from(cJSON_GetObjectItemCaseSensitive(acl, "boxes"), username);
     remove_user_from(cJSON_GetObjectItemCaseSensitive(acl, "tonies"), username);
     remove_user_from(cJSON_GetObjectItemCaseSensitive(acl, "folders"), username);
+    remove_user_from(cJSON_GetObjectItemCaseSensitive(acl, "models"), username);
+    remove_user_from(cJSON_GetObjectItemCaseSensitive(acl, "images"), username);
     save_unlocked();
     unlock_acl();
 }
@@ -1232,7 +1349,8 @@ static void add_box_settings(cJSON *json)
             }
             continue;
         }
-        if (opt->internal || opt->level == LEVEL_SECRET || has_prefix(system_settings, opt->option_name) ||
+        if (opt->internal || opt->level == LEVEL_SECRET || !has_prefix(box_settings, opt->option_name) ||
+            has_prefix(system_settings, opt->option_name) ||
             has_prefix(secret_settings, opt->option_name) || looks_secret(opt->option_name))
         {
             continue;
@@ -1340,13 +1458,15 @@ error_t handleApiAclMine(HttpConnection *connection, const char_t *uri, const ch
     /* tonies with an entry the user is part of; tonies without owner are open as "unassigned" says */
     cJSON *tonies = cJSON_AddObjectToObject(json, "tonies");
     cJSON *folders = cJSON_AddObjectToObject(json, "folders");
+    cJSON *models = cJSON_AddObjectToObject(json, "models");
+    cJSON *images = cJSON_AddObjectToObject(json, "images");
     lock_acl();
     struct
     {
         const char *key;
         cJSON *out;
-    } maps[] = {{"tonies", tonies}, {"folders", folders}};
-    for (int m = 0; m < 2; m++)
+    } maps[] = {{"tonies", tonies}, {"folders", folders}, {"models", models}, {"images", images}};
+    for (int m = 0; m < 4; m++)
     {
         cJSON *entry = NULL;
         cJSON_ArrayForEach(entry, cJSON_GetObjectItemCaseSensitive(acl, maps[m].key))
@@ -1961,5 +2081,43 @@ error_t handleApiAclUsers(HttpConnection *connection, const char_t *uri, const c
         cJSON_AddItemToArray(array, u);
     }
     osFreeMem(names);
+    return send_json(connection, 200, json);
+}
+
+/* what a user owns or has shared: boxes, tonies, folders, custom tonies and their pictures */
+error_t handleApiAclOwned(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
+{
+    (void)uri;
+    (void)client_ctx;
+    char user[64];
+    if (!query_value(queryString, "user", user, sizeof(user)) || user[0] == '\0')
+    {
+        return send_error(connection, 400, "invalid", "user missing");
+    }
+    static const char *const maps[] = {"boxes", "tonies", "folders", "models", "images"};
+    cJSON *json = cJSON_CreateObject();
+    lock_acl();
+    for (size_t m = 0; m < sizeof(maps) / sizeof(maps[0]); m++)
+    {
+        cJSON *out = cJSON_AddArrayToObject(json, maps[m]);
+        cJSON *entry = NULL;
+        cJSON_ArrayForEach(entry, cJSON_GetObjectItemCaseSensitive(acl, maps[m]))
+        {
+            char granted[RIGHTS_MAX];
+            bool owner = in_owners(entry, user);
+            if (owner || shared_rights(entry, user, granted, sizeof(granted)))
+            {
+                cJSON *item = cJSON_CreateObject();
+                cJSON_AddStringToObject(item, "id", entry->string);
+                cJSON_AddBoolToObject(item, "owner", owner);
+                if (!owner)
+                {
+                    cJSON_AddStringToObject(item, "granted", granted);
+                }
+                cJSON_AddItemToArray(out, item);
+            }
+        }
+    }
+    unlock_acl();
     return send_json(connection, 200, json);
 }

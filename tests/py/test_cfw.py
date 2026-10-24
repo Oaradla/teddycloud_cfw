@@ -34,7 +34,7 @@ HTTPS_API_PORT = int(os.environ.get("TEDDYCLOUD_HTTPS_API_PORT", "0"))
 pytestmark = pytest.mark.skipif(not SANDBOX or not HTTPS_API_PORT, reason="needs the sandbox from tests/py/with_server.sh")
 
 BUILD = 1791210720  # 2026-10-05 14:32:00 UTC
-CAPS_ALL = 0x7FF
+CAPS_ALL = 0x1FFF
 CAPS_WITHOUT_EXTENSIONS = CAPS_ALL & ~(1 << 9)
 FIGURE_UID = 0xE0040350DEADBEEF
 FIGURE_RUID = "EFBEADDE500304E0"  # the same UID in content path order
@@ -214,6 +214,34 @@ def test_hello_answer_is_recorded(box, start):
     assert entry["isCfw"] and entry["version"] == BUILD
 
 
+def test_hello_on_each_log_connection(box, start):
+    """command 63 once per log connection of a box that is known by its X-CFW-Build header"""
+    for _ in range(2):
+        sock = box.rtnl(cfw.record(8672, bytes(12), group=27, **start.next()), keep_open=True)
+        try:
+            reader = cfw.FrameReader(sock)
+            frames = []
+            wait_until(lambda: frames.extend(reader.frames(0.5)) or [(1, 63)] in frames, timeout=10)
+            sock.sendall(cfw.record(8672, bytes(12), group=27, **start.next()))
+            frames.extend(reader.frames(1.5))
+            assert frames.count([(1, 63)]) == 1, frames
+        finally:
+            sock.close()
+
+
+def test_no_hello_on_the_log_connection_of_the_original_firmware():
+    other = Box("deadbeefcf09", SANDBOX, BASE.hostname, HTTPS_API_PORT, user_agent=f"TB/{ORIGINAL_BUILD} SP/1 HW/16")
+    try:
+        assert other.request("GET", "/v1/time")[0] == 200
+        sock = other.rtnl(cfw.record(8672, bytes(12), group=27, uptime=1000, sequence=1), keep_open=True)
+        try:
+            assert cfw.FrameReader(sock).frames(2.0) == []
+        finally:
+            sock.close()
+    finally:
+        other.close()
+
+
 def test_box_host_is_offered_for_a_new_box(box):
     # the address the boxes use, for the server line of a new box's card
     freshness(box)
@@ -261,6 +289,10 @@ def test_event_tag_round_trip():
     assert api_json("GET", f"/api/cfw/tag?ruid={ruid}")[1]["event"] == event
     tags = api_json("GET", "/api/cfw/tags")[1]["tags"]
     assert next(tag for tag in tags if tag["ruid"] == ruid)["kind"] == "event"
+    # the idle power-off times take the whole 16-bit parameter as minutes
+    event = {"tones": True, "actions": [{"action": 17, "mode": 0, "value": 30}, {"action": 18, "mode": 0, "value": 65535}]}
+    assert api("POST", f"/api/cfw/tag?ruid={ruid}", {"kind": "event", "event": event})[0] == 200
+    assert api_json("GET", f"/api/cfw/tag?ruid={ruid}")[1]["event"] == event
     # "none" replaces it with an empty profile
     assert api("POST", f"/api/cfw/tag?ruid={ruid}", {"kind": "none"})[0] == 200
     assert api_json("GET", f"/api/cfw/tag?ruid={ruid}")[1]["kind"] == "none"
@@ -270,7 +302,8 @@ def test_invalid_values_are_refused():
     for body in ({"kind": "profile", "profile": {"speakerLimit": 16}},
                  {"kind": "profile", "profile": {"sleepMinutes": 1.5}},
                  {"kind": "profile", "profile": {"sleepMinutes": -1}},
-                 {"kind": "event", "event": {"actions": [{"action": 17, "mode": 0, "value": 0}]}},
+                 {"kind": "event", "event": {"actions": [{"action": 19, "mode": 0, "value": 0}]}},
+                 {"kind": "event", "event": {"actions": [{"action": 1, "mode": 0, "value": 16384}]}},
                  {"kind": "event", "event": {"actions": []}},
                  {"kind": "other"}):
         assert api("POST", f"/api/cfw/tag?ruid={FIGURE_RUID}", body)[0] == 400, body
@@ -286,9 +319,14 @@ def test_box_settings_are_delivered(box, box_id):
         # speaker 9, headphones 12 (this box), LED on, both ears off, slap lock, tilt and volume unlocked
         assert cfw.tbs_body(delivered[0]) == bytes([0x04, 1, 9, 0x05, 1, 12, 0x06, 1, 0, 0x07, 1, 0, 0x08, 1, 1, 0x09, 1, 0, 0x0A, 1, 0])
         assert not files(freshness(box), GLOBAL_RUID)
+        # an idle power-off time other than 10 minutes is a 2-byte record
+        set_setting("cfw.box.idle_off_station", 1440, box_id)
+        delivered = files(freshness(box), GLOBAL_RUID)
+        assert len(delivered) == 1 and cfw.tbs_body(delivered[0])[-4:] == bytes([0x0C, 2, 0xA0, 0x05])
     finally:
         set_setting("cfw.box.both_ears_off", True)
         reset_setting("cfw.box.headphone_limit", box_id)
+        reset_setting("cfw.box.idle_off_station", box_id)
 
 
 def test_original_box_gets_rounded_limits():
@@ -361,6 +399,24 @@ def test_box_settings_report_becomes_box_setting(box, box_id, start):
         assert setting_value("cfw.box.speaker_limit", box_id) == "9"
     finally:
         for name in ("cfw.box.speaker_limit", "cfw.box.headphone_limit", "toniebox.led", "cfw.box.both_ears_off", "cfw.box.slap_lock", "cfw.box.tilt_lock", "cfw.box.volume_lock"):
+            reset_setting(name, box_id)
+
+
+def test_idle_times_report_becomes_box_setting(box, box_id, start):
+    files(freshness(box), GLOBAL_RUID)
+    timestamp = int(time.time()) + 200
+    try:
+        # an event tag set 2 minutes on battery and 1440 on the station: the sixth number of the report
+        report = global_report(timestamp)
+        packed = struct.unpack_from("<I", report, 8)[0] | (1 << 17) | (1 << 18)
+        report = report[:8] + struct.pack("<I", packed) + report[12:] + struct.pack("<I", 2 | (1440 << 16))
+        box.rtnl(cfw.record(cfw.FUNC_SETTINGS_CHANGED, report, **start.next()))
+        wait_until(lambda: setting_value("cfw.box.idle_off_station", box_id) == "1440")
+        assert setting_value("cfw.box.idle_off_battery", box_id) == "2" and setting_value("cfw.box.idle_off_station") == "10"
+        time.sleep(1.2)
+        assert not files(freshness(box), GLOBAL_RUID)
+    finally:
+        for name in ("cfw.box.idle_off_battery", "cfw.box.idle_off_station", "cfw.box.speaker_limit", "cfw.box.headphone_limit", "toniebox.led", "cfw.box.both_ears_off", "cfw.box.slap_lock", "cfw.box.tilt_lock", "cfw.box.volume_lock"):
             reset_setting(name, box_id)
 
 
@@ -500,6 +556,9 @@ def test_battery_report_shown_and_logged(box, box_id, start):
     if sandbox:
         model = json.load(open(os.path.join(sandbox, "config", "cfw", "battery", f"{box_id}.model.json")))
         assert model["version"] == 1 and model["cycle"]["active"] is True and model["last"]["station"] is False
+        # the last report is kept with the box state: shown again after a restart
+        state = json.load(open(os.path.join(sandbox, "config", "cfw", "boxes", f"{box_id}.json")))
+        assert state["battery"][0] == 3650 and state["batteryResult"]["percent"] == 23
 
 
 def test_tag_record_names_the_tonie(box, box_id, start):

@@ -4,8 +4,11 @@
 #   teddycloud.example.com  -> web UI on container port 80 (HTTP)
 #   box.example.com         -> Toniebox TLS on container port 443 (TCP passthrough)
 #
-# Do not publish the web UI to the internet without enabling web UI login.
-# TeddyCloud cannot tell LAN clients from Traefik: the proxy source IP looks local.
+# Do not publish the web UI to the internet without enabling web UI login
+# (Settings -> Web login, ideally with 2FA required).
+# Set web_auth.trusted_proxies to the address or network of Traefik (e.g. its
+# docker network 172.18.0.0/16), otherwise every client looks like Traefik and
+# lockouts, "LAN only" users and the access filters see a local address.
 #
 # Replace the image/hostnames and attach this service to your Traefik network.
 

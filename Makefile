@@ -840,7 +840,7 @@ TEST_C_CRYPTO_SRC := cyclone/cyclone_crypto/hash/sha1.c cyclone/cyclone_crypto/h
 test_c: $(PROTO_H_FILES)
 	$(QUIET)$(ECHO) "[ ${CYAN}TEST${NC} ] Build and run C unit tests"
 	$(QUIET)mkdir -p $(BIN_DIR)
-	$(QUIET)$(CC) -I include -I src/proto -I include/protobuf-c -I src/cyclone/common -I src/cyclone/cyclone_tcp -I cyclone/common -I cyclone/cyclone_tcp -I cyclone/cyclone_ssl -I cyclone/cyclone_crypto -D GPL_LICENSE_TERMS_ACCEPTED -ffunction-sections -Wl,--gc-sections -o $(BIN_DIR)/test_c $(TEST_C_SRC) $(SRC_DIR)/os_ext.c $(SRC_DIR)/str_ext.c $(SRC_DIR)/fs_ext.c $(SRC_DIR)/esp32_port.c $(SRC_DIR)/platform/platform_linux.c $(SRC_DIR)/cyclone/common/os_port_posix.c $(SRC_DIR)/cfw_format.c $(SRC_DIR)/cfw_battery_model.c $(SRC_DIR)/box_cert.c $(SRC_DIR)/web_auth_crypto.c $(SRC_DIR)/web_auth_net.c $(SRC_DIR)/web_acl_core.c $(TEST_C_CRYPTO_SRC)
+	$(QUIET)$(CC) -I include -I src/proto -I include/protobuf-c -I src/cyclone/common -I src/cyclone/cyclone_tcp -I cyclone/common -I cyclone/cyclone_tcp -I cyclone/cyclone_ssl -I cyclone/cyclone_crypto -D GPL_LICENSE_TERMS_ACCEPTED -ffunction-sections -Wl,--gc-sections -o $(BIN_DIR)/test_c $(TEST_C_SRC) $(SRC_DIR)/os_ext.c $(SRC_DIR)/str_ext.c $(SRC_DIR)/fs_ext.c $(SRC_DIR)/esp32_port.c $(SRC_DIR)/platform/platform_linux.c $(SRC_DIR)/cyclone/common/os_port_posix.c $(SRC_DIR)/cfw_format.c $(SRC_DIR)/cfw_battery_model.c $(SRC_DIR)/box_cert.c $(SRC_DIR)/zip_writer.c $(SRC_DIR)/web_auth_crypto.c $(SRC_DIR)/web_auth_net.c $(SRC_DIR)/web_acl_core.c $(TEST_C_CRYPTO_SRC)
 	$(QUIET)$(BIN_DIR)/test_c
 
 .PHONY: test

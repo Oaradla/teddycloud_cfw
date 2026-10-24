@@ -52,6 +52,7 @@ static const test_case_t tests[] = {
     {"web_acl_patterns", test_web_acl_patterns},
     {"web_acl_decisions", test_web_acl_decisions},
     {"web_acl_paths", test_web_acl_paths},
+    {"zip_write_stored", test_zip_write_stored},
 };
 
 int main(void)

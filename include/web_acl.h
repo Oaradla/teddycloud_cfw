@@ -2,6 +2,7 @@
 #define _WEB_ACL_H
 
 #include "handler.h"
+#include "cJSON.h"
 
 /*
  * Permissions of the web UI users (only with the login on; without it everyone may
@@ -37,6 +38,21 @@ void web_acl_folder_removed(const char *path);
 /* settings name readable / changeable for a box by the user */
 bool web_acl_setting_allowed(HttpConnection *connection, const char *box_id, const char *name, bool write);
 
+/* who added a custom tonie ("models") or a picture of one ("images"); to NULL removes the entry */
+bool web_acl_owns(HttpConnection *connection, const char *map, const char *name);
+void web_acl_owned_created(HttpConnection *connection, const char *map, const char *name);
+void web_acl_owned_renamed(const char *map, const char *from, const char *to);
+
+/* custom tonies (web_acl_models.c): users with model.create add them and change those they own
+   or those used only where they may change things (library folders, tonies) */
+bool web_acl_model_allowed(HttpConnection *connection, const cJSON *entry);
+/* a picture in custom_img: own, or every custom tonie showing it may be changed */
+bool web_acl_image_allowed(HttpConnection *connection, const char *name);
+/* {"models": [...], "images": [...]}: the custom tonies the user may change, and the pictures shown only by those */
+cJSON *web_acl_models_changeable(HttpConnection *connection);
+/* names of the custom tonies used only below the library paths (and nowhere else) */
+cJSON *web_acl_model_orphans(HttpConnection *connection, const char *const *paths, size_t count);
+
 /* "lib://<path>" and the like: true if the user may use it as a tonie source */
 bool web_acl_source_allowed(HttpConnection *connection, const char *source);
 
@@ -64,6 +80,7 @@ error_t handleApiAclCatalog(HttpConnection *connection, const char_t *uri, const
 error_t handleApiAclMine(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiAclGet(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiAclSet(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
+error_t handleApiAclOwned(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiAclUsers(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiAclGroupsSet(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiAclGroupsDelete(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);

@@ -43,7 +43,7 @@ uint32_t cfw_tbs_timestamp(const uint8_t *file);
 bool cfw_tbs_next_record(const uint8_t *file, size_t *pos, cfw_record_t *record);
 
 size_t cfw_event_for_basic_box(const uint8_t *file, uint8_t *out);
-size_t cfw_report_body(uint32_t packed, uint32_t values, uint8_t *body);
+size_t cfw_report_body(uint32_t packed, uint32_t values, uint32_t idle, uint8_t *body);
 size_t cfw_strip_volume_fields(uint8_t *message, size_t length);
 
 /* App images of the ESP32 box (ESP-IDF "App Image Format") */

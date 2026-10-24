@@ -79,13 +79,18 @@ void test_cfw_report_body(void)
     uint8_t body[64];
     /* "toggle shuffle" on a figure without a profile */
     const uint8_t shuffle[] = {0x02, 1, 1};
-    assert(cfw_report_body(1 | (1 << 5) | (1 << 13), 0, body) == sizeof(shuffle) && memcmp(body, shuffle, sizeof(shuffle)) == 0);
+    assert(cfw_report_body(1 | (1 << 5) | (1 << 13), 0, 0, body) == sizeof(shuffle) && memcmp(body, shuffle, sizeof(shuffle)) == 0);
 
     /* global file: speaker limit 5, LED dimmed, both-ears switch-off off, volume lock on; profile keys skipped */
     uint32_t packed = 3 | (1 << 4) | (1 << 7) | (1 << 9) | (1 << 10) | (2 << 14);
     uint32_t values = (5 << 16) | (1 << 26) | (1 << 29);
     const uint8_t global[] = {0x04, 1, 5, 0x06, 1, 2, 0x07, 1, 0, 0x0A, 1, 1};
-    assert(cfw_report_body(packed, values, body) == sizeof(global) && memcmp(body, global, sizeof(global)) == 0);
+    assert(cfw_report_body(packed, values, 0, body) == sizeof(global) && memcmp(body, global, sizeof(global)) == 0);
+
+    /* global file with the idle power-off times: 2 minutes on battery, 1440 on the station */
+    const uint8_t idle[] = {0x0B, 2, 2, 0, 0x0C, 2, 0xA0, 0x05};
+    assert(cfw_report_body(3 | (1 << 17) | (1 << 18), 0, 2 | (1440 << 16), body) == sizeof(idle) && memcmp(body, idle, sizeof(idle)) == 0);
+    assert(cfw_report_body(1 | (1 << 17), 0, 2, body) == 0);
 }
 
 void test_cfw_strip_volume_fields(void)

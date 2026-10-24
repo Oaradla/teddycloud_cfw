@@ -169,7 +169,7 @@ static size_t put_record(uint8_t *body, uint8_t key, uint32_t value, uint8_t len
 }
 
 /* the body of the file the box wrote, from its settings change report */
-size_t cfw_report_body(uint32_t packed, uint32_t values, uint8_t *body)
+size_t cfw_report_body(uint32_t packed, uint32_t values, uint32_t idle, uint8_t *body)
 {
     uint8_t kind = packed & 3;
     size_t n = 0;
@@ -211,6 +211,13 @@ size_t cfw_report_body(uint32_t packed, uint32_t values, uint8_t *body)
         if (values & (1u << (24 + lock)))
         {
             n += put_record(&body[n], 0x08 + lock, (values >> (27 + lock)) & 1, 1);
+        }
+    }
+    for (uint8_t i = 0; i < 2; i++)
+    {
+        if (kind == CFW_TBS_KIND_GLOBAL && (packed & (1u << (17 + i))))
+        {
+            n += put_record(&body[n], 0x0B + i, (idle >> (16 * i)) & 0xFFFF, 2);
         }
     }
     return n;

@@ -146,6 +146,7 @@ request_type_t request_paths[] = {
     {REQ_GET, "/api/acl/catalog", SERTY_WEB, &handleApiAclCatalog},
     {REQ_GET, "/api/acl/mine", SERTY_WEB, &handleApiAclMine},
     {REQ_GET, "/api/acl/users", SERTY_WEB, &handleApiAclUsers},
+    {REQ_GET, "/api/acl/owned", SERTY_WEB, &handleApiAclOwned},
     {REQ_GET, "/api/acl/get", SERTY_WEB, &handleApiAclGet},
     {REQ_POST, "/api/acl/levels/set", SERTY_WEB, &handleApiAclLevelsSet},
     {REQ_POST, "/api/acl/groups/set", SERTY_WEB, &handleApiAclGroupsSet},
@@ -178,10 +179,12 @@ request_type_t request_paths[] = {
     {REQ_GET, "/api/toniesJsonUpdate", SERTY_WEB, &handleApiToniesJsonUpdate},
     {REQ_GET, "/api/toniesJsonReload", SERTY_WEB, &handleApiToniesJsonReload},
     {REQ_GET, "/api/toniesJson", SERTY_WEB, &handleApiToniesJson},
+    {REQ_GET, "/api/toniesCustomJsonChangeable", SERTY_WEB, &handleApiToniesCustomJsonChangeable},
     {REQ_GET, "/api/toniesCustomJson", SERTY_WEB, &handleApiToniesCustomJson},
     {REQ_POST, "/api/toniesCustomJsonUpsert", SERTY_WEB, &handleApiToniesCustomJsonUpsert},
     {REQ_POST, "/api/toniesCustomJsonDelete", SERTY_WEB, &handleApiToniesCustomJsonDelete},
     {REQ_POST, "/api/toniesCustomJsonRename", SERTY_WEB, &handleApiToniesCustomJsonRename},
+    {REQ_POST, "/api/toniesCustomJsonOrphans", SERTY_WEB, &handleApiToniesCustomJsonOrphans},
     {REQ_GET, "/api/tonieboxesJson", SERTY_WEB, &handleApiTonieboxJson},
     {REQ_GET, "/api/tonieboxesCustomJson", SERTY_WEB, &handleApiTonieboxCustomJson},
     {REQ_GET, "/api/trigger", SERTY_WEB, &handleApiTrigger},
@@ -1225,27 +1228,11 @@ void server_init(bool test)
         size_t openConnections = 0;
         for (size_t i = 0; i < APP_HTTP_MAX_CONNECTIONS; i++)
         {
-            HttpConnection *conn = &httpsWebConnections[i];
-            if (!conn->running)
+            /* a browser, also when it asks for a box: it says nothing about the boxes */
+            if (httpsWebConnections[i].running)
             {
-                continue;
+                openConnections++;
             }
-            openConnections++;
-            mutex_lock(MUTEX_CLIENT_CTX);
-            client_ctx_t *client_ctx = &conn->private.client_ctx;
-            if (client_ctx->settings == NULL)
-            {
-                mutex_unlock(MUTEX_CLIENT_CTX);
-                continue;
-            }
-            settings_internal_t *internal = &client_ctx->settings->internal;
-            if (internal->config_used)
-            {
-                time_t curr_time = time(NULL);
-                internal->online = true;
-                internal->last_connection = curr_time;
-            }
-            mutex_unlock(MUTEX_CLIENT_CTX);
         }
         if (openConnections != openWebConnectionsLast)
         {
@@ -1269,7 +1256,8 @@ void server_init(bool test)
                 continue;
             }
             settings_internal_t *internal = &client_ctx->settings->internal;
-            if (internal->config_used)
+            /* only a box's own settings: the server's are copied into every box when they are loaded */
+            if (internal->config_used && internal->overlayNumber > 0)
             {
                 time_t curr_time = time(NULL);
                 internal->online = true;

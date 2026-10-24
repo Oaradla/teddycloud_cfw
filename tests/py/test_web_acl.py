@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from sim import taf  # noqa: E402
 from sim.box import Box  # noqa: E402
 
 BASE = urllib.parse.urlsplit(os.environ.get("TEDDYCLOUD_BASE_URL", "http://127.0.0.1:80"))
@@ -36,14 +37,14 @@ class Client:
             status, data = self.post("/api/auth/login", {"username": user, "password": PW[user]})
             assert status == 200 and data.get("ok"), (user, data)
 
-    def request(self, method, path, body=None, raw=False):
+    def request(self, method, path, body=None, raw=False, content_type="application/x-www-form-urlencoded"):
         h = {"Sec-Fetch-Site": "same-origin"}
         if self.cookie:
             h["Cookie"] = "tc_web_session=" + self.cookie
         data = None
         if body is not None:
             data = body if raw else json.dumps(body)
-            h["Content-Type"] = "application/x-www-form-urlencoded" if raw else "application/json"
+            h["Content-Type"] = content_type if raw else "application/json"
         conn = http.client.HTTPConnection(BASE.hostname, BASE.port, timeout=20)
         try:
             conn.request(method, path, body=data, headers=h)
@@ -65,6 +66,12 @@ class Client:
 
     def post(self, path, body=None, raw=False):
         return self.request("POST", path, body if body is not None else {}, raw=raw)
+
+    def upload(self, path, filename, data):
+        boundary = "tcboundary"
+        body = b"--%s\r\nContent-Disposition: form-data; name=\"file\"; filename=\"%s\"\r\n\r\n%s\r\n--%s--\r\n" % (
+            boundary.encode(), filename.encode(), data, boundary.encode())
+        return self.request("POST", path, body, raw=True, content_type="multipart/form-data; boundary=" + boundary)
 
 
 def box_ids():
@@ -122,9 +129,13 @@ def test_box_settings_of_owner(world):
     assert alice.get("/api/settings/getIndex?overlay=%s" % b2)[0] == 403
     assert alice.get("/api/settings/getIndex")[0] == 403
     assert alice.post("/api/settings/set/toniebox.max_vol_spk?overlay=%s" % b1, "2", raw=True)[0] == 200
+    # saved at once: users may not trigger the write of the config
+    assert "overlay.%s.toniebox.max_vol_spk=2" % b1 in (Path(SANDBOX) / "config" / "config.overlay.ini").read_text()
     assert alice.post("/api/settings/set/toniebox.max_vol_spk?overlay=%s" % b2, "2", raw=True)[0] == 403
     # settings that touch the server or the files stay with the admin, also per box
     assert alice.post("/api/settings/set/core.contentdir?overlay=%s" % b1, "x", raw=True)[0] == 403
+    # global settings do nothing per box, so they are not the user's either
+    assert alice.post("/api/settings/set/frontend.default_ui?overlay=%s" % b1, "1", raw=True)[0] == 403
     assert alice.post("/api/settings/set/toniebox.max_vol_spk", "2", raw=True)[0] == 403
     # an unknown overlay must not fall back to the global settings
     assert alice.post("/api/settings/set/toniebox.max_vol_spk?overlay=nobox", "2", raw=True)[0] == 403
@@ -363,6 +374,26 @@ def test_review_secret_and_system_settings_are_not_readable(world):
     assert alice.get("/api/getTagIndex")[0] == 200
 
 
+def test_firmware_update_with_box_update(world):
+    """the firmware update of a box goes with box.update; the builds themselves stay the admin's"""
+    b1, b2 = world["box1"], world["box2"]
+    if Client("admin").get("/api/settings/get/cfw.update.channel")[0] != 200:
+        pytest.skip("server without custom firmware support")
+    alice = Client("alice")
+    assert alice.get("/api/settings/get/cfw.update.channel?overlay=%s" % b1)[0] == 200
+    assert alice.post("/api/settings/set/cfw.update.channel?overlay=%s" % b1, "1", raw=True)[0] == 200
+    assert alice.post("/api/settings/set/cfw.update.channel?overlay=%s" % b2, "1", raw=True)[0] == 403
+    assert alice.post("/api/settings/set/cfw.update.channel", "1", raw=True)[0] == 403
+    assert alice.post("/api/settings/set/cfw.firmware.github_repo?overlay=%s" % b1, "x/y", raw=True)[0] == 403
+    assert alice.post("/api/cfw/firmware/delete", {"build": 1})[0] == 403
+    admin = Client("admin")
+    assert admin.post("/api/auth/users/update", {"username": "alice", "deny": "box.update"})[0] == 200
+    try:
+        assert Client("alice").post("/api/settings/set/cfw.update.channel?overlay=%s" % b1, "0", raw=True)[0] == 403
+    finally:
+        assert admin.post("/api/auth/users/update", {"username": "alice", "deny": ""})[0] == 200
+
+
 def test_header_status_and_cfw_switches_for_users(world):
     alice = Client("alice")
     assert alice.get("/v1/time")[0] == 200
@@ -377,7 +408,10 @@ def test_level_limit_also_on_own_boxes(world):
     assert "levelDeny" not in catalog
     names = {o["id"] for o in catalog["boxSettings"]}
     assert "cloud.enabled" in names and "toniebox.max_vol_spk" in names
-    assert not any(n.startswith(("core.contentdir", "internal.", "web_auth.")) or "password" in n for n in names)
+    assert not any(n.startswith(("core.contentdir", "core.settings_level", "internal.", "web_auth.", "frontend.", "encode.")) or "password" in n for n in names)
+    assert "core.flex_enabled" in names
+    # only what the page of a box shows per box
+    assert not names & {"cloud.enableV3Ota", "cloud.markCustomTagByUid", "cfw.show_battery", "cfw.event_image"}
     assert catalog["boxSettingGroups"].get("cloud")
     limit = "box.view, box.setting:toniebox.*, tonie.*, folder.*"
     assert admin.post("/api/acl/levels/set", {"user": limit})[0] == 200
@@ -456,3 +490,142 @@ def test_long_rights_lists_apply_in_full(world):
         assert admin.post("/api/acl/levels/set", {"user": "*"})[0] == 200
         assert admin.post("/api/auth/users/update", {"username": "alice", "deny": ""})[0] == 200
     assert Client("alice").post("/api/settings/set/toniebox.max_vol_spk?overlay=%s" % b1, "2", raw=True)[0] == 200
+
+
+def custom_tonie(model, title="Test"):
+    audio_id = str(sum(map(ord, model.lower())))
+    return {"model": model, "audio_id": [audio_id], "hash": ["0" * 40], "title": title, "series": title}
+
+
+def test_users_add_custom_tonies_and_change_only_their_own(world):
+    admin, alice, bob, gast = Client("admin"), Client("alice"), Client("bob"), Client("gast")
+    assert alice.post("/api/toniesCustomJsonUpsert", custom_tonie("Alice-1"))[0] == 200
+    assert alice.post("/api/toniesCustomJsonUpsert", custom_tonie("alice-1", "Neu"))[0] == 200
+    assert "alice-1" in alice.get("/api/acl/mine")[1]["models"]
+    assert bob.post("/api/toniesCustomJsonUpsert", custom_tonie("alice-1"))[0] == 403
+    assert bob.post("/api/toniesCustomJsonDelete", {"models": ["alice-1"]})[0] == 403
+    assert bob.post("/api/toniesCustomJsonRename", {"fromModel": "alice-1", "toModel": "bob-1"})[0] == 403
+    assert gast.post("/api/toniesCustomJsonUpsert", custom_tonie("gast-1"))[0] == 403
+    assert admin.post("/api/toniesCustomJsonUpsert", custom_tonie("admin-1"))[0] == 200
+    assert alice.post("/api/toniesCustomJsonUpsert", custom_tonie("admin-1"))[0] == 403
+    assert alice.post("/api/toniesCustomJsonRename", {"fromModel": "alice-1", "toModel": "alice-2"})[0] == 200
+    assert list(alice.get("/api/acl/mine")[1]["models"]) == ["alice-2"]
+    assert alice.post("/api/toniesCustomJsonDelete", {"models": ["alice-2"]})[0] == 200
+    assert alice.get("/api/acl/mine")[1]["models"] == {}
+    assert [m["model"] for m in alice.get("/api/toniesCustomJson")[1]] == ["admin-1"]
+    assert admin.post("/api/toniesCustomJsonDelete", {"models": ["admin-1"]})[0] == 200
+
+
+def test_users_add_new_pictures_of_custom_tonies(world):
+    alice, gast = Client("alice"), Client("gast")
+    path = "/api/fileUpload?special=custom_img&path="
+    assert alice.upload(path, "alice.png", b"png")[0] == 200
+    assert (Path(SANDBOX) / "data" / "www" / "custom_img" / "alice.png").read_bytes() == b"png"
+    # the folder is served as it is: no pages, and nothing of others replaced
+    assert alice.upload(path, "alice.png", b"other")[0] != 200
+    assert alice.upload(path, "alice.html", b"<script>")[0] != 200
+    assert not (Path(SANDBOX) / "data" / "www" / "custom_img" / "alice.html").exists()
+    assert gast.upload(path, "gast.png", b"png")[0] == 403
+    assert Client("admin").upload(path, "alice.png", b"admin")[0] == 200
+
+
+def put_taf(where, audio_id):
+    """A TAF in the sandbox: where is "library/<path>" or "content/default/<HI8>/<LO8>"."""
+    path = Path(SANDBOX) / "data" / where
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(taf.build(audio_id, os.urandom(3 * 4096)))
+    return path
+
+
+def test_custom_tonies_follow_the_places_they_are_used(world):
+    admin, alice, bob = Client("admin"), Client("alice"), Client("bob")
+    tonie = custom_tonie("Used-1")
+    audio_id = int(tonie["audio_id"][0])
+    assert admin.post("/api/toniesCustomJsonUpsert", tonie)[0] == 200
+    # used nowhere: only the admin
+    assert alice.post("/api/toniesCustomJsonUpsert", tonie)[0] == 403
+    # used only in alice's folder: alice changes it, bob not
+    alices = put_taf("library/private/alice/used/used.taf", audio_id)
+    assert alice.post("/api/toniesCustomJsonUpsert", custom_tonie("Used-1", "Neu"))[0] == 200
+    assert bob.post("/api/toniesCustomJsonUpsert", tonie)[0] == 403
+    assert "Used-1" in alice.get("/api/toniesCustomJsonChangeable")[1]["models"]
+    assert "Used-1" not in bob.get("/api/toniesCustomJsonChangeable")[1]["models"]
+    # also used in bob's folder or on bob's tonie: neither of them
+    bobs = put_taf("library/private/bob/used.taf", audio_id)
+    assert alice.post("/api/toniesCustomJsonUpsert", tonie)[0] == 403
+    bobs.unlink()
+    assert admin.post("/api/acl/set", {"type": "tonie", "id": RUID_B, "owners": ["bob"]})[0] == 200
+    on_tonie = put_taf("content/default/FEDCBA98/76543210", audio_id)
+    assert alice.post("/api/toniesCustomJsonUpsert", tonie)[0] == 403
+    on_tonie.unlink()
+    # deleting the folder's file takes the tonie along when asked, it is used nowhere else
+    assert alice.post("/api/toniesCustomJsonOrphans", ["private/alice/used"])[1] == ["Used-1"]
+    assert bob.post("/api/toniesCustomJsonOrphans", ["private/alice/used"])[1] == []
+    assert alice.post("/api/fileDelete?special=library&models=1", "private/alice/used/used.taf", raw=True)[0] == 200
+    assert not alices.exists()
+    assert "Used-1" not in [m["model"] for m in admin.get("/api/toniesCustomJson")[1]]
+
+
+def test_pictures_of_custom_tonies_are_deleted_with_them(world):
+    admin, alice, bob = Client("admin"), Client("alice"), Client("bob")
+    imgs = Path(SANDBOX) / "data" / "www" / "custom_img"
+    upload = "/api/fileUpload?special=custom_img&path="
+    delete = "/api/fileDelete?special=custom_img"
+    assert alice.upload(upload, "own.png", b"png")[0] == 200
+    assert "own.png" in alice.get("/api/acl/mine")[1]["images"]
+    assert alice.upload(upload + "sub", "deep.png", b"png")[0] == 403
+    assert bob.post(delete, "own.png", raw=True)[0] == 403
+    assert alice.post(delete, "own.png", raw=True)[0] == 200 and not (imgs / "own.png").exists()
+    # the last tonie showing a picture takes it along when asked
+    assert alice.upload(upload, "pic.png", b"png")[0] == 200
+    for model in ("Pic-1", "Pic-2"):
+        assert alice.post("/api/toniesCustomJsonUpsert", {**custom_tonie(model), "pic": "/custom_img/pic.png"})[0] == 200
+    assert alice.post("/api/toniesCustomJsonDelete", {"models": ["Pic-1"], "pictures": True})[0] == 200
+    assert (imgs / "pic.png").exists()
+    assert alice.post("/api/toniesCustomJsonDelete", {"models": ["Pic-2"], "pictures": True})[0] == 200
+    assert not (imgs / "pic.png").exists() and "pic.png" not in alice.get("/api/acl/mine")[1]["images"]
+    # a picture of the admin shown only by a tonie alice may change is hers to delete
+    assert admin.upload(upload, "admins.png", b"png")[0] == 200
+    tonie = {**custom_tonie("Pic-3"), "pic": "/custom_img/admins.png"}
+    assert admin.post("/api/toniesCustomJsonUpsert", tonie)[0] == 200
+    assert alice.post(delete, "admins.png", raw=True)[0] == 403
+    put_taf("library/private/alice/pic.taf", int(tonie["audio_id"][0]))
+    assert bob.post(delete, "admins.png", raw=True)[0] == 403
+    assert "admins.png" in alice.get("/api/toniesCustomJsonChangeable")[1]["images"]
+    assert alice.post(delete, "admins.png", raw=True)[0] == 200
+    # no way out of the picture folder
+    evil = {**custom_tonie("Pic-4"), "pic": "/custom_img/../index.html"}
+    (Path(SANDBOX) / "data" / "www" / "index.html").write_text("ui")
+    assert alice.post("/api/toniesCustomJsonUpsert", evil)[0] == 200
+    assert alice.post("/api/toniesCustomJsonDelete", {"models": ["Pic-4"], "pictures": True})[0] == 200
+    assert (Path(SANDBOX) / "data" / "www" / "index.html").exists()
+
+
+def test_users_never_take_the_audio_id_of_an_official_tonie(world):
+    admin, alice = Client("admin"), Client("alice")
+    official = {"no": "1", "model": "10000001", "audio_id": ["4711"], "hash": ["1" * 40], "title": "Offiziell", "series": "O",
+                "episodes": "", "tracks": [], "release": "0", "language": "de-de", "category": "audio-play", "pic": ""}
+    (Path(SANDBOX) / "config" / "tonies.json").write_text(json.dumps([official]))
+    assert admin.get("/api/toniesJsonReload")[0] == 200
+    assert alice.post("/api/toniesCustomJsonUpsert", {**custom_tonie("Copy-1"), "audio_id": ["4711"]})[0] == 400
+    assert admin.post("/api/toniesCustomJsonUpsert", {**custom_tonie("Copy-1"), "audio_id": ["4711"]})[0] == 200
+
+
+def test_admin_sees_what_a_user_owns(world):
+    admin, alice = Client("admin"), Client("alice")
+    status, owned = admin.get("/api/acl/owned?user=alice")
+    assert status == 200 and world["box1"] in [b["id"] for b in owned["boxes"] if b["owner"]]
+    assert "private/alice" in [f["id"] for f in owned["folders"]]
+    assert alice.get("/api/acl/owned?user=alice")[0] == 403
+
+
+def test_deleting_a_folder_with_its_content_drops_its_owners(world):
+    admin, alice, bob = Client("admin"), Client("alice"), Client("bob")
+    assert alice.post("/api/dirCreate?special=library", "gone", raw=True)[0] == 200
+    assert admin.post("/api/acl/set", {"type": "folder", "id": "gone", "owners": ["alice"]})[0] == 200
+    put_taf("library/gone/a.taf", 4242)
+    assert alice.post("/api/fileDelete?special=library", "gone", raw=True)[0] == 200
+    assert "gone" not in alice.get("/api/acl/mine")[1]["folders"]
+    # a new folder of the same name is open again, not alice's
+    assert bob.post("/api/dirCreate?special=library", "gone", raw=True)[0] == 200
+    assert bob.post("/api/dirCreate?special=library", "gone/sub", raw=True)[0] == 200

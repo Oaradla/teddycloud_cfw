@@ -8,7 +8,8 @@ const acl_right_t acl_rights[] = {
     {"box.view", "box", false},
     {"box.settings", "box", false},
     {"box.setting", "box", false}, /* box.setting:<name> for single settings */
-    {"box.cfw", "box", false},
+    {"box.cfw", "box", false}, /* remote control */
+    {"box.update", "box", false}, /* firmware update */
     {"box.share", "box", false},
     {"tonie.view", "tonie", false},
     {"tonie.assign", "tonie", false},
@@ -18,6 +19,7 @@ const acl_right_t acl_rights[] = {
     {"folder.write", "folder", false},
     {"folder.share", "folder", false},
     {"users.manage", "system", false},
+    {"model.create", "system", false}, /* custom tonies; changing them is for their owners */
     {"system.settings", "system", true},
     {"system.files", "system", true},
     {"system.admin", "system", true},

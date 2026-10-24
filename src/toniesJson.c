@@ -515,6 +515,14 @@ toniesJson_item_t *tonies_byAudioId(uint32_t audio_id)
     return item;
 }
 
+bool tonies_isOfficialAudioId(uint32_t audio_id)
+{
+    mutex_lock(MUTEX_TONIES_JSON_CACHE);
+    bool found = tonies_byAudioIdHash_base(audio_id, NULL, toniesJsonCache, toniesJsonCount) != NULL;
+    mutex_unlock(MUTEX_TONIES_JSON_CACHE);
+    return found;
+}
+
 toniesJson_item_t *tonies_byAudioIdHash(uint32_t audio_id, uint8_t *hash)
 {
     mutex_lock(MUTEX_TONIES_JSON_CACHE);

@@ -86,7 +86,7 @@ With the login on, every user has a level:
 
 Admins can add own groups (up to 32), each of the kind user or guest with its own limit of rights; a user in a group has the level of its kind.
 
-Rights are `box.view`, `box.settings` (or single settings as `box.setting:<name>`, e.g. `box.setting:toniebox.max_vol_spk`), `box.cfw`, `tonie.view`, `tonie.assign`, `tonie.edit`, `folder.read`, `folder.write`, the `*.share` rights of owners and `users.manage`. Admins assign the owners of boxes, set the most a level or group may have (this also counts on the user's own boxes) and can take further rights from single users.
+Rights are `box.view`, `box.settings` (or single settings as `box.setting:<name>`, e.g. `box.setting:toniebox.max_vol_spk`), `box.cfw`, `tonie.view`, `tonie.assign`, `tonie.edit`, `folder.read`, `folder.write`, the `*.share` rights of owners, `users.manage` and `model.create` (add custom tonies and their pictures; users change and delete the custom tonies they added, and those used only in folders and on tonies they may change, and pictures shown only by such tonies; never with the audio id of an official tonie). Admins assign the owners of boxes, set the most a level or group may have (this also counts on the user's own boxes) and can take further rights from single users.
 
 - A new tag belongs to the owners of the box it is first placed on; tags from before belong to nobody (usable by all users) until they are placed on a box. Admins assign tags by hand.
 - Library: `by/` is readable for all, new top-level folders are readable and writable for all, `private/<user>` belongs to the user, who can share sub folders. A tonie can only point at library files the user may read.

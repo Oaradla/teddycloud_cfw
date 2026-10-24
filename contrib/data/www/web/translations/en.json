@@ -61,6 +61,7 @@
         "locked": "Locked",
         "unlocked": "Unlocked",
         "minutes": "min",
+        "idleMinutesHint": "0 = 10 min as in the original, up to 65535 min (about 45 days)",
         "speakerLimit": "Speaker volume limit",
         "headphoneLimit": "Headphone volume limit",
         "ledLevelLabel": "LED brightness",
@@ -124,7 +125,9 @@
             "slapLockGlobal": "Slap lock of the box",
             "tiltLockGlobal": "Tilt lock of the box",
             "volumeLockGlobal": "Volume lock of the box",
-            "bothEarsOff": "Switch off with both ears"
+            "bothEarsOff": "Switch off with both ears",
+            "idleOffBattery": "Switch-off time on battery",
+            "idleOffStation": "Switch-off time on the charging station"
         },
         "mode": {
             "0": "Toggle",
@@ -145,6 +148,7 @@
             "badgeTooltip": "Custom firmware, build {{build}}",
             "batteryTooltip": "Battery last reported: {{time}}",
             "batteryTooltipStation": "Battery last reported: {{time}} · on the charging station",
+            "batteryRemaining": "About {{time}} of playing time left at the current volume",
             "connected": "connected",
             "notConnected": "not connected"
         },
@@ -263,9 +267,15 @@
             "notes": "Notes",
             "added": "Added",
             "deleteConfirm": "Delete image {{build}}?",
+            "deleteManyConfirm": "Delete {{n}} image(s)?",
+            "deleteSelected": "Delete selected ({{n}})",
+            "deleteOld": "Delete old images ({{n}})",
+            "deletedCount": "{{n}} image(s) deleted",
+            "deleteFailed": "{{n}} image(s) not deleted",
             "deleted": "Image deleted",
             "noImages": "No images yet",
             "github": "Download from GitHub",
+            "olderReleases": "Older releases on GitHub ({{n}})",
             "githubRepo": "Repository",
             "githubAuto": "Download automatically",
             "githubAutoValues": {
@@ -508,7 +518,8 @@
                     "pluginName": "The title shown in menus (mandatory)",
                     "standalone": "Boolean flag indicating whether the plugin should run in standalone mode (no header, no sidebar, no footer). Important: do not put true or false in quotes.",
                     "teddyCloudSection": "Desired section where plugin shall be added to navigation (valid values:  home, tonies, tonieboxes, settings, community)",
-                    "version": "Version of the plugin"
+                    "version": "Version of the plugin",
+                    "hideInNav": "Flag indicating whether the plugin should be hidden in navigation (true/false)"
                 },
                 "fieldsTitle": "Fields:",
                 "folderStructureTitle": "Plugin Folder Structure:",
@@ -537,7 +548,12 @@
                 "warningUploadingPlugin": "Please select a file",
                 "warningUploadingPluginDetails": "Please select a zipped plugin file before hitting \"Add Plugin\""
             },
-            "visitHomepage": "Visit Plugins Homepage"
+            "visitHomepage": "Visit Plugins Homepage",
+            "hidden": "Hidden",
+            "pagination": {
+                "pageSelector": "Plugins per Page",
+                "showAll": "Show All"
+            }
         },
         "supportRequestGuide": {
             "actions": {
@@ -692,6 +708,7 @@
         }
     ],
     "fileBrowser": {
+        "searchSubfolders": "Search subfolders too",
         "actions": "Actions",
         "assignToTonie": {
             "action": "Assign to Tonie",
@@ -980,7 +997,8 @@
             "uploadedFile": "File uploaded!",
             "uploadedFileFailed": "File upload failed!",
             "uploading": "Uploading..."
-        }
+        },
+        "deleteOrphanModels": "Also delete the custom tonies used nowhere else ({{n}}), with their pictures"
     },
     "footer": {
         "sponsor": "Sponsor now!",
@@ -1403,6 +1421,7 @@
         "zh-tw": "Chinese (Taiwan)"
     },
     "radioStreamSearch": {
+        "preview": "Listen",
         "failedToFetchSearchResults": "Failed to fetch radio stations search results",
         "failedToFetchSearchResultsDetails": "Failed to fetch radio stations search results: ",
         "noResults": "No entries found for search.",
@@ -2015,6 +2034,14 @@
                 "label": "Volume lock",
                 "description": "A short ear press does not change the volume"
             },
+            "cfw_box_idle_off_battery": {
+                "label": "Switch-off time on battery",
+                "description": "Minutes after which the idle box switches itself off when it is not on the charging station (1 to 65535, about 45 days). Boxes without the custom firmware always switch off after 10 minutes"
+            },
+            "cfw_box_idle_off_station": {
+                "label": "Switch-off time on the charging station",
+                "description": "Minutes after which the idle box switches itself off while it stands on the charging station (1 to 65535, about 45 days). Boxes without the custom firmware always switch off after 10 minutes"
+            },
             "cfw_update_enabled": {
                 "label": "Firmware update",
                 "description": "Offer custom firmware images to the box"
@@ -2266,6 +2293,11 @@
                 "2": "75%",
                 "3": "100%"
             },
+            "toniebox_boxGeneration": {
+                "0": "Unknown",
+                "1": "Toniebox 1",
+                "2": "Toniebox 2"
+            },
             "cfw_event_notice_language": {
                 "0": "German",
                 "1": "English",
@@ -2445,6 +2477,9 @@
             "you": "you",
             "tree": {
                 "all": "All rights",
+                "cfwBoxes": "CFW boxes only",
+                "plainBoxes": "boxes without CFW only",
+                "flexTonie": "Flex tonie",
                 "settings": "Settings",
                 "search": "Search",
                 "extra": "Also (kept as is):",
@@ -2462,7 +2497,18 @@
             "denyTitle": "Rights of {{username}}",
             "mustChangePassword": "Must set a new password at the next login",
             "mustChangePasswordPending": "Password change pending",
-            "mustChangePasswordHint": "After logging in, the user can only change their password. The x takes the demand back."
+            "mustChangePasswordHint": "After logging in, the user can only change their password. The x takes the demand back.",
+            "owned": {
+                "title": "Belongs to {{username}}",
+                "none": "Nothing belongs to this user and nothing is shared with them.",
+                "boxes": "Tonieboxes",
+                "tonies": "Tonies",
+                "folders": "Library folders",
+                "models": "Custom tonies",
+                "images": "Pictures",
+                "owner": "Owner",
+                "shared": "Shared: {{rights}}"
+            }
         }
     },
     "sharing": {
@@ -2483,7 +2529,8 @@
         "pickUser": "User",
         "remove": "Remove",
         "rights": {
-            "box.cfw": "Remote control / firmware",
+            "box.cfw": "Remote control",
+            "box.update": "Firmware update",
             "box.settings": "All settings",
             "box.view": "See",
             "folder.read": "Read",
@@ -2811,9 +2858,8 @@
             "connectToTonieboxProceed": "You are now ready to proceed!",
             "connectToTonieboxText": "The green LED on the Toniebox mainboard should stay steadily lit (no flashing or blinking). If it does not, your connections might be loose or incorrect. Disconnect the programmer, double-check all connections, and try again. If you are working with thin wires, consider applying hot glue to secure them in place and prevent any movement. Additionally, ensure that the Toniebox is powered using its charger.",
             "connectToTonieboxTextUart": "Ensure that the UART is configured to 3.3V before connecting the UART programmer to your computer via USB.",
-            "createPatch": "Create altUrl.custom.305.patch",
             "createPortPatch": "Create altPort.custom.patch",
-            "customPortPatch": "Optional: create a port patch (altPort.custom.json)",
+            "customPortPatch": "Optional: Create a port patch (altPort.custom.json)",
             "customPortPatchHint": "Only needed if the box should reach TeddyCloud on another port than 443, e.g. through a proxy that routes by port. The patch works with the firmware versions 3.1.0 BF2, 3.3.0 and 3.4.0. hackiebox-ng already ships altPort.json for port 10443; create your own patch only for another port. CC3235 boxes and the Toniebox 2 cannot be patched: they always connect to port 443.",
             "customUrlPatch": "Create a custom URL Patch (altUrl.custom.305.json)",
             "customUrlPatchHint": "Please create this patch only if the predefined altUrl.tc.fritz.box.json and altUrl.305.json patches are not functioning with your current TeddyCloud setup. If they do meet your needs you can proceed by clicking 'Next'.",
@@ -2922,6 +2968,7 @@
                 "backupDone": "Backup done: {{files}} files, flash {{kb}} KB. Box {{mac}}.",
                 "backupFailed": "Not all files could be read: {{list}}",
                 "backupFirst": "Download the backup first, then you can go on.",
+                "backupStored": "The flash dump is stored on the server in the firmware folder: {{name}}",
                 "bootloader": "Bootloader",
                 "bootloaderConfirm": "Write the bootloader to the flash?",
                 "bootloaderConfirmText": "Afterwards the box starts from the SD card. Without a matching card it does not start until the card is ready.",
@@ -2987,7 +3034,8 @@
                 "wayBrowser": "In the browser",
                 "wayCard": "SD card only",
                 "wayManual": "Command line"
-            }
+            },
+            "createHostNamePatch": "Create altUrl.custom.305.patch"
         },
         "cc3235BoxFlashing": {
             "CH341AProgrammer": {
@@ -3178,7 +3226,7 @@
                 "hintESP32FirmwareFlashed": "The patching should be done. Please disconnect the Toniebox from the UART, remove the short circuit from J100 and restart the box. It should now be able to connect to TeddyCloud!",
                 "hintESP32FirmwareReseted": "The reset should be done. Please disconnect the Toniebox from the UART, remove the short circuit from J100 and restart the box. It should be no longer connected to your Teddycloud. Do a freshnesscheck to test if it works fine.",
                 "hintFlashESP32RevvoxFlasher": "Click on \"Flash ESP32\", if necessary choose the COM-Port and wait till the step is done!",
-                "hintPatchFlash": "To apply the selected/read flash with your TeddyCloud CA certificate and possibly make other adjustments like the TeddyCloud hostname and/or WiFi credentials, click 'Patch' after entering the information or proceed to the next step without patching.",
+                "hintPatchFlash": "To apply the selected/read flash with your TeddyCloud CA certificate and possibly make other adjustments like the TeddyCloud hostname, port and/or WiFi credentials, click 'Patch' after entering the information or proceed to the next step without patching.",
                 "hintPatchHost": "Enter the desired hostname for your TeddyCloud instance.",
                 "hintPatchPort": "Port the box connects to. Keep 443 unless the box should reach TeddyCloud on another port, e.g. through a proxy that routes by port. CC3235 boxes and the Toniebox 2 cannot be patched: they always connect to port 443.",
                 "hintPatchWifi": "Optionally enter the WiFi credentials for your Toniebox. Please only set this if you really need to - usually, if your Toniebox was connected to your WiFi right before patching, you don't need to.",
@@ -3437,7 +3485,8 @@
                 "confirm": "Delete",
                 "deleted": "Model \"{{model}}\" has been deleted.",
                 "description": "Really delete \"{{model}}\"? This cannot be undone.",
-                "title": "Delete model"
+                "title": "Delete model",
+                "alsoPicture": "Also delete the picture, no other figure shows it"
             },
             "duplicateTitleSuffix": "Copy",
             "editModalTitle": "Edit model {{current}} of {{total}}",
@@ -3524,7 +3573,8 @@
                 "run": "Shrink {{count}} images",
                 "text": "Pictures in custom_img above {{kb}} KB get a small copy (at most 512 pixels, WebP where the browser can write it); the models then use the copy. The originals stay in the folder.",
                 "title": "Optimize the images of the custom models"
-            }
+            },
+            "readOnly": "Someone else added this figure. You can view it but not change it."
         },
         "customImages": {
             "navigationTitle": "Images",
@@ -3744,7 +3794,8 @@
             "sourceCustom": "Custom",
             "sourceOriginal": "Original",
             "title": "Library: Select & upload images",
-            "titleSelect": "Select image"
+            "titleSelect": "Select image",
+            "deleteShownBy": "Figures showing this picture: {{count}}. They lose their picture."
         },
         "infoModal": {
             "download": "Download TAF as *.ogg",
@@ -4016,7 +4067,8 @@
                 "confirm": "Add",
                 "text": "Every TAF and playlist with a title in this folder and the folders below goes onto the sheet; hidden ones and those on the sheet already are left out.",
                 "title": "Add a library folder"
-            }
+            },
+            "downloadPdf": "Download PDF"
         },
         "title": "Tonies",
         "tonies": {

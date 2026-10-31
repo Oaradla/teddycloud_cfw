@@ -14,6 +14,7 @@
         "backToLogin": "Back to login",
         "loginBusy": "The server is busy, please try again.",
         "loginFailed": "Invalid username or password",
+        "loginLanOnly": "This user may log in from the home network only.",
         "loginHint": "Sign in to TeddyCloud",
         "loginRateLimited": "Too many login attempts. Try again in a few minutes.",
         "loginRateLimitedMinutes": "Too many login attempts. Try again in {{count}} minutes (at {{until}}).",
@@ -238,6 +239,11 @@
             "disabled": "update off",
             "notCfw": "Original firmware / unknown",
             "rolledBack": "Build {{build}} was rolled back",
+            "rolledBackReason": {
+                "box": "Automatic: the bootloader went back to the previous build after a failed trial start.",
+                "left": "The box ran this build and now starts an older one again (picked by hand or fell back without a report).",
+                "attempts": "Offered several times but never started."
+            },
             "confirmed": "Last update confirmed",
             "pageNew": "New setup page {{version}}",
             "pageNewHint": "The release package brings a setup page that differs from the one of the previous version for this box platform. Boxes with this firmware get it at their next start.",
@@ -343,7 +349,9 @@
                 },
                 "enable": "Switch on CFW support",
                 "enabled": "CFW support switched on"
-            }
+            },
+            "imagesInUse": "In use by: {{boxes}}.",
+            "notInLibrary": "not in the library"
         },
         "sectionTitle": "Custom firmware",
         "loadError": "Could not load the CFW settings",
@@ -371,7 +379,11 @@
             "tooManyCommands": "Too many commands waiting",
             "noImage": "No image received",
             "tagMissing": "Release tag missing",
-            "cfwOff": "CFW support is off (cfw.enabled)"
+            "cfwOff": "CFW support is off (cfw.enabled)",
+            "notReachable": "The box cannot be reached now",
+            "noBatteryLog": "No battery log for this box",
+            "noCardPackage": "No release package with a card tree for this build",
+            "invalidJson": "Invalid JSON"
         },
         "controls": {
             "title": "Using a box with the custom firmware",
@@ -1846,6 +1858,10 @@
                 "label": "Cache to library",
                 "description": "Cache cloud content to library"
             },
+            "cloud_cacheToLibraryDir": {
+                "label": "Library cache directory",
+                "description": "Directory inside the library for cached cloud content"
+            },
             "cloud_markCustomTagByPass": {
                 "label": "Autodetect custom tags (password)",
                 "description": "Automatically mark custom tags by password"
@@ -2360,7 +2376,17 @@
                 "invalid_group": "This group does not exist.",
                 "invalid_name": "The name must have 1 to 32 characters.",
                 "password_unchanged": "The new password must differ from the current one.",
-                "password_change_required": "Change your password first."
+                "password_change_required": "Change your password first.",
+                "last_admin": "At least one admin must remain.",
+                "forbidden": "You may not do this.",
+                "invalid_share": "Unknown user or right in a share.",
+                "invalid_owner": "Owners must be existing users that are no guests.",
+                "invalid_rights": "Unknown right in the list.",
+                "invalid_level": "Unknown level.",
+                "not_found": "User not found.",
+                "save_failed": "Could not save.",
+                "no_users": "Create a user before enabling login protection.",
+                "https_required": "HTTPS is required."
             },
             "events": {
                 "detail": "Detail",
@@ -2541,7 +2567,8 @@
             "box.share": "Share",
             "tonie.share": "Share",
             "folder.share": "Share",
-            "users.manage": "Create and manage users"
+            "users.manage": "Create and manage users",
+            "model.create": "Add custom tonies"
         },
         "save": "Save",
         "shares": "Shared with",
@@ -3033,7 +3060,41 @@
                 "title": "CC3200 in the browser",
                 "wayBrowser": "In the browser",
                 "wayCard": "SD card only",
-                "wayManual": "Command line"
+                "wayManual": "Command line",
+                "errors": {
+                    "adapterDisconnected": "The serial adapter is disconnected.",
+                    "fatEntry": "Incorrect file table entry (index {{index}} instead of {{expected}}).",
+                    "noAck": "The box did not acknowledge command 0x{{opcode}}.",
+                    "packetTimeout": "No answer from the box (timeout).",
+                    "packetIncomplete": "The answer of the box is incomplete.",
+                    "packetChecksum": "The answer of the box has a wrong checksum.",
+                    "noBreakAck": "No answer to the break condition: is the box in its bootloader (SOP2, reset)?",
+                    "versionLength": "The version info should be 28 bytes, got {{length}}.",
+                    "bootloaderUnsupported": "Bootloader {{version}} is not supported.",
+                    "nwpNoAck": "No answer after starting the NWP bootloader.",
+                    "noStorageList": "The box sent no storage list.",
+                    "storageInfoShort": "The storage info is too short.",
+                    "noSerialFlash": "The box reports no serial flash.",
+                    "noSram": "The box reports no SRAM.",
+                    "beyondStorage": "{{size}} bytes at {{offset}} are beyond the {{total}} bytes of the storage.",
+                    "shortRead": "Got {{length}} bytes, asked for {{size}}.",
+                    "flashReadsDiffer": "The two reads of the flash differ; check the wiring and read again.",
+                    "noFileTable": "No valid file table on the box.",
+                    "fileInfoShort": "The file info is too short.",
+                    "openFailed": "Opening {{name}} failed.",
+                    "closeFailed": "Closing the file failed (0x{{status}}).",
+                    "fileMissing": "{{name}} does not exist on the box.",
+                    "readFailed": "Reading {{name}} failed.",
+                    "fileReadsDiffer": "The two reads of {{name}} differ.",
+                    "nothingToWrite": "{{name}}: nothing to write.",
+                    "eraseFailed": "Erasing {{name}} failed (0x{{status}}).",
+                    "tooBig": "{{name}} is too big.",
+                    "writeFailed": "Writing {{name}} at {{pos}} failed.",
+                    "verifyFailed": "{{name}} reads back different from what was written.",
+                    "certsMissing": "Missing on the box: {{names}}",
+                    "noPreloader": "The package has no preloader.",
+                    "noMcuimg": "/sys/mcuimg.bin was not in the backup."
+                }
             },
             "createHostNamePatch": "Create altUrl.custom.305.patch"
         },
@@ -3178,9 +3239,11 @@
                 "cancel": "Cancel",
                 "chipMAC": "Chip MAC",
                 "chipType": "Chip Type",
-                "chipTypeError": "Chip type error - unexpected type read. Read {{actualname}}, expected {{expectedname}}. Abort processing, check connection and try again!",
+                "chipTypeError": "Chip type error - unexpected type read. Read {{actualtype}}, expected {{expectedtype}}. Abort processing, check connection and try again!",
                 "confirmFlashDialog": "Do you really want to flash your Toniebox? Please ensure a stable connection and do not interrupt the process!",
                 "confirmFlashDialogHint": "To ensure your Toniebox works correctly, the specified TeddyCloud instance is absolutely necessary. If your TeddyCloud is offline, your Toniebox won't be able to access new content!",
+                "confirmResetDialog": "The whole flash of the Toniebox is overwritten with the chosen file. Use only the backup of exactly this box. Do not interrupt and do not disconnect.",
+                "resetOtherBox": "The file is the backup of box {{file}}, but box {{box}} is connected. Nothing was written.",
                 "confirmFlashModal": "Flash Toniebox with patched firmware",
                 "connectESPCollapseTitle": "Help: Connect UART with Toniebox",
                 "connected": "Connected",
@@ -3902,13 +3965,17 @@
             "title": "System Sounds"
         },
         "tafDownload": {
-            "asOneFile": "Download as one *.ogg file",
-            "downloadCount": "Download {{count}} tracks as *.ogg",
-            "downloadOne": "Download 1 track as *.ogg",
+            "asOneFile": "Download as one *.{{format}} file",
+            "asZip": "as zip",
+            "downloadCount": "Download {{count}} tracks as *.{{format}}",
+            "downloadOne": "Download 1 track as *.{{format}}",
             "duration": "Time",
-            "modalTitle": "Download tracks as *.ogg",
+            "format": "Format",
+            "modalTitle": "Download tracks",
             "selectAll": "Select all tracks",
             "selectedCount": "{{selected}} of {{total}} selected",
+            "several": "Several tracks",
+            "singleFiles": "one by one",
             "track": "Track",
             "unnamedTrack": "Track {{number}}"
         },

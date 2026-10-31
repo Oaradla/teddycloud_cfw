@@ -9,6 +9,8 @@
 #include "handler.h"
 #include "proto/toniebox.pb.rtnl.pb-c.h"
 
+/* cfw.enabled of a box: its overlay can switch it off, but not on */
+bool cfw_enabled(const settings_t *settings);
 void cfw_init(void);
 void cfw_deinit(void);
 void cfw_loop(void);

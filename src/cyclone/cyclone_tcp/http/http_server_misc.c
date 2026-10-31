@@ -76,9 +76,28 @@ error_t httpReadRequestHeader(HttpConnection *connection)
    if(error)
       return error;
 
-   //Read the first line of the request
-   error = httpReceive(connection, connection->buffer,
-      HTTP_SERVER_BUFFER_SIZE - 1, &length, SOCKET_FLAG_BREAK_CRLF);
+   length = 0;
+#if (HTTP_SERVER_TLS_SUPPORT == ENABLED)
+   //A binary client (the Toniebox log) sends no request line: its data starts
+   //with 00 00 and may hold no CRLF, so the first bytes are read on their own
+   if(connection->tlsContext != NULL)
+   {
+      error = httpReceive(connection, connection->buffer, 4, &length, SOCKET_FLAG_WAIT_ALL);
+      if(!error && connection->buffer[0] == 0 && connection->buffer[1] == 0)
+      {
+         connection->response.contentLength = length;
+         return ERROR_INVALID_REQUEST;
+      }
+   }
+#endif
+   //Read the (rest of the) first line of the request
+   if(!error && osMemchr(connection->buffer, '\n', length) == NULL)
+   {
+      size_t more = 0;
+      error = httpReceive(connection, connection->buffer + length,
+         HTTP_SERVER_BUFFER_SIZE - 1 - length, &more, SOCKET_FLAG_BREAK_CRLF);
+      length += more;
+   }
    //Unable to read any data?
    if(error)
       return error;
@@ -559,10 +578,10 @@ void httpAppendForwardedFor(HttpConnection *connection, const char_t *value)
    char_t tail[sizeof(connection->request.forwardedFor)];
    size_t room = size - 1;
    size_t n = 0;
-   if (add >= room)
+   if (add + sep >= room)
    {
-      osMemcpy(tail, value + add - room, room);
-      n = room;
+      n = add < room ? add : room;
+      osMemcpy(tail, value + add - n, n);
    }
    else
    {

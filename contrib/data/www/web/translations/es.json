@@ -14,6 +14,7 @@
         "backToLogin": "Volver al inicio de sesión",
         "loginBusy": "El servidor está ocupado, inténtalo de nuevo.",
         "loginFailed": "Usuario o contraseña no válidos",
+        "loginLanOnly": "Este usuario solo puede iniciar sesión desde la red doméstica.",
         "loginHint": "Inicia sesión en TeddyCloud",
         "loginRateLimited": "Demasiados intentos de inicio de sesión. Inténtalo de nuevo en unos minutos.",
         "loginRateLimitedMinutes": "Demasiados intentos de inicio de sesión. Vuelve a intentarlo en {{count}} minutos (a las {{until}}).",
@@ -238,6 +239,11 @@
             "disabled": "actualización desactivada",
             "notCfw": "Firmware original / desconocido",
             "rolledBack": "Se revirtió el build {{build}}",
+            "rolledBackReason": {
+                "box": "Automático: el cargador de arranque volvió a la compilación anterior tras un arranque de prueba fallido.",
+                "left": "La caja funcionó con esta compilación y ahora arranca de nuevo una más antigua (elegida a mano o retrocedida sin aviso).",
+                "attempts": "Ofrecida varias veces pero nunca arrancada."
+            },
             "confirmed": "Última actualización confirmada",
             "pageNew": "Página de configuración {{version}} nueva",
             "pageNewHint": "El paquete trae una página de configuración distinta de la de la versión anterior de esta plataforma. Las cajas con este firmware la reciben en su próximo arranque.",
@@ -343,7 +349,9 @@
                 },
                 "enable": "Activar soporte CFW",
                 "enabled": "Soporte CFW activado"
-            }
+            },
+            "imagesInUse": "En uso por: {{boxes}}.",
+            "notInLibrary": "no está en la biblioteca"
         },
         "sectionTitle": "Firmware personalizado",
         "loadError": "No se pudo cargar la configuración CFW",
@@ -371,7 +379,11 @@
             "tooManyCommands": "Demasiados comandos en espera",
             "noImage": "No se recibió ninguna imagen",
             "tagMissing": "Falta la etiqueta de la versión",
-            "cfwOff": "El soporte CFW está desactivado (cfw.enabled)"
+            "cfwOff": "El soporte CFW está desactivado (cfw.enabled)",
+            "notReachable": "La caja no está accesible ahora",
+            "noBatteryLog": "No hay registro de batería para esta caja",
+            "noCardPackage": "No hay paquete de versión con árbol de tarjeta para esta compilación",
+            "invalidJson": "JSON no válido"
         },
         "controls": {
             "title": "Manejo con el firmware personalizado",
@@ -1846,6 +1858,10 @@
                 "label": "Caché en la biblioteca",
                 "description": "Almacenar en caché el contenido de la nube en la biblioteca"
             },
+            "cloud_cacheToLibraryDir": {
+                "label": "Carpeta de la biblioteca para contenido de la nube",
+                "description": "Carpeta dentro de la biblioteca donde se guarda el contenido de la nube"
+            },
             "cloud_markCustomTagByPass": {
                 "label": "Detectar etiquetas personalizadas (contraseña)",
                 "description": "Marcar automáticamente las etiquetas personalizadas por contraseña"
@@ -2360,7 +2376,17 @@
                 "invalid_group": "Este grupo no existe.",
                 "invalid_name": "El nombre debe tener de 1 a 32 caracteres.",
                 "password_unchanged": "La nueva contraseña debe ser distinta de la actual.",
-                "password_change_required": "Primero cambia tu contraseña."
+                "password_change_required": "Primero cambia tu contraseña.",
+                "last_admin": "Debe quedar al menos un administrador.",
+                "forbidden": "No tienes permiso para esto.",
+                "invalid_share": "Usuario o derecho desconocido en un uso compartido.",
+                "invalid_owner": "Los propietarios deben ser usuarios existentes que no sean invitados.",
+                "invalid_rights": "Derecho desconocido en la lista.",
+                "invalid_level": "Nivel desconocido.",
+                "not_found": "Usuario no encontrado.",
+                "save_failed": "No se pudo guardar.",
+                "no_users": "Crea un usuario antes de activar la protección de inicio de sesión.",
+                "https_required": "Se requiere HTTPS."
             },
             "events": {
                 "detail": "Detalle",
@@ -2541,7 +2567,8 @@
             "box.share": "Compartir",
             "tonie.share": "Compartir",
             "folder.share": "Compartir",
-            "users.manage": "Crear y gestionar usuarios"
+            "users.manage": "Crear y gestionar usuarios",
+            "model.create": "Añadir tonies propios"
         },
         "save": "Guardar",
         "shares": "Compartido con",
@@ -3033,7 +3060,41 @@
                 "title": "CC3200 en el navegador",
                 "wayBrowser": "En el navegador",
                 "wayCard": "Solo tarjeta SD",
-                "wayManual": "Línea de comandos"
+                "wayManual": "Línea de comandos",
+                "errors": {
+                    "adapterDisconnected": "El adaptador serie está desconectado.",
+                    "fatEntry": "Entrada incorrecta en la tabla de archivos (índice {{index}} en lugar de {{expected}}).",
+                    "noAck": "La caja no ha confirmado el comando 0x{{opcode}}.",
+                    "packetTimeout": "Sin respuesta de la caja (tiempo agotado).",
+                    "packetIncomplete": "La respuesta de la caja está incompleta.",
+                    "packetChecksum": "La respuesta de la caja tiene una suma de comprobación incorrecta.",
+                    "noBreakAck": "Sin respuesta a la señal de break: ¿está la caja en su bootloader (SOP2, reset)?",
+                    "versionLength": "La información de versión debería tener 28 bytes, recibidos: {{length}}.",
+                    "bootloaderUnsupported": "El bootloader {{version}} no es compatible.",
+                    "nwpNoAck": "Sin respuesta tras iniciar el bootloader NWP.",
+                    "noStorageList": "La caja no ha enviado la lista de memorias.",
+                    "storageInfoShort": "La información de la memoria es demasiado corta.",
+                    "noSerialFlash": "La caja no indica ninguna memoria flash serie.",
+                    "noSram": "La caja no indica ninguna SRAM.",
+                    "beyondStorage": "{{size}} bytes en {{offset}} superan los {{total}} bytes de la memoria.",
+                    "shortRead": "Recibidos {{length}} bytes, solicitados {{size}}.",
+                    "flashReadsDiffer": "Las dos lecturas de la flash difieren; revisa el cableado y vuelve a leer.",
+                    "noFileTable": "No hay ninguna tabla de archivos válida en la caja.",
+                    "fileInfoShort": "La información del archivo es demasiado corta.",
+                    "openFailed": "No se pudo abrir {{name}}.",
+                    "closeFailed": "No se pudo cerrar el archivo (0x{{status}}).",
+                    "fileMissing": "{{name}} no existe en la caja.",
+                    "readFailed": "No se pudo leer {{name}}.",
+                    "fileReadsDiffer": "Las dos lecturas de {{name}} difieren.",
+                    "nothingToWrite": "{{name}}: nada que escribir.",
+                    "eraseFailed": "No se pudo borrar {{name}} (0x{{status}}).",
+                    "tooBig": "{{name}} es demasiado grande.",
+                    "writeFailed": "No se pudo escribir {{name}} en {{pos}}.",
+                    "verifyFailed": "{{name}} se lee distinto de lo que se escribió.",
+                    "certsMissing": "Falta en la caja: {{names}}",
+                    "noPreloader": "El paquete no contiene ningún preloader.",
+                    "noMcuimg": "/sys/mcuimg.bin no estaba en la copia de seguridad."
+                }
             },
             "createHostNamePatch": "Crear altUrl.custom.305.patch"
         },
@@ -3178,9 +3239,11 @@
                 "cancel": "Cancelar",
                 "chipMAC": "Chip MAC",
                 "chipType": "Tipo de chip",
-                "chipTypeError": "Error de tipo de chip - Se leyó un tipo inesperado. Leído {{actualname}}, esperado {{expectedname}}. Proceso abortado, revise la conexión y vuelva a intentarlo.",
+                "chipTypeError": "Error de tipo de chip - Se leyó un tipo inesperado. Leído {{actualtype}}, esperado {{expectedtype}}. Proceso abortado, revise la conexión y vuelva a intentarlo.",
                 "confirmFlashDialog": "¿Realmente quieres flashear tu Toniebox? ¡Asegúrate de tener una conexión estable y no interrumpas el proceso!",
                 "confirmFlashDialogHint": "Para garantizar que tu Toniebox funcione correctamente, la instancia especificada de TeddyCloud es absolutamente necesaria. Si tu TeddyCloud está desconectado, ¡tu Toniebox no podrá acceder al nuevo contenido!",
+                "confirmResetDialog": "Toda la memoria flash de la Toniebox se sobrescribe con el archivo elegido. Usa solo la copia de seguridad de esta misma caja. No interrumpas ni desconectes.",
+                "resetOtherBox": "El archivo es la copia de seguridad de la caja {{file}}, pero está conectada la caja {{box}}. No se ha escrito nada.",
                 "confirmFlashModal": "Flashear Toniebox con firmware parcheado",
                 "connectESPCollapseTitle": "Ayuda: Conectar UART con Toniebox",
                 "connected": "Conectado",
@@ -3902,13 +3965,17 @@
             "title": "Sonidos del sistema"
         },
         "tafDownload": {
-            "asOneFile": "Descargar como un solo archivo *.ogg",
-            "downloadCount": "Descargar {{count}} pistas como *.ogg",
-            "downloadOne": "Descargar 1 pista como *.ogg",
+            "asOneFile": "Descargar como un solo archivo *.{{format}}",
+            "asZip": "como zip",
+            "downloadCount": "Descargar {{count}} pistas como *.{{format}}",
+            "downloadOne": "Descargar 1 pista como *.{{format}}",
             "duration": "Tiempo",
-            "modalTitle": "Descargar pistas como *.ogg",
+            "format": "Formato",
+            "modalTitle": "Descargar pistas",
             "selectAll": "Seleccionar todas las pistas",
             "selectedCount": "{{selected}} de {{total}} seleccionadas",
+            "several": "Varias pistas",
+            "singleFiles": "por separado",
             "track": "Pista",
             "unnamedTrack": "Pista {{number}}"
         },

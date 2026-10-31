@@ -217,6 +217,11 @@ error_t fsMoveFile(const char_t *source_path, const char_t *target_path, bool_t 
     {
         return error;
     }
+    /* a renamed folder */
+    if (error == NO_ERROR && !fsDirExists(source_path) && fsDirExists(target_path))
+    {
+        return error;
+    }
 
     error = fsCopyFile(source_path, target_path, overwrite);
     if (error == NO_ERROR)

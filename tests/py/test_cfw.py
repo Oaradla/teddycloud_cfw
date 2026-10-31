@@ -282,6 +282,16 @@ def test_profile_is_delivered(box):
     assert not files(freshness(box), FIGURE_RUID)
 
 
+def test_every_start_gets_every_file_again(box, start):
+    profile = {"resume": True, "sleepMinutes": 30, "ledLevel": 2}
+    assert api("POST", f"/api/cfw/tag?ruid={FIGURE_RUID}", {"kind": "profile", "profile": profile})[0] == 200
+    files(freshness(box), FIGURE_RUID)
+    assert not files(freshness(box), FIGURE_RUID)
+    start.__init__(sequence=10)
+    box.rtnl(cfw.hello(BUILD, CAPS_ALL, **start.next()))
+    wait_until(lambda: files(freshness(box), FIGURE_RUID))
+
+
 def test_event_tag_round_trip():
     ruid = "11223344556677E0"
     event = {"tones": False, "actions": [{"action": 13, "mode": 0, "value": 0}, {"action": 9, "mode": 1, "value": 6}]}
@@ -406,8 +416,9 @@ def test_idle_times_report_becomes_box_setting(box, box_id, start):
     files(freshness(box), GLOBAL_RUID)
     timestamp = int(time.time()) + 200
     try:
-        # an event tag set 2 minutes on battery and 1440 on the station: the sixth number of the report
-        report = global_report(timestamp)
+        # an event tag set 2 minutes on battery and 1440 on the station: the sixth number of the report.
+        # With the speaker limit teddyCloud has (a report without it would make teddyCloud send its own)
+        report = global_report(timestamp, speaker=9)
         packed = struct.unpack_from("<I", report, 8)[0] | (1 << 17) | (1 << 18)
         report = report[:8] + struct.pack("<I", packed) + report[12:] + struct.pack("<I", 2 | (1440 << 16))
         box.rtnl(cfw.record(cfw.FUNC_SETTINGS_CHANGED, report, **start.next()))
@@ -415,7 +426,13 @@ def test_idle_times_report_becomes_box_setting(box, box_id, start):
         assert setting_value("cfw.box.idle_off_battery", box_id) == "2" and setting_value("cfw.box.idle_off_station") == "10"
         time.sleep(1.2)
         assert not files(freshness(box), GLOBAL_RUID)
+
+        # a report without them: the box keeps 10 minutes, also when the global value differs
+        set_setting("cfw.box.idle_off_battery", 30)
+        box.rtnl(cfw.record(cfw.FUNC_SETTINGS_CHANGED, global_report(timestamp + 1), **start.next()))
+        wait_until(lambda: setting_value("cfw.box.idle_off_battery", box_id) == "10")
     finally:
+        reset_setting("cfw.box.idle_off_battery")
         for name in ("cfw.box.idle_off_battery", "cfw.box.idle_off_station", "cfw.box.speaker_limit", "cfw.box.headphone_limit", "toniebox.led", "cfw.box.both_ears_off", "cfw.box.slap_lock", "cfw.box.tilt_lock", "cfw.box.volume_lock"):
             reset_setting(name, box_id)
 
@@ -604,12 +621,14 @@ def test_update_manual_and_automatic(box, box_id):
         api("POST", f"/api/cfw/deliver?overlay={box_id}", {"build": 0})
 
 
-def test_rolled_back_image_is_not_offered_again(box, box_id):
+def test_rolled_back_image_is_not_offered_again(box, box_id, start):
     try:
         # the release image BUILD + 20 was offered last; it starts, then the box runs the old build again
         assert ota(box, BUILD + 20)[0] == 304
         assert ota(box, BUILD)[0] == 304
-        assert box_entry(box)["rolledBackBuild"] == BUILD + 20
+        entry = box_entry(box)
+        assert entry["rolledBackBuild"] == BUILD + 20 and entry["rolledBackReason"] == "left"
+        assert entry["rolledBackTime"] > 0
 
         # an offered image that never runs counts as rolled back after three starts
         image = cfw.slot_image(BUILD + 40)
@@ -617,7 +636,8 @@ def test_rolled_back_image_is_not_offered_again(box, box_id):
         for _ in range(3):
             assert ota(box, BUILD)[2] == image
         assert ota(box, BUILD)[0] == 304
-        assert box_entry(box)["rolledBackBuild"] == BUILD + 40
+        entry = box_entry(box)
+        assert entry["rolledBackBuild"] == BUILD + 40 and entry["rolledBackReason"] == "attempts"
 
         # a build newer than the offered one is no rollback and ends the one shown
         newer = cfw.slot_image(BUILD + 45)
@@ -626,9 +646,57 @@ def test_rolled_back_image_is_not_offered_again(box, box_id):
         assert ota(box, BUILD + 47)[0] == 304
         entry = box_entry(box)
         assert entry["rolledBackBuild"] == 0 and entry["lastOfferedBuild"] == 0
+        assert entry["rolledBackReason"] == "" and entry["rolledBackTime"] == 0
+
+        # an older image assigned by hand that does not stay counts as rolled back after three starts as well
+        older = cfw.slot_image(BUILD - 10)
+        assert upload(older, "alpha")[0] == 200
+        assert api("POST", f"/api/cfw/deliver?overlay={box_id}", {"build": BUILD - 10})[0] == 200
+        for _ in range(3):
+            assert ota(box, BUILD)[2] == older
+        assert ota(box, BUILD)[0] == 304
+        assert box_entry(box)["rolledBackBuild"] == BUILD - 10
+
+        # a rollback the box reports in its hello: the bootloader went back after a failed trial start
+        box.rtnl(cfw.hello(BUILD, CAPS_ALL, rolled_back=BUILD + 37, **start.next()))
+        entry = box_entry(box)
+        assert entry["rolledBackBuild"] == BUILD + 37 and entry["rolledBackReason"] == "box"
     finally:
+        api("POST", f"/api/cfw/deliver?overlay={box_id}", {"build": 0})
         reset_setting("cfw.update.mode", box_id)
         reset_setting("cfw.update.channel", box_id)
+
+
+def test_image_without_a_platform_in_its_metadata_is_for_the_cc3200(box_id):
+    build = BUILD + 70
+    assert upload(cfw.slot_image(build), "alpha")[0] == 200
+    meta = Path(SANDBOX) / "data" / "firmware" / "cfw" / f"{build}.json"
+    data = json.loads(meta.read_text())
+    del data["platform"]
+    meta.write_text(json.dumps(data))
+    try:
+        assert api("POST", f"/api/cfw/deliver?overlay={box_id}", {"build": build})[0] == 200
+    finally:
+        api("POST", f"/api/cfw/deliver?overlay={box_id}", {"build": 0})
+        api("POST", "/api/cfw/firmware/delete", {"build": build, "platform": "cc3200"})
+
+
+def test_update_checks_asked_for_are_no_starts(box, box_id, start):
+    # "check now" three times while the box can not install (no free slot): the image stays on offer
+    image = cfw.slot_image(BUILD + 60)
+    assert upload(image, "release")[0] == 200
+    sock = box.rtnl(cfw.hello(BUILD, CAPS_ALL, **start.next()), keep_open=True)
+    try:
+        wait_until(lambda: box_entry(box)["helloValid"])
+        assert api("POST", f"/api/cfw/deliver?overlay={box_id}", {"build": BUILD + 60})[0] == 200
+        for _ in range(3):
+            assert api("POST", f"/api/cfw/deliver?overlay={box_id}", {"now": True})[0] == 200
+            assert ota(box, BUILD)[2] == image
+        assert ota(box, BUILD)[2] == image
+        assert box_entry(box)["rolledBackBuild"] != BUILD + 60
+    finally:
+        sock.close()
+        api("POST", f"/api/cfw/deliver?overlay={box_id}", {"build": 0})
 
 
 def test_original_firmware_box_is_not_offered_an_image(box, box_id):
@@ -846,7 +914,7 @@ def test_esp32_image_upload():
 
 
 def test_esp32_install_through_the_original_firmware():
-    """the image assigned to an ESP32 box with the original firmware, once, with the
+    """the image assigned to an ESP32 box with the original firmware, at most three times, with the
     server the box asked in its server block"""
     esp = Box("deadbeefe301", SANDBOX, BASE.hostname, HTTPS_API_PORT, user_agent=ESP32_OFW_AGENT)
     try:
@@ -861,10 +929,14 @@ def test_esp32_install_through_the_original_firmware():
         assert status == 200
         image, text = body[:-64], body[-64:]
         assert hashlib.sha256(image).hexdigest().encode() == text
-        assert cfw.esp32_server_block(body) == (BASE.hostname, HTTPS_API_PORT)
+        # Host without a port: the box reached the server on 443, whatever port it listens on inside
+        assert cfw.esp32_server_block(body) == (BASE.hostname, 443)
         assert hashlib.sha256(image[:-32]).digest() == image[-32:]
         assert box_entry(esp)["esp32Delivered"] == BUILD + 50
-        # only once: the box asks again (the image did not stay) and gets nothing, the build counts as rolled back
+        # the box asks again (the download broke off or the image did not stay): twice more, then the build
+        # counts as rolled back and the box gets nothing
+        assert ota(esp, 1701777214)[0] == 200
+        assert ota(esp, 1701777214)[0] == 200
         assert ota(esp, 1701777214)[0] == 304
         assert box_entry(esp)["rolledBackBuild"] == BUILD + 50
         # assigned again: delivered again
@@ -1075,6 +1147,9 @@ def test_release_package_with_setup_page():
         status, result = upload_query(page3, f"build={second}&platform=cc3200")
         assert status == 200 and result["page"]["label"] == "CFW_9.9.10"
         assert library_entry(second)["page"] == cfw.page_version(page3) and library_entry(second)["pageNew"]
+        # the image uploaded alone again keeps its page
+        assert upload(cfw.slot_image(second), "beta")[0] == 200
+        assert library_entry(second)["page"] == cfw.page_version(page3) and library_entry(second)["pageLabel"] == "CFW_9.9.10"
         status, result = upload_query(b"<html>default</html>", "")
         assert status == 200 and result["page"]["label"].startswith("#")
         assert api_json("GET", "/api/cfw/firmware")[1]["defaultPage"]["page"] == cfw.page_version(b"<html>default</html>")

@@ -113,7 +113,7 @@ void test_web_auth_ip(void)
     assert(!web_auth_ip_parse("example.com", a));
 
     const char *lan = WEB_AUTH_DEFAULT_LAN_NETWORKS;
-    assert(web_auth_ip_in_list(lan, "192.168.5.122"));
+    assert(web_auth_ip_in_list(lan, "192.168.1.22"));
     assert(web_auth_ip_in_list(lan, "172.31.255.1"));
     assert(!web_auth_ip_in_list(lan, "172.32.0.1"));
     assert(web_auth_ip_in_list(lan, "fd12:3456::1"));

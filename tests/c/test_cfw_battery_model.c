@@ -52,6 +52,14 @@ void test_cfw_battery_model_report(void)
     cfw_battery_model_report(&m, &p, &r);
     assert(!r.charging && r.percent == 50 && r.remainingSec == 0 && !r.learned);
 
+    /* a model without drops (a damaged model file) gives no time left instead of dividing by zero */
+    cfw_battery_model_t empty = m;
+    empty.capacity = 1000000;
+    empty.baseDrop = 0;
+    memset(empty.playDrop, 0, sizeof(empty.playDrop));
+    cfw_battery_model_report(&empty, &p, &r);
+    assert(r.remainingSec == 0);
+
     /* implausible values are left out */
     cfw_battery_report_t bad = report(5000, 0, 5, 160000);
     bad.implausible = true;

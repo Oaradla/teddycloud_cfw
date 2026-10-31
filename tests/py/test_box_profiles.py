@@ -235,10 +235,8 @@ def test_connection_ends_like_the_box(captured, ending):
         c.finish(ending)
 
 
-@pytest.mark.xfail(strict=True, reason="the server reads the start of a connection line by line before it tells HTTP "
-                   "from RTNL: a first record without a line feed waits for more data. The first record of a CC3200 on "
-                   "3.1.0 BF2 has none (3.3.0, 3.4.0 and the ESP32 have a 0x0a in a payload)")
 def test_first_rtnl_record_without_line_feed(captured):
+    """the first record of a CC3200 on 3.1.0 BF2, and of the custom firmware, may have no 0x0a"""
     frame = rtnl.frame(rtnl.log2(1000, 1, rtnl.FUGR_TAG, captured.profile.tag_valid, (0xE0040350AABBCCDD).to_bytes(8, "big")))
     assert b"\n" not in frame
     sse = SseListener(BASE.hostname, BASE.port)

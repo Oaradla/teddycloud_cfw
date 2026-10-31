@@ -14,6 +14,7 @@
         "backToLogin": "Powrót do logowania",
         "loginBusy": "Serwer jest zajęty, spróbuj ponownie.",
         "loginFailed": "Nieprawidłowa nazwa użytkownika lub hasło",
+        "loginLanOnly": "Ten użytkownik może logować się tylko z sieci domowej.",
         "loginHint": "Zaloguj się do TeddyCloud",
         "loginRateLimited": "Zbyt wiele prób logowania. Spróbuj ponownie za kilka minut.",
         "loginRateLimitedMinutes": "Zbyt wiele prób logowania. Spróbuj ponownie za {{count}} min (o {{until}}).",
@@ -238,6 +239,11 @@
             "disabled": "aktualizacja wył.",
             "notCfw": "Oryginalny firmware / nieznany",
             "rolledBack": "Build {{build}} został wycofany",
+            "rolledBackReason": {
+                "box": "Automatycznie: bootloader wrócił do poprzedniej wersji po nieudanym starcie próbnym.",
+                "left": "Pudełko działało z tą wersją, a teraz znów uruchamia starszą (wybraną ręcznie lub cofniętą bez zgłoszenia).",
+                "attempts": "Oferowana kilka razy, ale nigdy nie uruchomiona."
+            },
             "confirmed": "Ostatnia aktualizacja potwierdzona",
             "pageNew": "Nowa strona konfiguracji {{version}}",
             "pageNewHint": "Pakiet zawiera stronę konfiguracji inną niż poprzednia wersja dla tej platformy. Pudełka z tym firmware otrzymają ją przy następnym uruchomieniu.",
@@ -343,7 +349,9 @@
                 },
                 "enable": "Włącz obsługę CFW",
                 "enabled": "Obsługa CFW włączona"
-            }
+            },
+            "imagesInUse": "Używane przez: {{boxes}}.",
+            "notInLibrary": "brak w bibliotece"
         },
         "sectionTitle": "Custom Firmware",
         "loadError": "Nie udało się wczytać ustawień CFW",
@@ -371,7 +379,11 @@
             "tooManyCommands": "Zbyt wiele poleceń w kolejce",
             "noImage": "Nie otrzymano obrazu",
             "tagMissing": "Brak tagu wydania",
-            "cfwOff": "Obsługa CFW jest wyłączona (cfw.enabled)"
+            "cfwOff": "Obsługa CFW jest wyłączona (cfw.enabled)",
+            "notReachable": "Box jest teraz nieosiągalny",
+            "noBatteryLog": "Brak dziennika baterii dla tego boxa",
+            "noCardPackage": "Brak pakietu wydania z drzewem karty dla tego buildu",
+            "invalidJson": "Nieprawidłowy JSON"
         },
         "controls": {
             "title": "Obsługa z Custom Firmware",
@@ -1846,6 +1858,10 @@
                 "label": "Buforuj do biblioteki",
                 "description": "Buforuj zawartość z chmury do biblioteki"
             },
+            "cloud_cacheToLibraryDir": {
+                "label": "Folder biblioteki dla treści z chmury",
+                "description": "Folder w bibliotece, w którym zapisywane są treści z chmury"
+            },
             "cloud_markCustomTagByPass": {
                 "label": "Automatycznie wykrywaj własne tagi (hasło)",
                 "description": "Automatycznie oznaczaj własne tagi na podstawie hasła"
@@ -2360,7 +2376,17 @@
                 "invalid_group": "Ta grupa nie istnieje.",
                 "invalid_name": "Nazwa musi mieć od 1 do 32 znaków.",
                 "password_unchanged": "Nowe hasło musi różnić się od obecnego.",
-                "password_change_required": "Najpierw zmień hasło."
+                "password_change_required": "Najpierw zmień hasło.",
+                "last_admin": "Musi pozostać co najmniej jeden administrator.",
+                "forbidden": "Nie masz do tego uprawnień.",
+                "invalid_share": "Nieznany użytkownik lub uprawnienie w udostępnieniu.",
+                "invalid_owner": "Właściciele muszą być istniejącymi użytkownikami, którzy nie są gośćmi.",
+                "invalid_rights": "Nieznane uprawnienie na liście.",
+                "invalid_level": "Nieznany poziom.",
+                "not_found": "Nie znaleziono użytkownika.",
+                "save_failed": "Nie udało się zapisać.",
+                "no_users": "Utwórz użytkownika przed włączeniem ochrony logowaniem.",
+                "https_required": "Wymagane jest HTTPS."
             },
             "events": {
                 "detail": "Szczegóły",
@@ -2541,7 +2567,8 @@
             "box.share": "Udostępniać",
             "tonie.share": "Udostępniać",
             "folder.share": "Udostępniać",
-            "users.manage": "Tworzyć użytkowników i nimi zarządzać"
+            "users.manage": "Tworzyć użytkowników i nimi zarządzać",
+            "model.create": "Dodawanie własnych tonies"
         },
         "save": "Zapisz",
         "shares": "Udostępnione dla",
@@ -3033,7 +3060,41 @@
                 "title": "CC3200 w przeglądarce",
                 "wayBrowser": "W przeglądarce",
                 "wayCard": "Tylko karta SD",
-                "wayManual": "Wiersz poleceń"
+                "wayManual": "Wiersz poleceń",
+                "errors": {
+                    "adapterDisconnected": "Adapter szeregowy jest odłączony.",
+                    "fatEntry": "Nieprawidłowy wpis w tablicy plików (indeks {{index}} zamiast {{expected}}).",
+                    "noAck": "Box nie potwierdził polecenia 0x{{opcode}}.",
+                    "packetTimeout": "Brak odpowiedzi od boxa (przekroczony czas).",
+                    "packetIncomplete": "Odpowiedź boxa jest niekompletna.",
+                    "packetChecksum": "Odpowiedź boxa ma nieprawidłową sumę kontrolną.",
+                    "noBreakAck": "Brak odpowiedzi na sygnał break: czy box jest w swoim bootloaderze (SOP2, reset)?",
+                    "versionLength": "Informacja o wersji powinna mieć 28 bajtów, otrzymano: {{length}}.",
+                    "bootloaderUnsupported": "Bootloader {{version}} nie jest obsługiwany.",
+                    "nwpNoAck": "Brak odpowiedzi po uruchomieniu bootloadera NWP.",
+                    "noStorageList": "Box nie wysłał listy pamięci.",
+                    "storageInfoShort": "Informacja o pamięci jest za krótka.",
+                    "noSerialFlash": "Box nie zgłasza pamięci flash szeregowej.",
+                    "noSram": "Box nie zgłasza pamięci SRAM.",
+                    "beyondStorage": "{{size}} bajtów od {{offset}} wykracza poza {{total}} bajtów pamięci.",
+                    "shortRead": "Otrzymano {{length}} bajtów, żądano {{size}}.",
+                    "flashReadsDiffer": "Dwa odczyty pamięci flash się różnią; sprawdź okablowanie i odczytaj ponownie.",
+                    "noFileTable": "Brak prawidłowej tablicy plików na boxie.",
+                    "fileInfoShort": "Informacja o pliku jest za krótka.",
+                    "openFailed": "Nie udało się otworzyć {{name}}.",
+                    "closeFailed": "Nie udało się zamknąć pliku (0x{{status}}).",
+                    "fileMissing": "{{name}} nie istnieje na boxie.",
+                    "readFailed": "Nie udało się odczytać {{name}}.",
+                    "fileReadsDiffer": "Dwa odczyty {{name}} się różnią.",
+                    "nothingToWrite": "{{name}}: nic do zapisania.",
+                    "eraseFailed": "Nie udało się usunąć {{name}} (0x{{status}}).",
+                    "tooBig": "{{name}} jest za duży.",
+                    "writeFailed": "Nie udało się zapisać {{name}} na pozycji {{pos}}.",
+                    "verifyFailed": "{{name}} odczytany różni się od zapisanego.",
+                    "certsMissing": "Brak na boxie: {{names}}",
+                    "noPreloader": "Pakiet nie zawiera preloadera.",
+                    "noMcuimg": "/sys/mcuimg.bin nie było w kopii zapasowej."
+                }
             },
             "createHostNamePatch": "Utwórz altUrl.custom.305.patch"
         },
@@ -3178,9 +3239,11 @@
                 "cancel": "Anuluj",
                 "chipMAC": "MAC układu",
                 "chipType": "Typ układu",
-                "chipTypeError": "Błąd typu układu - odczytano nieoczekiwany typ. Odczytano {{actualname}}, oczekiwano {{expectedname}}. Przerwij przetwarzanie, sprawdź połączenie i spróbuj ponownie!",
+                "chipTypeError": "Błąd typu układu - odczytano nieoczekiwany typ. Odczytano {{actualtype}}, oczekiwano {{expectedtype}}. Przerwij przetwarzanie, sprawdź połączenie i spróbuj ponownie!",
                 "confirmFlashDialog": "Czy na pewno chcesz zflashować swojego Tonieboxa? Upewnij się, że masz stabilne połączenie i nie przerywaj procesu!",
                 "confirmFlashDialogHint": "Aby Twój Toniebox działał prawidłowo, podana instancja TeddyCloud jest absolutnie niezbędna. Jeśli Twój TeddyCloud jest offline, Twój Toniebox nie będzie mógł uzyskać dostępu do nowej zawartości!",
+                "confirmResetDialog": "Cała pamięć flash Tonieboxa zostanie nadpisana wybranym plikiem. Używaj tylko kopii zapasowej dokładnie tego boxa. Nie przerywaj i nie odłączaj.",
+                "resetOtherBox": "Plik jest kopią zapasową boxa {{file}}, a podłączony jest box {{box}}. Nic nie zapisano.",
                 "confirmFlashModal": "Zflashuj Tonieboxa spatchowanym firmware",
                 "connectESPCollapseTitle": "Pomoc: podłącz UART do Tonieboxa",
                 "connected": "Połączono",
@@ -3902,13 +3965,17 @@
             "title": "Dźwięki systemowe"
         },
         "tafDownload": {
-            "asOneFile": "Pobierz jako jeden plik *.ogg",
-            "downloadCount": "Pobierz utwory ({{count}}) jako *.ogg",
-            "downloadOne": "Pobierz 1 utwór jako *.ogg",
+            "asOneFile": "Pobierz jako jeden plik *.{{format}}",
+            "asZip": "jako zip",
+            "downloadCount": "Pobierz utwory ({{count}}) jako *.{{format}}",
+            "downloadOne": "Pobierz 1 utwór jako *.{{format}}",
             "duration": "Czas",
-            "modalTitle": "Pobierz utwory jako *.ogg",
+            "format": "Format",
+            "modalTitle": "Pobierz utwory",
             "selectAll": "Zaznacz wszystkie utwory",
             "selectedCount": "Wybrano {{selected}} z {{total}}",
+            "several": "Kilka utworów",
+            "singleFiles": "osobno",
             "track": "Utwór",
             "unnamedTrack": "Utwór {{number}}"
         },

@@ -1656,11 +1656,6 @@ bool web_auth_gate(HttpConnection *connection, const char_t *uri, error_t *error
         *error = web_auth_unauthorized(connection);
         return true;
     }
-    if (info.restricted && !in_list(restricted_api, uri))
-    {
-        *error = send_message(connection, 403, "2fa_setup_required", "Set up two-factor authentication first");
-        return true;
-    }
     if (sensitive_settings_uri(uri) && !recently_confirmed(&info))
     {
         *error = send_message(connection, 403, "reauth_required", "Confirm with your password");
@@ -1669,6 +1664,8 @@ bool web_auth_gate(HttpConnection *connection, const char_t *uri, error_t *error
     lock_auth();
     web_user_t *user = find_user_unlocked(info.username);
     bool must_change_pw = user != NULL && user->must_change_pw;
+    /* a rule set after the login takes effect on the next request */
+    bool setup_2fa = info.restricted || (user != NULL && two_factor_required(user) && !user_has_totp(user));
     if (user != NULL)
     {
         connection->private.web_user_known = TRUE;
@@ -1682,12 +1679,18 @@ bool web_auth_gate(HttpConnection *connection, const char_t *uri, error_t *error
         *error = web_auth_unauthorized(connection);
         return true;
     }
-    if (must_change_pw && !in_list(password_change_api, uri))
+    if (setup_2fa && !in_list(restricted_api, uri))
+    {
+        *error = send_message(connection, 403, "2fa_setup_required", "Set up two-factor authentication first");
+        return true;
+    }
+    /* 2FA comes first: a restricted session reaches only its setup anyway */
+    if (must_change_pw && !setup_2fa && !in_list(password_change_api, uri))
     {
         *error = send_message(connection, 403, "password_change_required", "Change your password first");
         return true;
     }
-    if (!info.restricted && !web_acl_request_allowed(connection, uri, connection->request.queryString))
+    if (!setup_2fa && !web_acl_request_allowed(connection, uri, connection->request.queryString))
     {
         *error = send_message(connection, 403, "forbidden", "You may not do this");
         return true;
@@ -2072,7 +2075,8 @@ error_t handleApiAuthStatus(HttpConnection *connection, const char_t *uri, const
     int left = user != NULL ? recovery_left(user) : 0;
     unlock_auth();
     bool enabled = !env && settings_get_bool("frontend.web_auth_enabled") && count > 0;
-    bool logged_in = enabled && info.found && !info.restricted;
+    bool setup_2fa = info.restricted || (required && !totp);
+    bool logged_in = enabled && info.found && !setup_2fa;
 
     cJSON *json = cJSON_CreateObject();
     cJSON_AddBoolToObject(json, "enabled", enabled);
@@ -2080,7 +2084,7 @@ error_t handleApiAuthStatus(HttpConnection *connection, const char_t *uri, const
     cJSON_AddStringToObject(json, "username", enabled && info.found ? info.username : "");
     cJSON_AddBoolToObject(json, "envOverride", env);
     cJSON_AddNumberToObject(json, "userCount", count);
-    cJSON_AddBoolToObject(json, "twoFactorSetupRequired", enabled && info.found && info.restricted);
+    cJSON_AddBoolToObject(json, "twoFactorSetupRequired", enabled && info.found && setup_2fa);
     cJSON_AddBoolToObject(json, "passwordChangeRequired", logged_in && must_change_pw);
     cJSON_AddBoolToObject(json, "twoFactorEnabled", totp);
     cJSON_AddBoolToObject(json, "twoFactorRequired", required);
@@ -2167,13 +2171,14 @@ error_t handleApiAuthLogin(HttpConnection *connection, const char_t *uri, const 
     {
         reason = "unknown user";
     }
+    else if (user->lan_only && !lan)
+    {
+        /* said whatever the password: a right one must not look wrong */
+        reason = "user may log in from local networks only";
+    }
     else if (!ok || osStrcmp(stored, user->hash) != 0)
     {
         reason = "wrong password";
-    }
-    else if (user->lan_only && !lan)
-    {
-        reason = "user may log in from local networks only";
     }
     else if (!lan && user->remote_locked_until > now)
     {
@@ -2181,9 +2186,14 @@ error_t handleApiAuthLogin(HttpConnection *connection, const char_t *uri, const 
     }
     if (reason != NULL)
     {
+        bool lan_only = user != NULL && user->lan_only && !lan;
         login_register_failure_unlocked(ip, user, lan, username, reason);
         unlock_auth();
         wipe(new_hash, sizeof(new_hash));
+        if (lan_only)
+        {
+            return send_message(connection, 403, "lan_only", "This user may log in from the home network only");
+        }
         return send_message(connection, 401, "unauthorized", "Invalid username or password");
     }
     /* with 2FA the failures are forgiven only after the second factor, so codes can not be guessed endlessly */
@@ -2254,6 +2264,27 @@ error_t handleApiAuthLogin(HttpConnection *connection, const char_t *uri, const 
         return send_json_status(connection, 200, json, NULL, false);
     }
     return complete_login(connection, canonical, ip, restricted, want_token, NULL);
+}
+
+/* the password is known to whoever gets here: wrong codes count per account, from any address outside */
+static void count_tfa_failure_unlocked(web_user_t *user, const char *ip, bool lan, time_t now)
+{
+    if (lan)
+    {
+        return;
+    }
+    if (user->tfa_locked_until != 0 && user->tfa_locked_until <= now)
+    {
+        user->tfa_failures = 0;
+        user->tfa_locked_until = 0;
+    }
+    if ((uint32_t)++user->tfa_failures >= settings_get_unsigned("web_auth.lockout_attempts") * ACCOUNT_FAIL_FACTOR)
+    {
+        user->tfa_locked_until = now + lock_duration(1);
+        user->tfa_failures = 0;
+        TRACE_WARNING("Web UI 2FA of user '%s' locked for logins from outside after wrong codes\r\n", user->username);
+        add_event_unlocked("account_locked", user->username, ip, "too many wrong 2FA codes");
+    }
 }
 
 error_t handleApiAuthLogin2fa(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
@@ -2347,22 +2378,7 @@ error_t handleApiAuthLogin2fa(HttpConnection *connection, const char_t *uri, con
             osMemset(c, 0, sizeof(*c));
         }
         login_register_failure_unlocked(ip, user, lan, user->username, have_code ? "wrong 2FA code" : "wrong recovery code");
-        /* the password is known to whoever gets here: wrong codes count per account, from any address outside */
-        if (!lan)
-        {
-            if (user->tfa_locked_until != 0 && user->tfa_locked_until <= now)
-            {
-                user->tfa_failures = 0;
-                user->tfa_locked_until = 0;
-            }
-            if ((uint32_t)++user->tfa_failures >= settings_get_unsigned("web_auth.lockout_attempts") * ACCOUNT_FAIL_FACTOR)
-            {
-                user->tfa_locked_until = now + lock_duration(1);
-                user->tfa_failures = 0;
-                TRACE_WARNING("Web UI 2FA of user '%s' locked for logins from outside after wrong codes\r\n", user->username);
-                add_event_unlocked("account_locked", user->username, ip, "too many wrong 2FA codes");
-            }
-        }
+        count_tfa_failure_unlocked(user, ip, lan, now);
         unlock_auth();
         return send_message(connection, 401, "invalid_code", "Invalid code");
     }
@@ -2590,11 +2606,12 @@ error_t handleApiAuth2faEnable(HttpConnection *connection, const char_t *uri, co
     return send_json_status(connection, 200, json, NULL, false);
 }
 
+static bool confirm_second_factor(HttpConnection *connection, const char *username, cJSON *body, error_t *err);
+
 /* password and a current code or recovery code of the logged-in user */
 static bool confirm_identity(HttpConnection *connection, const session_info_t *info, cJSON *body, error_t *err)
 {
     char password[PASSWORD_MAX + 1];
-    char code[RECOVERY_CODE_MAX];
     if (!json_string(body, "password", password, sizeof(password)))
     {
         *err = send_message(connection, 400, "invalid_body", "Password required");
@@ -2613,11 +2630,22 @@ static bool confirm_identity(HttpConnection *connection, const session_info_t *i
         *err = send_message(connection, 403, "wrong_password", "Wrong password");
         return false;
     }
+    return confirm_second_factor(connection, info->username, body, err);
+}
+
+/* a current code or recovery code of the user, if the user has 2FA */
+static bool confirm_second_factor(HttpConnection *connection, const char *username, cJSON *body, error_t *err)
+{
+    char code[RECOVERY_CODE_MAX];
+    char ip[WEB_AUTH_IP_STR_MAX];
+    web_auth_client_ip(connection, ip, sizeof(ip));
+    bool lan = ip_is_lan(ip);
+    time_t now = time(NULL);
     lock_auth();
-    web_user_t *user = find_user_unlocked(info->username);
+    web_user_t *user = find_user_unlocked(username);
     /* without 2FA the password is all there is to confirm */
-    ok = user != NULL && !user_has_totp(user);
-    if (user != NULL && user_has_totp(user))
+    bool ok = user != NULL && !user_has_totp(user);
+    if (user != NULL && user_has_totp(user) && (lan || user->tfa_locked_until <= now))
     {
         if (json_string(body, "code", code, sizeof(code)))
         {
@@ -2638,6 +2666,11 @@ static bool confirm_identity(HttpConnection *connection, const session_info_t *i
             ok = use_recovery_code_unlocked(user, code);
         }
         wipe(code, sizeof(code));
+        if (!ok)
+        {
+            login_register_failure_unlocked(ip, user, lan, user->username, "wrong 2FA code for a confirmation");
+            count_tfa_failure_unlocked(user, ip, lan, now);
+        }
     }
     unlock_auth();
     if (!ok)
@@ -2882,6 +2915,12 @@ error_t handleApiAuthUsersCreate(HttpConnection *connection, const char_t *uri, 
         /* the first user, created without login, has to be an admin */
         level = actor == NULL ? ACL_LEVEL_ADMIN : (actor->level == ACL_LEVEL_GUEST ? ACL_LEVEL_GUEST : ACL_LEVEL_USER);
     }
+    if (user_count == 0)
+    {
+        /* else nobody could manage the users once the login is on */
+        level = ACL_LEVEL_ADMIN;
+        group[0] = '\0';
+    }
     if (connection->private.web_user_known &&
         (actor == NULL || !acl_may_manage_level(actor->level, level) ||
          (actor->level != ACL_LEVEL_ADMIN && !can_manage)))
@@ -2999,6 +3038,22 @@ error_t handleApiAuthUsersUpdate(HttpConnection *connection, const char_t *uri, 
         delete_body(body);
         return send_message(connection, 403, "forbidden", "You may not change this user");
     }
+    if (new_deny != NULL)
+    {
+        char bad[64];
+        if (!is_admin_unlocked(connection))
+        {
+            unlock_auth();
+            delete_body(body);
+            return send_message(connection, 403, "forbidden", "Only admins restrict users");
+        }
+        if (osStrlen(new_deny) >= sizeof(user->deny) || !acl_list_valid(new_deny, bad, sizeof(bad)))
+        {
+            unlock_auth();
+            delete_body(body);
+            return send_message(connection, 400, "invalid_rights", "Unknown right in the list");
+        }
+    }
     if (new_level != NULL)
     {
         acl_level_t level;
@@ -3026,21 +3081,10 @@ error_t handleApiAuthUsersUpdate(HttpConnection *connection, const char_t *uri, 
     }
     if (new_deny != NULL)
     {
-        char bad[64];
-        if (!is_admin_unlocked(connection))
-        {
-            unlock_auth();
-            delete_body(body);
-            return send_message(connection, 403, "forbidden", "Only admins restrict users");
-        }
-        if (osStrlen(new_deny) >= sizeof(user->deny) || !acl_list_valid(new_deny, bad, sizeof(bad)))
-        {
-            unlock_auth();
-            delete_body(body);
-            return send_message(connection, 400, "invalid_rights", "Unknown right in the list");
-        }
         copy_str(user->deny, sizeof(user->deny), new_deny);
     }
+    /* sessions from before the restriction would keep the access it takes away */
+    bool restricted = cJSON_IsTrue(lan_only) && !user->lan_only;
     if (cJSON_IsBool(lan_only))
     {
         user->lan_only = cJSON_IsTrue(lan_only);
@@ -3061,7 +3105,7 @@ error_t handleApiAuthUsersUpdate(HttpConnection *connection, const char_t *uri, 
         add_event_unlocked("2fa_reset", user->username, ip, info.found ? info.username : NULL);
     }
     int revoked = 0;
-    if (revoke || reset_2fa)
+    if (revoke || reset_2fa || restricted)
     {
         /* revoking the own sessions keeps the one in use */
         revoked = revoke_user_sessions_unlocked(user->username, info.found ? info.token_hash : NULL);
@@ -3191,15 +3235,16 @@ error_t handleApiAuthUsersPassword(HttpConnection *connection, const char_t *uri
     bool have = json_string(body, "username", username, sizeof(username)) && json_string(body, "password", password, sizeof(password));
     bool have_current = json_string(body, "currentPassword", current, sizeof(current));
     bool must_change_pw = json_bool(body, "mustChangePassword", false);
-    delete_body(body);
     if (!have)
     {
+        delete_body(body);
         wipe(password, sizeof(password));
         wipe(current, sizeof(current));
         return send_message(connection, 400, "invalid_body", "Username and password required");
     }
     session_info_t info = current_session(connection, false);
     bool own = info.found && osStrcasecmp(info.username, username) == 0;
+    error_t err = NO_ERROR;
     /* a stolen session alone must not be enough to take over the account */
     if (own)
     {
@@ -3209,17 +3254,25 @@ error_t handleApiAuthUsersPassword(HttpConnection *connection, const char_t *uri
         wipe(current, sizeof(current));
         if (busy || !ok)
         {
+            delete_body(body);
             wipe(password, sizeof(password));
             return busy ? send_message(connection, 503, "busy", "Try again") : send_message(connection, 403, "wrong_password", "Current password is wrong");
         }
         if (unchanged)
         {
+            delete_body(body);
             wipe(password, sizeof(password));
             return send_message(connection, 400, "password_unchanged", "The new password must differ from the current one");
         }
+        if (!confirm_second_factor(connection, info.username, body, &err))
+        {
+            delete_body(body);
+            wipe(password, sizeof(password));
+            return err;
+        }
     }
+    delete_body(body);
     wipe(current, sizeof(current));
-    error_t err = NO_ERROR;
     if (!own && !require_confirmation(connection, &err))
     {
         wipe(password, sizeof(password));
@@ -3324,11 +3377,11 @@ error_t handleApiAuthEnabled(HttpConnection *connection, const char_t *uri, cons
         return send_message(connection, 400, "env_override", "Login protection is disabled by TEDDYCLOUD_WEB_AUTH_DISABLE");
     }
     lock_auth();
-    int count = user_count;
+    int admins = admin_count_unlocked();
     unlock_auth();
-    if (enabled && count == 0)
+    if (enabled && admins == 0)
     {
-        return send_message(connection, 400, "no_users", "Create a user before enabling login protection");
+        return send_message(connection, 400, "no_users", "Create an admin before enabling login protection");
     }
     if (!settings_set_bool("frontend.web_auth_enabled", enabled) || settings_save() != NO_ERROR)
     {

@@ -94,6 +94,7 @@ typedef struct
     bool localOta;
     bool cacheContent;
     bool cacheToLibrary;
+    char *cacheToLibraryDir;
     bool markCustomTagByPass;
     bool markCustomTagByUid;
     bool prioCustomContent;

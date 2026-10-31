@@ -67,6 +67,7 @@ typedef struct
     bool web_user_known;
     uint8_t web_level;
     char web_user[33];
+    bool newConnection;
 } http_connection_private_t;
 
 #define CONTENT_LENGTH_MAX (INT32_MAX)

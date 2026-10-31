@@ -128,7 +128,9 @@ def login_enabled():
     c = Client()
     status, data, _ = c.get("/api/auth/status")
     assert status == 200 and data["enabled"] is False
-    assert c.post("/api/auth/users/create", {"username": ADMIN, "password": ADMIN_PW})[0] == 200
+    assert c.post("/api/auth/enabled", {"enabled": True})[0] == 400
+    # a UI may send a level for the first user too: it still has to become admin
+    assert c.post("/api/auth/users/create", {"username": ADMIN, "password": ADMIN_PW, "level": "user"})[0] == 200
     assert c.post("/api/auth/enabled", {"enabled": True})[0] == 200
     a = admin()
     set_setting(a, "web_auth.trusted_proxies", "127.0.0.1")
@@ -229,6 +231,21 @@ def test_overlong_forwarded_for_can_not_fake_a_local_address():
     assert data["client"]["ip"] == "unknown" and data["client"]["lan"] is False
 
 
+def test_second_forwarded_for_that_just_fits_is_cut_safely():
+    a = admin()
+    conn = http.client.HTTPConnection(HOST, PORT, timeout=20)
+    try:
+        conn.putrequest("GET", "/api/auth/status")
+        conn.putheader("Cookie", "tc_web_session=" + a.cookie)
+        conn.putheader("X-Forwarded-For", "a")
+        conn.putheader("X-Forwarded-For", "1" * 241 + ", 203.0.113.97")
+        conn.endheaders()
+        data = json.loads(conn.getresponse().read())
+    finally:
+        conn.close()
+    assert data["client"]["ip"] == "203.0.113.97"
+
+
 def test_account_lockout_from_outside_keeps_lan_working():
     a = admin()
     assert a.post("/api/auth/users/create", {"username": "victim", "password": "Victim-Password-1"})[0] == 200
@@ -247,9 +264,22 @@ def test_account_lockout_from_outside_keeps_lan_working():
 def test_lan_only_user():
     a = admin()
     assert a.post("/api/auth/users/create", {"username": "lanuser", "password": "Lan-User-Password", "lanOnly": True})[0] == 200
-    assert Client(forwarded_for="198.51.100.40").login("lanuser", "Lan-User-Password")[0] == 401
+    # from outside it is refused as such, with the right password and with a wrong one
+    for password in ("Lan-User-Password", "wrong-password"):
+        status, data, _ = Client(forwarded_for="198.51.100.40").login("lanuser", password)
+        assert status == 403 and data["error"] == "lan_only"
     assert Client(forwarded_for="192.168.1.40").login("lanuser", "Lan-User-Password")[0] == 200
     unlock(a, ip="198.51.100.40")
+
+
+def test_lan_only_ends_the_sessions_from_outside():
+    a = admin()
+    assert a.post("/api/auth/users/create", {"username": "lanlater", "password": "Lan-Later-Password"})[0] == 200
+    outside = Client(forwarded_for="198.51.100.41")
+    assert outside.login("lanlater", "Lan-Later-Password")[0] == 200
+    assert outside.get("/api/auth/status")[1]["loggedIn"] is True
+    assert a.post("/api/auth/users/update", {"username": "lanlater", "lanOnly": True})[0] == 200
+    assert outside.get("/api/auth/status")[1]["loggedIn"] is False
 
 
 def test_cross_site_requests_are_rejected():
@@ -358,6 +388,26 @@ def test_totp_codes_can_not_be_guessed_with_the_password():
     unlock(a, username="otpguess")
 
 
+def test_totp_codes_can_not_be_guessed_in_a_confirmation():
+    a = admin()
+    a.post("/api/auth/users/create", {"username": "otpconfirm", "password": "Otp-Confirm-Password"})
+    c = Client(forwarded_for="203.0.113.40")
+    c.login("otpconfirm", "Otp-Confirm-Password")
+    _, setup, _ = c.post("/api/auth/2fa/setup", {"password": "Otp-Confirm-Password"})
+    c.post("/api/auth/2fa/enable", {"code": totp(setup["secret"])})
+    wrong = "000000" if totp(setup["secret"]) != "000000" else "111111"
+    # a stolen session with the password: the wrong codes add up like at the login
+    for i in range(15):
+        c.forwarded_for = "203.0.113.%d" % (40 + i // 4)
+        assert c.post("/api/auth/confirm", {"password": "Otp-Confirm-Password", "code": wrong})[0] == 403, i
+    c.forwarded_for = "203.0.113.50"
+    assert c.post("/api/auth/confirm", {"password": "Otp-Confirm-Password", "code": totp(setup["secret"], step_offset=1)})[0] == 403
+    for i in range(4):
+        unlock(a, ip="203.0.113.%d" % (40 + i))
+    unlock(a, ip="203.0.113.50")
+    unlock(a, username="otpconfirm")
+
+
 def test_confirm_with_password():
     a = admin()
     assert a.post("/api/auth/confirm", {"password": "wrong-password"})[0] == 403
@@ -397,6 +447,40 @@ def test_required_2fa_restricts_the_session():
     assert status == 403 and data["error"] == "2fa_required"
 
 
+def test_2fa_setup_before_demanded_password_change():
+    a = admin()
+    assert a.post("/api/auth/users/create",
+                  {"username": "both", "password": "Both-Password", "require2fa": True, "mustChangePassword": True})[0] == 200
+    c = Client()
+    assert c.login("both", "Both-Password")[1]["twoFactorSetupRequired"] is True
+    status, setup, _ = c.post("/api/auth/2fa/setup", {"password": "Both-Password"})
+    assert status == 200
+    assert c.post("/api/auth/2fa/enable", {"code": totp(setup["secret"])})[0] == 200
+    _, st, _ = c.get("/api/auth/status")
+    assert st["loggedIn"] is True and st["passwordChangeRequired"] is True
+    assert c.get("/api/acl/mine")[1]["error"] == "password_change_required"
+    assert c.post("/api/auth/users/updatePassword",
+                  {"username": "both", "password": "Both-Password-2", "currentPassword": "Both-Password",
+                   "code": totp(setup["secret"], step_offset=1)})[0] == 200
+    assert c.get("/api/acl/mine")[0] == 200
+
+
+def test_2fa_required_later_restricts_the_running_session():
+    a = admin()
+    assert a.post("/api/auth/users/create", {"username": "later2fa", "password": "Later-2fa-Password"})[0] == 200
+    c = Client()
+    assert c.login("later2fa", "Later-2fa-Password")[0] == 200
+    assert c.get("/api/acl/mine")[0] == 200
+    assert a.post("/api/auth/users/update", {"username": "later2fa", "require2fa": True})[0] == 200
+    status, data, _ = c.get("/api/acl/mine")
+    assert status == 403 and data["error"] == "2fa_setup_required"
+    _, st, _ = c.get("/api/auth/status")
+    assert st["loggedIn"] is False and st["twoFactorSetupRequired"] is True
+    _, setup, _ = c.post("/api/auth/2fa/setup", {"password": "Later-2fa-Password"})
+    assert c.post("/api/auth/2fa/enable", {"code": totp(setup["secret"])})[0] == 200
+    assert c.get("/api/acl/mine")[0] == 200
+
+
 def test_own_password_change_needs_current_password_and_ends_other_sessions():
     a = admin()
     a.post("/api/auth/users/create", {"username": "pwchange", "password": "Pw-Change-Password"})
@@ -410,6 +494,20 @@ def test_own_password_change_needs_current_password_and_ends_other_sessions():
     assert status == 200 and data["sessionsRevoked"] == 1
     assert c1.get("/api/acl/mine")[0] == 200
     assert c2.get("/api/acl/mine")[0] == 401
+
+
+def test_own_password_change_needs_the_2fa_code():
+    a = admin()
+    a.post("/api/auth/users/create", {"username": "pwotp", "password": "Pw-Otp-Password"})
+    c = Client()
+    c.login("pwotp", "Pw-Otp-Password")
+    _, setup, _ = c.post("/api/auth/2fa/setup", {"password": "Pw-Otp-Password"})
+    assert c.post("/api/auth/2fa/enable", {"code": totp(setup["secret"])})[0] == 200
+    change = {"username": "pwotp", "password": "Pw-Otp-Password-2", "currentPassword": "Pw-Otp-Password"}
+    status, data, _ = c.post("/api/auth/users/updatePassword", change)
+    assert status == 403 and data["error"] == "invalid_code"
+    status, data, _ = c.post("/api/auth/users/updatePassword", dict(change, code=totp(setup["secret"], step_offset=1)))
+    assert status == 200
 
 
 def test_password_change_demanded_by_the_admin():

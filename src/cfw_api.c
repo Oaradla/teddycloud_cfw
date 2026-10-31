@@ -71,6 +71,8 @@ static cJSON *read_body_json(HttpConnection *connection)
 {
     if (connection->request.byteCount == 0 || connection->request.byteCount >= CFW_BODY_MAX)
     {
+        /* a body left unread would be taken for the next request */
+        connection->request.keepAlive = FALSE;
         return NULL;
     }
     char *data = osAllocMem(CFW_BODY_MAX);
@@ -268,7 +270,7 @@ static void push_file(uint64_t ruid, const uint8_t *file, size_t fileLength)
         settings_t *settings = get_settings_id(i);
         cfw_box_t *box = settings->internal.config_used ? cfw_box_get(settings) : NULL;
         bool takesIt = box != NULL && box->helloValid && (box->capabilities & CFW_CAP_REMOTE) && (file[4] != CFW_TBS_KIND_EVENT || (box->capabilities & CFW_CAP_EVENT_TAG_EXT));
-        if (!takesIt || !settings->cfw.enabled || !settings->cfw.settings_sync || !settings->cfw.remote_control)
+        if (!takesIt || !cfw_enabled(settings) || !settings->cfw.settings_sync || !settings->cfw.remote_control)
         {
             continue;
         }
@@ -327,6 +329,9 @@ error_t handleApiCfwBoxes(HttpConnection *connection, const char_t *uri, const c
         cJSON_AddNumberToObject(entry, "capabilities", box.capabilities);
         cJSON_AddNumberToObject(entry, "updateResult", box.updateResult);
         cJSON_AddNumberToObject(entry, "rolledBackBuild", box.rolledBackBuild);
+        static const char *reasons[] = {"", "box", "left", "attempts"};
+        cJSON_AddStringToObject(entry, "rolledBackReason", reasons[box.rolledBackReason]);
+        cJSON_AddNumberToObject(entry, "rolledBackTime", (double)box.rolledBackTime);
         cJSON_AddNumberToObject(entry, "helloTime", (double)box.helloTime);
         cJSON_AddBoolToObject(entry, "helloValid", box.helloValid);
         cJSON_AddBoolToObject(entry, "online", online);
@@ -357,7 +362,7 @@ error_t handleApiCfwBoxes(HttpConnection *connection, const char_t *uri, const c
             }
         }
         cJSON *cfw = cJSON_AddObjectToObject(entry, "settings");
-        cJSON_AddBoolToObject(cfw, "enabled", settings->cfw.enabled);
+        cJSON_AddBoolToObject(cfw, "enabled", cfw_enabled(settings));
         cJSON_AddBoolToObject(cfw, "settingsSync", settings->cfw.settings_sync);
         cJSON_AddBoolToObject(cfw, "remoteControl", settings->cfw.remote_control);
         cJSON *update = cJSON_AddObjectToObject(entry, "update");
@@ -679,7 +684,7 @@ error_t handleApiCfwStatus(HttpConnection *connection, const char_t *uri, const 
         cJSON_AddBoolToObject(json, "helloValid", box->helloValid);
         cJSON_AddBoolToObject(json, "online", cfw_box_online(box));
         cJSON_AddNumberToObject(json, "capabilities", box->capabilities);
-        cJSON_AddBoolToObject(json, "remote", box->helloValid && (box->capabilities & CFW_CAP_REMOTE) && settings->cfw.enabled && settings->cfw.remote_control);
+        cJSON_AddBoolToObject(json, "remote", box->helloValid && (box->capabilities & CFW_CAP_REMOTE) && cfw_enabled(settings) && settings->cfw.remote_control);
         cJSON_AddNumberToObject(json, "queued", box->queueCount);
         if (box->statusValid)
         {

@@ -14,6 +14,7 @@
         "backToLogin": "Torna all'accesso",
         "loginBusy": "Il server è occupato, riprova.",
         "loginFailed": "Nome utente o password non validi",
+        "loginLanOnly": "Questo utente può accedere solo dalla rete domestica.",
         "loginHint": "Accedi a TeddyCloud",
         "loginRateLimited": "Troppi tentativi di accesso. Riprova tra qualche minuto.",
         "loginRateLimitedMinutes": "Troppi tentativi di accesso. Riprova tra {{count}} minuti (alle {{until}}).",
@@ -238,6 +239,11 @@
             "disabled": "aggiornamento disattivato",
             "notCfw": "Firmware originale / sconosciuto",
             "rolledBack": "La build {{build}} è stata annullata (rollback)",
+            "rolledBackReason": {
+                "box": "Automatico: il bootloader è tornato alla build precedente dopo un avvio di prova fallito.",
+                "left": "Il box ha funzionato con questa build e ora avvia di nuovo una più vecchia (scelta a mano o ritorno senza segnalazione).",
+                "attempts": "Offerta più volte ma mai avviata."
+            },
             "confirmed": "Ultimo aggiornamento confermato",
             "pageNew": "Nuova pagina di configurazione {{version}}",
             "pageNewHint": "Il pacchetto porta una pagina di configurazione diversa da quella della versione precedente per questa piattaforma. I box con questo firmware la ricevono al prossimo avvio.",
@@ -343,7 +349,9 @@
                 },
                 "enable": "Attiva supporto CFW",
                 "enabled": "Supporto CFW attivato"
-            }
+            },
+            "imagesInUse": "In uso da: {{boxes}}.",
+            "notInLibrary": "non nella libreria"
         },
         "sectionTitle": "Firmware personalizzato",
         "loadError": "Impossibile caricare le impostazioni CFW",
@@ -371,7 +379,11 @@
             "tooManyCommands": "Troppi comandi in attesa",
             "noImage": "Nessuna immagine ricevuta",
             "tagMissing": "Tag della release mancante",
-            "cfwOff": "Il supporto CFW è disattivato (cfw.enabled)"
+            "cfwOff": "Il supporto CFW è disattivato (cfw.enabled)",
+            "notReachable": "Il box non è raggiungibile ora",
+            "noBatteryLog": "Nessun registro della batteria per questo box",
+            "noCardPackage": "Nessun pacchetto di release con albero della scheda per questa build",
+            "invalidJson": "JSON non valido"
         },
         "controls": {
             "title": "Uso con il firmware personalizzato",
@@ -1846,6 +1858,10 @@
                 "label": "Cache nella libreria",
                 "description": "Memorizza i contenuti cloud nella libreria"
             },
+            "cloud_cacheToLibraryDir": {
+                "label": "Cartella della libreria per i contenuti cloud",
+                "description": "Cartella nella libreria in cui vengono salvati i contenuti cloud"
+            },
             "cloud_markCustomTagByPass": {
                 "label": "Rileva automaticamente tag personalizzati (password)",
                 "description": "Contrassegna automaticamente i tag personalizzati in base alla password"
@@ -2360,7 +2376,17 @@
                 "invalid_group": "Questo gruppo non esiste.",
                 "invalid_name": "Il nome deve avere da 1 a 32 caratteri.",
                 "password_unchanged": "La nuova password deve essere diversa da quella attuale.",
-                "password_change_required": "Prima cambia la password."
+                "password_change_required": "Prima cambia la password.",
+                "last_admin": "Deve rimanere almeno un amministratore.",
+                "forbidden": "Non hai il permesso di farlo.",
+                "invalid_share": "Utente o diritto sconosciuto in una condivisione.",
+                "invalid_owner": "I proprietari devono essere utenti esistenti che non sono ospiti.",
+                "invalid_rights": "Diritto sconosciuto nell'elenco.",
+                "invalid_level": "Livello sconosciuto.",
+                "not_found": "Utente non trovato.",
+                "save_failed": "Impossibile salvare.",
+                "no_users": "Crea un utente prima di attivare la protezione con accesso.",
+                "https_required": "È richiesto HTTPS."
             },
             "events": {
                 "detail": "Dettaglio",
@@ -2541,7 +2567,8 @@
             "box.share": "Condividere",
             "tonie.share": "Condividere",
             "folder.share": "Condividere",
-            "users.manage": "Creare e gestire utenti"
+            "users.manage": "Creare e gestire utenti",
+            "model.create": "Aggiungere tonies personalizzati"
         },
         "save": "Salva",
         "shares": "Condiviso con",
@@ -3033,7 +3060,41 @@
                 "title": "CC3200 nel browser",
                 "wayBrowser": "Nel browser",
                 "wayCard": "Solo scheda SD",
-                "wayManual": "Riga di comando"
+                "wayManual": "Riga di comando",
+                "errors": {
+                    "adapterDisconnected": "L'adattatore seriale è scollegato.",
+                    "fatEntry": "Voce errata nella tabella dei file (indice {{index}} invece di {{expected}}).",
+                    "noAck": "Il box non ha confermato il comando 0x{{opcode}}.",
+                    "packetTimeout": "Nessuna risposta dal box (timeout).",
+                    "packetIncomplete": "La risposta del box è incompleta.",
+                    "packetChecksum": "La risposta del box ha un checksum errato.",
+                    "noBreakAck": "Nessuna risposta al segnale di break: il box è nel suo bootloader (SOP2, reset)?",
+                    "versionLength": "Le informazioni di versione dovrebbero essere di 28 byte, ricevuti: {{length}}.",
+                    "bootloaderUnsupported": "Il bootloader {{version}} non è supportato.",
+                    "nwpNoAck": "Nessuna risposta dopo l'avvio del bootloader NWP.",
+                    "noStorageList": "Il box non ha inviato l'elenco delle memorie.",
+                    "storageInfoShort": "Le informazioni sulla memoria sono troppo corte.",
+                    "noSerialFlash": "Il box non segnala alcuna flash seriale.",
+                    "noSram": "Il box non segnala alcuna SRAM.",
+                    "beyondStorage": "{{size}} byte a {{offset}} superano i {{total}} byte della memoria.",
+                    "shortRead": "Ricevuti {{length}} byte, richiesti {{size}}.",
+                    "flashReadsDiffer": "Le due letture della flash sono diverse; controlla i collegamenti e rileggi.",
+                    "noFileTable": "Nessuna tabella dei file valida sul box.",
+                    "fileInfoShort": "Le informazioni sul file sono troppo corte.",
+                    "openFailed": "Apertura di {{name}} non riuscita.",
+                    "closeFailed": "Chiusura del file non riuscita (0x{{status}}).",
+                    "fileMissing": "{{name}} non esiste sul box.",
+                    "readFailed": "Lettura di {{name}} non riuscita.",
+                    "fileReadsDiffer": "Le due letture di {{name}} sono diverse.",
+                    "nothingToWrite": "{{name}}: niente da scrivere.",
+                    "eraseFailed": "Cancellazione di {{name}} non riuscita (0x{{status}}).",
+                    "tooBig": "{{name}} è troppo grande.",
+                    "writeFailed": "Scrittura di {{name}} a {{pos}} non riuscita.",
+                    "verifyFailed": "{{name}} riletto è diverso da quanto scritto.",
+                    "certsMissing": "Mancante sul box: {{names}}",
+                    "noPreloader": "Il pacchetto non contiene alcun preloader.",
+                    "noMcuimg": "/sys/mcuimg.bin non era nel backup."
+                }
             },
             "createHostNamePatch": "Crea altUrl.custom.305.patch"
         },
@@ -3178,9 +3239,11 @@
                 "cancel": "Annulla",
                 "chipMAC": "MAC chip",
                 "chipType": "Tipo di chip",
-                "chipTypeError": "Errore nel tipo di chip - letto un tipo imprevisto. Letto {{actualname}}, previsto {{expectedname}}. Elaborazione interrotta: controlla il collegamento e riprova!",
+                "chipTypeError": "Errore nel tipo di chip - letto un tipo imprevisto. Letto {{actualtype}}, previsto {{expectedtype}}. Elaborazione interrotta: controlla il collegamento e riprova!",
                 "confirmFlashDialog": "Vuoi davvero flashare il Toniebox? Assicurati che la connessione sia stabile e non interrompere il processo!",
                 "confirmFlashDialogHint": "Per garantire il corretto funzionamento del Toniebox, l'istanza TeddyCloud specificata è assolutamente necessaria. Se TeddyCloud è offline, il Toniebox non potrà accedere a nuovi contenuti!",
+                "confirmResetDialog": "L'intera flash del Toniebox viene sovrascritta con il file scelto. Usa solo il backup proprio di questo box. Non interrompere e non scollegare.",
+                "resetOtherBox": "Il file è il backup del box {{file}}, ma è collegato il box {{box}}. Non è stato scritto nulla.",
                 "confirmFlashModal": "Flasha il Toniebox con il firmware modificato",
                 "connectESPCollapseTitle": "Aiuto: collega UART al Toniebox",
                 "connected": "Connesso",
@@ -3902,13 +3965,17 @@
             "title": "Suoni di sistema"
         },
         "tafDownload": {
-            "asOneFile": "Scarica come un unico file *.ogg",
-            "downloadCount": "Scarica {{count}} tracce come *.ogg",
-            "downloadOne": "Scarica 1 traccia come *.ogg",
+            "asOneFile": "Scarica come un unico file *.{{format}}",
+            "asZip": "come zip",
+            "downloadCount": "Scarica {{count}} tracce come *.{{format}}",
+            "downloadOne": "Scarica 1 traccia come *.{{format}}",
             "duration": "Durata",
-            "modalTitle": "Scarica tracce come *.ogg",
+            "format": "Formato",
+            "modalTitle": "Scarica tracce",
             "selectAll": "Seleziona tutte le tracce",
             "selectedCount": "{{selected}} di {{total}} selezionate",
+            "several": "Più tracce",
+            "singleFiles": "singolarmente",
             "track": "Traccia",
             "unnamedTrack": "Traccia {{number}}"
         },

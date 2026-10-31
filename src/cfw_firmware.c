@@ -422,6 +422,11 @@ static bool load_meta(const char *platform, uint32_t build, cfw_image_t *image)
     json_text(json, "githubTag", image->githubTag, sizeof(image->githubTag));
     json_text(json, "notes", image->notes, sizeof(image->notes));
     json_text(json, "platform", image->platform, sizeof(image->platform));
+    if (image->platform[0] == '\0')
+    {
+        /* written before images had a platform */
+        osStrncpy(image->platform, is_esp32(platform) ? CFW_PLATFORM_ESP32 : CFW_PLATFORM_CC3200, sizeof(image->platform) - 1);
+    }
     image->original = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "original"));
     json_text(json, "patches", image->patches, sizeof(image->patches));
     cJSON *added = cJSON_GetObjectItemCaseSensitive(json, "added");
@@ -587,8 +592,15 @@ static bool firmware_add(const char *tmpPath, uint32_t channel, const char *sour
     bool hadMeta = load_meta(image->platform, image->build, &old);
     image->channel = (channel == CFW_CHANNEL_NONE) ? (hadMeta ? old.channel : CFW_CHANNEL_BETA) : channel;
     osStrncpy(image->source, source, sizeof(image->source) - 1);
-    osStrncpy(image->githubTag, githubTag, sizeof(image->githubTag) - 1);
+    osStrncpy(image->githubTag, hadMeta && githubTag[0] == '\0' ? old.githubTag : githubTag, sizeof(image->githubTag) - 1);
     osStrncpy(image->notes, hadMeta && notes[0] == '\0' ? old.notes : notes, sizeof(image->notes) - 1);
+    if (hadMeta)
+    {
+        /* the setup page stays with the build */
+        image->page = old.page;
+        osStrncpy(image->pageLabel, old.pageLabel, sizeof(image->pageLabel) - 1);
+        osStrncpy(image->pageRequires, old.pageRequires, sizeof(image->pageRequires) - 1);
+    }
     image->added = time(NULL);
     if (image->original)
     {
@@ -938,6 +950,9 @@ uint32_t cfw_firmware_choose(settings_t *settings, const cfw_box_t *box, uint32_
    card, for example) settles the offer without a rollback */
 static void track_offer(cfw_box_t *box, uint32_t currentVersion)
 {
+    /* a check asked for over the remote control comes within a start, it is no further attempt */
+    bool requested = box->checkRequested;
+    box->checkRequested = false;
     if (box->offeredBuild == 0)
     {
         return;
@@ -945,20 +960,20 @@ static void track_offer(cfw_box_t *box, uint32_t currentVersion)
     if (currentVersion == box->offeredBuild)
     {
         box->offerStarted = true;
-        cfw_box_rolled_back(box, currentVersion, false);
+        cfw_box_rolled_back(box, currentVersion, CFW_ROLLBACK_NONE);
         return;
     }
-    if (currentVersion > box->offeredBuild)
+    if (currentVersion > box->offeredBuild && !box->offerDowngrade)
     {
         TRACE_INFO("CFW: box %s runs build %" PRIu32 ", newer than the offered build %" PRIu32 "\r\n", box->id, currentVersion, box->offeredBuild);
         box->offeredBuild = 0;
-        cfw_box_rolled_back(box, currentVersion, false);
+        cfw_box_rolled_back(box, currentVersion, CFW_ROLLBACK_NONE);
         return;
     }
-    if (box->offerStarted || ++box->offerAttempts >= CFW_OFFER_ATTEMPTS)
+    if (box->offerStarted || (!requested && ++box->offerAttempts >= CFW_OFFER_ATTEMPTS))
     {
         TRACE_WARNING("CFW: box %s is back on build %" PRIu32 ", build %" PRIu32 " counts as rolled back\r\n", box->id, currentVersion, box->offeredBuild);
-        cfw_box_rolled_back(box, box->offeredBuild, true);
+        cfw_box_rolled_back(box, box->offeredBuild, box->offerStarted ? CFW_ROLLBACK_LEFT : CFW_ROLLBACK_ATTEMPTS);
         box->offeredBuild = 0;
     }
 }
@@ -1029,13 +1044,13 @@ static bool page_request(HttpConnection *connection, const char_t *uri, settings
 }
 
 /* the server for the server block: the host the box asked for, without a vendor domain
-   and with the port of the request or the API port; false: none to give */
-static bool esp32_server(HttpConnection *connection, settings_t *settings, char *host, size_t hostSize, uint16_t *port)
+   and with the port of the request (443 when Host has none); false: none to give */
+static bool esp32_server(HttpConnection *connection, char *host, size_t hostSize, uint16_t *port)
 {
     static const char *vendor[] = {"tbs.toys", "bxcl.de", "boxine.de", "tonies.com", "tonies.de", "tonies.cloud"};
     osStrncpy(host, connection->request.host, hostSize - 1);
     host[hostSize - 1] = '\0';
-    *port = (uint16_t)settings->core.https_api_port;
+    *port = 443;
     char *colon = osStrchr(host, ':');
     if (colon != NULL)
     {
@@ -1122,7 +1137,7 @@ static void esp32_returned(settings_t *settings, uint32_t build)
     }
 }
 
-/* item 3 asked by the original firmware of an ESP32 box: the image assigned to the box, once,
+/* item 3 asked by the original firmware of an ESP32 box: the image assigned to the box, at most CFW_OFFER_ATTEMPTS times,
    with the server block holding the server the box asked; false: not handled here */
 static bool esp32_install_request(HttpConnection *connection, const char_t *uri, settings_t *settings, error_t *result)
 {
@@ -1143,10 +1158,17 @@ static bool esp32_install_request(HttpConnection *connection, const char_t *uri,
     bool delivered = box != NULL && box->esp32Delivered == build;
     if (box != NULL && delivered && box->offeredBuild == build)
     {
-        /* the original firmware asks again: the image did not stay */
-        TRACE_WARNING("CFW: ESP32 box %s runs the original firmware again, build %" PRIu32 " counts as rolled back\r\n", box->id, build);
-        cfw_box_rolled_back(box, build, true);
-        box->offeredBuild = 0;
+        /* the original firmware asks again: the download broke off, or the image did not stay */
+        if (++box->offerAttempts < CFW_OFFER_ATTEMPTS)
+        {
+            delivered = false;
+        }
+        else
+        {
+            TRACE_WARNING("CFW: ESP32 box %s runs the original firmware again, build %" PRIu32 " counts as rolled back\r\n", box->id, build);
+            cfw_box_rolled_back(box, build, CFW_ROLLBACK_ATTEMPTS);
+            box->offeredBuild = 0;
+        }
         cfw_box_save(box);
     }
     cfw_unlock();
@@ -1160,7 +1182,7 @@ static bool esp32_install_request(HttpConnection *connection, const char_t *uri,
 
     char host[65] = "";
     uint16_t port = 0;
-    if (!esp32_server(connection, settings, host, sizeof(host), &port))
+    if (!esp32_server(connection, host, sizeof(host), &port))
     {
         host[0] = '\0';
         port = 0;
@@ -1175,10 +1197,14 @@ static bool esp32_install_request(HttpConnection *connection, const char_t *uri,
     box = cfw_box_get(settings);
     if (box != NULL)
     {
+        if (box->offeredBuild != build)
+        {
+            box->offerAttempts = 0;
+        }
         box->esp32Delivered = build;
         box->offeredBuild = build;
-        box->offerAttempts = 0;
         box->offerStarted = false;
+        box->offerDowngrade = false;
         box->offerTime = time(NULL);
         cfw_box_save(box);
     }
@@ -1203,7 +1229,7 @@ bool cfw_ota_request(HttpConnection *connection, const char_t *uri, client_ctx_t
 {
     settings_t *settings = client_ctx->settings;
     /* item 7 is asked by the CFW only; without X-CFW-Build it is the original firmware's request */
-    if (fileId == 7 && settings->cfw.enabled && connection->request.cfwBuild != 0)
+    if (fileId == 7 && cfw_enabled(settings) && connection->request.cfwBuild != 0)
     {
         return page_request(connection, uri, settings, connection->request.cfwBuild, currentVersion, result);
     }
@@ -1214,13 +1240,13 @@ bool cfw_ota_request(HttpConnection *connection, const char_t *uri, client_ctx_t
     /* item 7, and the update check of the ESP32 CFW with its own build as cv, are no requests of
        an original box; they are answered here and never passed on to the vendor's cloud */
     bool ownRequest = cfwBuild != 0 && (fileId == 7 || esp32Ua);
-    if (fileId == 3 && settings->cfw.enabled && cfwBuild == 0 && esp32Ua)
+    if (fileId == 3 && cfw_enabled(settings) && cfwBuild == 0 && esp32Ua)
     {
         return esp32_install_request(connection, uri, settings, result);
     }
     /* only the CFW gets a CFW image: a request without X-CFW-Build is the original firmware's, which must not
        install one (a box fallen back to it from the card would write the CFW into its flash) */
-    if (fileId != 3 || !settings->cfw.enabled || cfwBuild == 0)
+    if (fileId != 3 || !cfw_enabled(settings) || cfwBuild == 0)
     {
         return ownRequest ? not_modified(connection, result) : false;
     }
@@ -1247,6 +1273,7 @@ bool cfw_ota_request(HttpConnection *connection, const char_t *uri, client_ctx_t
         box->offeredBuild = build;
         box->offerAttempts = 0;
         box->offerStarted = false;
+        box->offerDowngrade = build < currentVersion;
     }
     if (box != NULL && build != 0)
     {
@@ -1666,7 +1693,7 @@ static void github_task(void *param)
 void cfw_loop(void)
 {
     settings_t *settings = get_settings();
-    if (!settings->cfw.enabled || settings->cfw.firmware.github_download == 0 || settings->cfw.firmware.github_repo == NULL || settings->cfw.firmware.github_repo[0] == '\0')
+    if (!cfw_enabled(settings) || settings->cfw.firmware.github_download == 0 || settings->cfw.firmware.github_repo == NULL || settings->cfw.firmware.github_repo[0] == '\0')
     {
         return;
     }

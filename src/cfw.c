@@ -17,6 +17,10 @@
 #define CFW_SYNC_INTERVAL 30
 #define CFW_SYNC_UNANSWERED_MAX 3
 #define CFW_ONLINE_TIMEOUT 120
+/* a box with the battery report logs a measurement every two minutes; one silent for longer is gone */
+#define CFW_SILENT_MAX 600
+/* a remote command the box did not get within this many seconds is dropped */
+#define CFW_REMOTE_MAX_AGE 60
 
 #define CFW_LOG_GROUP 22
 #define CFW_FUNC_HELLO 32257
@@ -224,9 +228,14 @@ bool cfw_store_write_tag(uint64_t ruid, const uint8_t *file, size_t length)
     return written;
 }
 
+bool cfw_enabled(const settings_t *settings)
+{
+    return get_settings()->cfw.enabled && settings->cfw.enabled;
+}
+
 bool cfw_tag_is_event(settings_t *settings, uint64_t ruid)
 {
-    if (settings == NULL || !settings->cfw.enabled)
+    if (settings == NULL || !cfw_enabled(settings))
     {
         return false;
     }
@@ -405,6 +414,9 @@ static void box_load(cfw_box_t *box)
     box->capabilities = json_number(json, "capabilities");
     box->updateResult = json_number(json, "updateResult");
     box->rolledBackBuild = json_number(json, "rolledBackBuild");
+    double reason = json_number(json, "rolledBackReason");
+    box->rolledBackReason = reason >= CFW_ROLLBACK_BOX && reason <= CFW_ROLLBACK_ATTEMPTS ? (cfw_rollback_t)reason : CFW_ROLLBACK_NONE;
+    box->rolledBackTime = json_number(json, "rolledBackTime");
     box->helloTime = json_number(json, "helloTime");
     box->helloUptime = json_number(json, "helloUptime");
     box->helloSequence = json_number(json, "helloSequence");
@@ -415,6 +427,7 @@ static void box_load(cfw_box_t *box)
     box->offerTime = json_number(json, "offerTime");
     box->offerAttempts = json_number(json, "offerAttempts");
     box->offerStarted = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "offerStarted"));
+    box->offerDowngrade = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "offerDowngrade"));
     cJSON *build;
     cJSON_ArrayForEach(build, cJSON_GetObjectItemCaseSensitive(json, "rolledBack"))
     {
@@ -462,7 +475,7 @@ static void box_load(cfw_box_t *box)
 
 void cfw_box_seen_request(settings_t *settings, uint32_t build, uint32_t cfwBuild)
 {
-    if (!settings->cfw.enabled)
+    if (!cfw_enabled(settings))
     {
         return;
     }
@@ -516,7 +529,7 @@ void cfw_box_host_get(char *host, size_t size)
 void cfw_box_seen_platform(settings_t *settings)
 {
     settings_box_type ic = settings->internal.toniebox_firmware.boxIC;
-    if (!settings->cfw.enabled || (ic != BOX_ESP32 && ic != BOX_CC3200 && ic != BOX_CC3235))
+    if (!cfw_enabled(settings) || (ic != BOX_ESP32 && ic != BOX_CC3200 && ic != BOX_CC3235))
     {
         return;
     }
@@ -539,6 +552,8 @@ void cfw_box_save(cfw_box_t *box)
     cJSON_AddNumberToObject(json, "capabilities", box->capabilities);
     cJSON_AddNumberToObject(json, "updateResult", box->updateResult);
     cJSON_AddNumberToObject(json, "rolledBackBuild", box->rolledBackBuild);
+    cJSON_AddNumberToObject(json, "rolledBackReason", box->rolledBackReason);
+    cJSON_AddNumberToObject(json, "rolledBackTime", (double)box->rolledBackTime);
     cJSON_AddNumberToObject(json, "helloTime", (double)box->helloTime);
     cJSON_AddNumberToObject(json, "helloUptime", (double)box->helloUptime);
     cJSON_AddNumberToObject(json, "helloSequence", box->helloSequence);
@@ -549,6 +564,7 @@ void cfw_box_save(cfw_box_t *box)
     cJSON_AddNumberToObject(json, "offerTime", (double)box->offerTime);
     cJSON_AddNumberToObject(json, "offerAttempts", box->offerAttempts);
     cJSON_AddBoolToObject(json, "offerStarted", box->offerStarted);
+    cJSON_AddBoolToObject(json, "offerDowngrade", box->offerDowngrade);
     cJSON *rolledBack = cJSON_AddArrayToObject(json, "rolledBack");
     for (size_t i = 0; i < box->rolledBackCount; i++)
     {
@@ -630,11 +646,13 @@ bool cfw_box_is_rolled_back(const cfw_box_t *box, uint32_t build)
 /* the builds the box rolled back are not offered again (the oldest is forgotten when the list is full);
    one that runs later is taken off the list; the rollback shown for the box ends once it runs that build
    or a newer one */
-void cfw_box_rolled_back(cfw_box_t *box, uint32_t build, bool rolledBack)
+void cfw_box_rolled_back(cfw_box_t *box, uint32_t build, cfw_rollback_t reason)
 {
-    if (!rolledBack && build >= box->rolledBackBuild)
+    if (reason == CFW_ROLLBACK_NONE && build >= box->rolledBackBuild)
     {
         box->rolledBackBuild = 0;
+        box->rolledBackReason = CFW_ROLLBACK_NONE;
+        box->rolledBackTime = 0;
     }
     for (size_t i = 0; i < box->rolledBackCount; i++)
     {
@@ -643,7 +661,7 @@ void cfw_box_rolled_back(cfw_box_t *box, uint32_t build, bool rolledBack)
             box->rolledBack[i] = box->rolledBack[--box->rolledBackCount];
         }
     }
-    if (rolledBack)
+    if (reason != CFW_ROLLBACK_NONE)
     {
         if (box->rolledBackCount == CFW_ROLLED_BACK_MAX)
         {
@@ -651,7 +669,12 @@ void cfw_box_rolled_back(cfw_box_t *box, uint32_t build, bool rolledBack)
             box->rolledBackCount--;
         }
         box->rolledBack[box->rolledBackCount++] = build;
+        if (box->rolledBackBuild != build || box->rolledBackTime == 0)
+        {
+            box->rolledBackTime = time(NULL);
+        }
         box->rolledBackBuild = build;
+        box->rolledBackReason = reason;
     }
 }
 
@@ -661,7 +684,7 @@ bool cfw_box_online(const cfw_box_t *box)
 }
 
 /* the version of each settings file the box holds, as far as the server knows; in memory only, so after
-   a server restart every box gets every file once more */
+   a server restart every box gets every file once more, and forgotten at every hello (see there) */
 static bool known_get(const cfw_box_t *box, uint64_t ruid, uint32_t *timestamp)
 {
     for (size_t i = 0; i < box->knownCount; i++)
@@ -734,7 +757,7 @@ static uint32_t step_to_quarter(uint32_t step)
 
 bool cfw_is_derived_setting(settings_t *settings, const char *name)
 {
-    if (!settings->cfw.enabled || (!get_settings()->cfw.show_box_settings && !settings->cfw.force_box_settings))
+    if (!cfw_enabled(settings) || (!get_settings()->cfw.show_box_settings && !settings->cfw.force_box_settings))
     {
         return false;
     }
@@ -893,7 +916,7 @@ static bool append_file(uint8_t *buffer, size_t *length, size_t limit, uint64_t 
 size_t cfw_freshness_finalize(client_ctx_t *client_ctx, uint8_t *buffer, size_t length, size_t cap)
 {
     settings_t *settings = client_ctx->settings;
-    if (!settings->cfw.enabled)
+    if (!cfw_enabled(settings))
     {
         return length;
     }
@@ -1053,7 +1076,12 @@ static void apply_global_report(settings_t *settings, const uint8_t *body, size_
                 value = &body[pos + 1];
             }
         }
-        if (value == NULL)
+        if (value == NULL && box_settings[i].key >= 0x0B)
+        {
+            /* without the record the box keeps 10 minutes */
+            settings_set_unsigned_ovl(box_settings[i].name, 10, overlay);
+        }
+        else if (value == NULL)
         {
             reset_box_setting(box_settings[i].name, overlay);
         }
@@ -1121,13 +1149,15 @@ static void show_settings_once(void)
 }
 
 /* a new start of the box ends the hello of the last one; the sequence numbers start at 1 at
-   every start. After a server restart, records continuing the start of the hello revive it. */
+   every start (the uptime does not tell: it wraps after 49.7 days). After a server restart,
+   records continuing the start of the hello revive it. */
 static void track_start(cfw_box_t *box, const TonieRtnlLog2 *log2)
 {
-    if (log2->sequence < box->lastSequence || log2->uptime < box->lastUptime)
+    if (log2->sequence <= box->lastSequence)
     {
         box->helloValid = false;
         box->queueCount = 0;
+        box->checkRequested = false;
         box->statusValid = false;
     }
     else if (box->lastSequence == 0 && box->helloSequence != 0 && log2->sequence > box->helloSequence && log2->uptime >= box->helloUptime)
@@ -1135,7 +1165,6 @@ static void track_start(cfw_box_t *box, const TonieRtnlLog2 *log2)
         box->helloValid = true;
     }
     box->lastSequence = log2->sequence;
-    box->lastUptime = log2->uptime;
     box->lastLogTime = time(NULL);
 }
 
@@ -1196,7 +1225,7 @@ static void battery_log(const char *boxId, const uint32_t battery[5], time_t now
 void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
 {
     settings_t *settings = client_ctx->settings;
-    if (!settings->cfw.enabled)
+    if (!cfw_enabled(settings))
     {
         return;
     }
@@ -1217,12 +1246,27 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
     uint32_t battery[5];
     char boxId[sizeof(((cfw_box_t *)0)->id)];
     uint32_t build = 0;
+    cfw_battery_model_t *loadedModel = NULL;
+
+    if (log2->function_group == CFW_LOG_GROUP && log2->function == CFW_FUNC_BATTERY)
+    {
+        cfw_lock();
+        cfw_box_t *box = cfw_box_get(settings);
+        bool load = box != NULL && box->batteryModel == NULL;
+        if (load)
+        {
+            osStrcpy(boxId, box->id);
+        }
+        cfw_unlock();
+        loadedModel = load ? cfw_battery_load(boxId) : NULL;
+    }
 
     cfw_lock();
     cfw_box_t *box = cfw_box_get(settings);
     if (box == NULL)
     {
         cfw_unlock();
+        osFreeMem(loadedModel);
         return;
     }
     track_start(box, log2);
@@ -1241,14 +1285,17 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
             box->updateResult = length >= 12 ? cfw_le32(&payload[8]) : 0;
             if (length >= 16 && cfw_le32(&payload[12]) != 0)
             {
-                cfw_box_rolled_back(box, cfw_le32(&payload[12]), true);
+                cfw_box_rolled_back(box, cfw_le32(&payload[12]), CFW_ROLLBACK_BOX);
             }
-            cfw_box_rolled_back(box, box->version, false);
+            cfw_box_rolled_back(box, box->version, CFW_ROLLBACK_NONE);
             box->helloValid = true;
             box->helloUptime = log2->uptime;
             box->helloSequence = log2->sequence;
             box->helloTime = time(NULL);
             box->isCfw = true;
+            /* a lost answer, a refused file or a new SD card would never be repaired: every start gets
+               every file again, what does not fit into one answer by command 6 every 30 s */
+            box->knownCount = 0;
             cfw_box_save(box);
             hello = true;
             eventName = "cfw-hello";
@@ -1328,7 +1375,7 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
             box->batteryValid = true;
             box->batteryTime = time(NULL);
             batteryReport = settings->cfw.battery_log;
-            batteryModel = cfw_battery_update(box, log2->uptime);
+            batteryModel = cfw_battery_update(box, log2->uptime, &loadedModel);
             batteryResult = box->batteryResult;
             osMemcpy(battery, box->battery, sizeof(battery));
             cfw_box_save(box);
@@ -1344,6 +1391,7 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
         break;
     }
     cfw_unlock();
+    osFreeMem(loadedModel);
 
     if (statusReport)
     {
@@ -1377,7 +1425,7 @@ uint_t cfw_remote_send(settings_t *settings, uint8_t command, const uint8_t *arg
     uint_t status = 409;
     cfw_lock();
     cfw_box_t *box = cfw_box_get(settings);
-    if (!get_settings()->cfw.enabled || !settings->cfw.enabled || !settings->cfw.remote_control)
+    if (!cfw_enabled(settings) || !settings->cfw.remote_control)
     {
         osSnprintf(message, messageSize, "remote control is switched off for this box");
     }
@@ -1388,6 +1436,10 @@ uint_t cfw_remote_send(settings_t *settings, uint8_t command, const uint8_t *arg
     else if (!(box->capabilities & CFW_CAP_REMOTE))
     {
         osSnprintf(message, messageSize, "the firmware of the box has no remote control");
+    }
+    else if (!cfw_box_online(box))
+    {
+        osSnprintf(message, messageSize, "the box is not online");
     }
     else if (!cfw_remote_queue(box, command, args, argsLength))
     {
@@ -1409,9 +1461,11 @@ bool cfw_remote_queue(cfw_box_t *box, uint8_t command, const uint8_t *args, size
     {
         return false;
     }
+    box->checkRequested |= command == CFW_CMD_UPDATE_CHECK;
     cfw_remote_t *entry = &box->queue[box->queueCount++];
     entry->command = command;
     entry->argsLength = argsLength;
+    entry->queued = time(NULL);
     if (argsLength > 0)
     {
         osMemcpy(entry->args, args, argsLength);
@@ -1451,6 +1505,7 @@ static size_t next_frame(cfw_box_t *box, settings_t *settings, bool received, ui
     if (received && box->isCfw && !box->helloSent)
     {
         box->helloSent = true;
+        sent->command = CFW_CMD_HELLO;
         return build_frame(frame, CFW_CMD_HELLO, NULL, 0);
     }
     if (!box->helloValid)
@@ -1458,16 +1513,19 @@ static size_t next_frame(cfw_box_t *box, settings_t *settings, bool received, ui
         return 0;
     }
 
-    /* command 6 only in reply to log data, at most every 30 s and only with files due */
+    /* command 6 only in reply to log data, only with files due, and the files checked at most every 30 s */
     /* not when the last answer could take none of the due files, and not again after three that the box left
        without a freshness check: until the next freshness check */
-    if (received && settings->cfw.settings_sync && now - box->lastSyncCommand >= CFW_SYNC_INTERVAL && !box->syncStalled &&
-        box->syncUnanswered < CFW_SYNC_UNANSWERED_MAX && box_has_pending(box, settings))
+    if (received && settings->cfw.settings_sync && now - box->lastSyncCheck >= CFW_SYNC_INTERVAL && !box->syncStalled &&
+        box->syncUnanswered < CFW_SYNC_UNANSWERED_MAX)
     {
-        box->lastSyncCommand = now;
-        box->syncUnanswered++;
-        TRACE_INFO("CFW: box %s: settings files due, log-host command 6 (%" PRIu32 ")\r\n", box->id, box->syncUnanswered);
-        return build_frame(frame, CFW_CMD_SYNC, NULL, 0);
+        box->lastSyncCheck = now;
+        if (box_has_pending(box, settings))
+        {
+            box->syncUnanswered++;
+            TRACE_INFO("CFW: box %s: settings files due, log-host command 6 (%" PRIu32 ")\r\n", box->id, box->syncUnanswered);
+            return build_frame(frame, CFW_CMD_SYNC, NULL, 0);
+        }
     }
     if (remote && settings->cfw.settings_sync && box->queueCount == 0 && now != box->lastGlobalCheck)
     {
@@ -1496,6 +1554,11 @@ static size_t next_frame(cfw_box_t *box, settings_t *settings, bool received, ui
     *sent = box->queue[0];
     box->queueCount--;
     osMemmove(&box->queue[0], &box->queue[1], box->queueCount * sizeof(cfw_remote_t));
+    if (sent->command != CFW_CMD_APPLY_SETTINGS && now - sent->queued > CFW_REMOTE_MAX_AGE)
+    {
+        TRACE_INFO("CFW: box %s: remote command %u dropped, it waited too long\r\n", box->id, sent->command);
+        return 0;
+    }
     if (sent->command == CFW_CMD_APPLY_SETTINGS)
     {
         known_set(box, cfw_ruid_from_bytes(sent->args), cfw_tbs_timestamp(&sent->args[8]));
@@ -1515,7 +1578,7 @@ static void resend_later(settings_t *settings, const HttpConnection *connection,
         {
             known_forget(box, cfw_ruid_from_bytes(sent->args));
         }
-        else if (sent->command != CFW_CMD_SYNC && box->queueCount < CFW_REMOTE_QUEUE)
+        else if (sent->command != CFW_CMD_SYNC && sent->command != CFW_CMD_HELLO && box->queueCount < CFW_REMOTE_QUEUE)
         {
             osMemmove(&box->queue[1], &box->queue[0], box->queueCount * sizeof(cfw_remote_t));
             box->queue[0] = *sent;
@@ -1528,7 +1591,7 @@ static void resend_later(settings_t *settings, const HttpConnection *connection,
 void cfw_rtnl_poll(HttpConnection *connection, bool received)
 {
     settings_t *settings = connection->private.client_ctx.settings;
-    if (settings == NULL || !settings->cfw.enabled)
+    if (settings == NULL || !cfw_enabled(settings))
     {
         return;
     }
@@ -1540,8 +1603,10 @@ void cfw_rtnl_poll(HttpConnection *connection, bool received)
     cfw_box_t *box = cfw_box_get(settings);
     if (box != NULL && (box->helloValid || box->isCfw))
     {
-        if (received && box->connection != connection)
+        /* a new connection may get the slot of the last one */
+        if (received && (box->connection != connection || connection->private.newConnection))
         {
+            connection->private.newConnection = false;
             box->connection = connection;
             box->helloSent = false;
         }
@@ -1569,18 +1634,20 @@ void cfw_rtnl_poll(HttpConnection *connection, bool received)
 
 /* a box with the custom firmware keeps its log connection while it is silent: it reads commands from it
    every second but sends records only on events, and closing it after a minute without data
-   would strand every remote command until the box logs again */
+   would strand every remote command until the box logs again. A box with the battery report that
+   stopped reporting has lost its connection without closing it (battery empty, out of reach) */
 bool_t cfw_rtnl_idle(HttpConnection *connection)
 {
     cfw_rtnl_poll(connection, false);
     settings_t *settings = connection->private.client_ctx.settings;
-    if (settings == NULL || !settings->cfw.enabled)
+    if (settings == NULL || !cfw_enabled(settings))
     {
         return FALSE;
     }
     cfw_lock();
     cfw_box_t *box = cfw_box_get(settings);
-    bool_t keep = box != NULL && box->helloValid && box->connection == connection;
+    bool_t keep = box != NULL && box->helloValid && box->connection == connection &&
+                  (!(box->capabilities & CFW_CAP_BATTERY) || time(NULL) - box->lastLogTime < CFW_SILENT_MAX);
     cfw_unlock();
     return keep;
 }

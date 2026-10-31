@@ -103,7 +103,7 @@ static void play_rx(t_ha_info *ha_info, const t_ha_entity *entity, void *ctx, co
 void cfw_mqtt_add_entities(t_ha_info *ha_info, uint8_t overlay)
 {
     t_ha_entity entity;
-    if (!get_settings()->cfw.enabled)
+    if (!cfw_enabled(get_settings_id(overlay)))
     {
         return;
     }

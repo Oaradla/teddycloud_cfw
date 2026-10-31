@@ -98,6 +98,14 @@ def test_rtnl_log2_reaches_sse(box, sse):
     assert (ev["sequence"], ev["function_group"], ev["function"]) == (42, rtnl.FUGR_TAG, rtnl.FUNC_TAG_VALID_CC3200)
 
 
+def test_placed_tag_lists_the_box(box, sse):
+    box.rtnl(rtnl.frame(rtnl.tag_placed(0xE0040350AABBCCDD)))
+    sse.wait_for("rtnl-raw-log2")
+    box_id = next(b["ID"] for b in json.loads(api("GET", "/api/getBoxes")[1])["boxes"] if box.mac in b["commonName"].lower())
+    tags = json.loads(api("GET", f"/api/getTagIndex?overlay={box_id}")[1])["tags"]
+    assert next(t["boxes"] for t in tags if t["ruid"] == "500304e0ddccbbaa") == [box_id]
+
+
 def test_rtnl_batched_frames_are_all_delivered(box, sse):
     box.rtnl(*(rtnl.frame(rtnl.volume_changed(5, -20, sequence=i)) for i in range(1, 6)))
     assert [e["sequence"] for e in sse.wait_for("rtnl-raw-log2", count=5)] == [1, 2, 3, 4, 5]

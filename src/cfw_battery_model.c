@@ -295,11 +295,12 @@ bool cfw_battery_model_report(cfw_battery_model_t *model, const cfw_battery_repo
     model->lastMv = report->mv;
     model->lastUptimeMs = report->uptimeMs;
     out.learned = model->cycles > 0;
-    if (out.percent >= 0 && model->capacity)
+    uint32_t playLoad = cfw_battery_model_play_load(model, band);
+    if (out.percent >= 0 && model->capacity && playLoad)
     {
         /* playing on at this volume */
         uint64_t left = (uint64_t)model->capacity * (uint32_t)out.percent / 100;
-        out.remainingSec = (uint32_t)(left / cfw_battery_model_play_load(model, band));
+        out.remainingSec = (uint32_t)(left / playLoad);
     }
     if (result != NULL)
     {

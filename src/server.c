@@ -42,7 +42,7 @@
 #include "toniebox_state.h"       // for get_toniebox_state, get_toniebox_s...
 #include "toniebox_state_type.h"  // for toniebox_state_box_t, toniebox_sta...
 #include "toniesJson.h"           // for tonieboxes_update, tonies_deinit
-#include "tonie_audio_playlist.h" // for tap_init, tap_deinit
+#include "tonie_audio_playlist.h" // for tap_init, tap_deinit, tap_sweep_uploads_start
 #include "compiler_port.h"        // for char_t, PRIuTIME
 #include "core/net.h"             // for ipStringToAddr, IpAddr
 #include "core/socket.h"          // for _Socket
@@ -1000,6 +1000,7 @@ error_t httpServerTlsInitCallback(HttpConnection *connection, TlsContext *tlsCon
 error_t httpServerBoxTlsInitCallback(HttpConnection *connection, TlsContext *tlsContext)
 {
     settings_t *settings = get_settings(); // Overlay is currently unknown and settings in the context empty
+    connection->private.newConnection = true;
     TlsClientAuthMode authMode = TLS_CLIENT_AUTH_OPTIONAL;
     error_t error = httpServerConfigureTls(tlsContext, authMode);
 
@@ -1207,6 +1208,8 @@ void server_init(bool test)
         tonies_update();
         tonieboxes_update();
     }
+
+    tap_sweep_uploads_start();
 
     systime_t last = osGetSystemTime();
     size_t openWebConnectionsLast = 0;

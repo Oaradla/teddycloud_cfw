@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Selected tracks of a TAF are exported as a zip of Ogg files (several tracks)
-or as a single Ogg (one track), on both download routes the web UI uses:
+or as a single Ogg (one track), on both download routes the web UI uses; with format=mp3 the
+whole content or one track comes as MP3:
 
   /content/<path>?ogg=true&tracks=...           file browser
   /content/download/<ruid>?...&tracks=...       tonie card, tag with a lib:// source (#350)
@@ -114,6 +115,26 @@ class TrackExport(Base):
         url = f"/content/download/{TAG_DIR}/{TAG_FILE}?skip_header=true&ogg=true"
         self.assert_zip_of_tracks(url + "&tracks=2%2C3", 2)
         self.assert_single_ogg(url + "&tracks=2")
+
+    def assert_mp3(self, path, title=None):
+        status, content_type, body = get(path)
+        self.assertEqual(status, 200, body[:200])
+        self.assertEqual(content_type, "audio/mpeg")
+        self.assertTrue(body.startswith(b"ID3"), body[:16])
+        if title:
+            self.assertIn(title.encode(), body[:256])
+        return body
+
+    def test_mp3(self):
+        self.name_tracks(["Erster", "Zweiter", "Dritter"])
+        whole = self.assert_mp3(f"/content/{TAF}?special=library&ogg=true&format=mp3")
+        track = self.assert_mp3(f"/content/{TAF}?special=library&ogg=true&tracks=2&format=mp3", "Zweiter")
+        self.assertLess(len(track), len(whole))
+        url = f"/content/download/{TAG_DIR}/{TAG_FILE}?skip_header=true&ogg=true&format=mp3"
+        self.assert_mp3(url)
+        self.assert_mp3(url + "&tracks=3", "Dritter")
+        status, _, _ = get(f"/content/{TAF}?special=library&ogg=true&tracks=1%2C2&format=mp3")
+        self.assertEqual(status, 400)
 
     def test_content_invalid_track(self):
         for query in ("tracks=9", "tracks=0", "tracks=abc", "tracks=,"):

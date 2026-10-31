@@ -16,6 +16,7 @@
 #include "handler_api.h"
 #include "cfw.h"
 #include "web_acl.h"
+#include "http/mime.h"
 #include "handler_cloud.h"
 #include "settings.h"
 #include "stats.h"
@@ -29,6 +30,7 @@
 #include "esp32.h"
 #include "cache.h"
 #include "libraryMeta.h"
+#include "mutex_manager.h"
 #include "taf_remux.h"
 #include "tonie_audio_playlist.h"
 #include "zip_writer.h"
@@ -775,7 +777,7 @@ static toniesJson_item_t *library_tap_item(const char *tapPath, settings_t *sett
 /* the picture of a library folder: the one picture of the playlists and TAFs directly in it, when
    they have just one (an album split into chapters, or a single TAF); NULL otherwise */
 #define LIBRARY_FOLDER_PICTURE_MAX_FILES 64
-static const char *library_folder_picture(const char *dirPath, settings_t *settings)
+static const char *library_folder_picture_scan(const char *dirPath, settings_t *settings)
 {
     FsDir *dir = fsOpenDir(dirPath);
     if (dir == NULL)
@@ -830,6 +832,64 @@ static const char *library_folder_picture(const char *dirPath, settings_t *setti
     }
     fsCloseDir(dir);
     return ambiguous ? NULL : picture;
+}
+
+/* the last answers of library_folder_picture_scan, which reads every TAF of a folder: a listing shows
+   many folders and is asked for often. An answer counts while the folder is unchanged, for a minute
+   (a custom tonie may give a file another picture meanwhile) */
+#define LIBRARY_FOLDER_PICTURE_CACHE 128
+#define LIBRARY_FOLDER_PICTURE_SECONDS 60
+typedef struct
+{
+    char *path;
+    DateTime modified;
+    time_t checked;
+    char *picture;
+} library_folder_picture_t;
+static library_folder_picture_t library_folder_pictures[LIBRARY_FOLDER_PICTURE_CACHE];
+static size_t library_folder_pictures_next;
+
+/* the picture of a folder, to be freed; NULL when it has none */
+static char *library_folder_picture(const char *dirPath, settings_t *settings)
+{
+    FsFileStat stat;
+    if (fsGetFileStat(dirPath, &stat) != NO_ERROR)
+    {
+        return NULL;
+    }
+    time_t now = time(NULL);
+    char *picture = NULL;
+    bool_t found = false;
+    mutex_lock(MUTEX_LIBRARY_FOLDER_PICTURE);
+    for (size_t i = 0; i < LIBRARY_FOLDER_PICTURE_CACHE && !found; i++)
+    {
+        library_folder_picture_t *c = &library_folder_pictures[i];
+        if (c->path != NULL && !osStrcmp(c->path, dirPath) && !osMemcmp(&c->modified, &stat.modified, sizeof(stat.modified)) &&
+            now - c->checked < LIBRARY_FOLDER_PICTURE_SECONDS)
+        {
+            found = true;
+            picture = c->picture ? strdup(c->picture) : NULL;
+        }
+    }
+    mutex_unlock(MUTEX_LIBRARY_FOLDER_PICTURE);
+    if (found)
+    {
+        return picture;
+    }
+
+    const char *scanned = library_folder_picture_scan(dirPath, settings);
+    picture = scanned ? strdup(scanned) : NULL;
+    mutex_lock(MUTEX_LIBRARY_FOLDER_PICTURE);
+    library_folder_picture_t *c = &library_folder_pictures[library_folder_pictures_next];
+    library_folder_pictures_next = (library_folder_pictures_next + 1) % LIBRARY_FOLDER_PICTURE_CACHE;
+    osFreeMem(c->path);
+    osFreeMem(c->picture);
+    c->path = strdup(dirPath);
+    c->modified = stat.modified;
+    c->checked = now;
+    c->picture = picture ? strdup(picture) : NULL;
+    mutex_unlock(MUTEX_LIBRARY_FOLDER_PICTURE);
+    return picture;
 }
 
 error_t handleApiFileIndexV2(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
@@ -1039,10 +1099,11 @@ error_t handleApiFileIndexV2(HttpConnection *connection, const char_t *uri, cons
         }
         if (library && isDir && osStrcmp(entry.name, ".."))
         {
-            const char *picture = library_folder_picture(filePathAbsolute, client_ctx->settings);
+            char *picture = library_folder_picture(filePathAbsolute, client_ctx->settings);
             if (picture != NULL)
             {
                 cJSON_AddStringToObject(jsonEntry, "folderPicture", picture);
+                osFreeMem(picture);
             }
         }
         if (item != NULL)
@@ -1368,7 +1429,6 @@ error_t file_save_start(void *in_ctx, const char *name, const char *filename)
             TRACE_ERROR("'%s' is no new image file\r\n", ctx->filename);
             return ERROR_ACCESS_DENIED;
         }
-        web_acl_owned_created(ctx->image_owner, "images", filename);
     }
     if (fsFileExists(ctx->filename))
     {
@@ -1415,6 +1475,11 @@ error_t file_save_end(void *in_ctx)
         return ERROR_FAILURE;
     }
     fsCloseFile(ctx->file);
+    if (ctx->image_owner != NULL)
+    {
+        /* the picture belongs to the user once it is there */
+        web_acl_owned_created(ctx->image_owner, "images", strrchr(ctx->filename, PATH_SEPARATOR) + 1);
+    }
     osFreeMem(ctx->filename);
     ctx->file = NULL;
 
@@ -2104,24 +2169,42 @@ error_t handleApiESP32PatchFirmware(HttpConnection *connection, const char_t *ur
     return error;
 }
 
-/* library uploads remember the last playlist, the user must be allowed to use its files */
+/* a playlist written into the library: the user must be allowed to use its files */
+static bool_t library_tap_allowed(HttpConnection *connection, const char *path)
+{
+    const char *lib = get_settings()->internal.librarydirfull;
+    size_t lib_len = osStrlen(lib);
+    if (!library_name_ends(path, ".tap") || osStrncmp(path, lib, lib_len) || path[lib_len] != PATH_SEPARATOR)
+    {
+        return true;
+    }
+    char *source = custom_asprintf("lib://%s", &path[lib_len + 1]);
+    bool_t allowed = web_acl_source_allowed(connection, source);
+    osFreeMem(source);
+    return allowed;
+}
+
+/* uploads check every playlist they write */
 typedef struct
 {
     file_save_ctx base;
-    char tap[PATH_LEN];
+    HttpConnection *connection;
+    bool_t denied;
 } library_save_ctx;
 
 static error_t file_save_end_library(void *in_ctx)
 {
     library_save_ctx *ctx = (library_save_ctx *)in_ctx;
-    const char *name = ctx->base.filename;
-    size_t len = name ? osStrlen(name) : 0;
-    if (ctx->base.file && len > 4 && !osStrcasecmp(&name[len - 4], ".tap"))
+    char *path = ctx->base.file ? strdup(ctx->base.filename) : NULL;
+    error_t error = file_save_end(in_ctx);
+    if (error == NO_ERROR && !library_tap_allowed(ctx->connection, path))
     {
-        osStrncpy(ctx->tap, name, sizeof(ctx->tap) - 1);
-        ctx->tap[sizeof(ctx->tap) - 1] = '\0';
+        fsDeleteFile(path);
+        ctx->denied = true;
+        error = ERROR_ACCESS_DENIED;
     }
-    return file_save_end(in_ctx);
+    osFreeMem(path);
+    return error;
 }
 
 error_t handleApiFileUpload(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
@@ -2173,6 +2256,7 @@ error_t handleApiFileUpload(HttpConnection *connection, const char_t *uri, const
 
         ctx.base.root_path = pathAbsolute;
         ctx.base.overlay = overlay;
+        ctx.connection = connection;
         char special[16];
         /* users add pictures of custom tonies there: new image files only, it is served as it is */
         if (!web_acl_is_admin(connection) && queryGet(queryString, "special", special, sizeof(special)) && !osStrcmp(special, "custom_img"))
@@ -2191,19 +2275,10 @@ error_t handleApiFileUpload(HttpConnection *connection, const char_t *uri, const
             break;
         }
 
-        const char *lib = get_settings()->internal.librarydirfull;
-        size_t lib_len = osStrlen(lib);
-        if (statusCode == 200 && ctx.tap[0] != '\0' && !osStrncmp(ctx.tap, lib, lib_len) && ctx.tap[lib_len] == PATH_SEPARATOR)
+        if (ctx.denied)
         {
-            char *source = custom_asprintf("lib://%s", &ctx.tap[lib_len + 1]);
-            bool_t allowed = web_acl_source_allowed(connection, source);
-            osFreeMem(source);
-            if (!allowed)
-            {
-                fsDeleteFile(ctx.tap);
-                osFreeMem(pathAbsolute);
-                return web_acl_forbidden(connection);
-            }
+            osFreeMem(pathAbsolute);
+            return web_acl_forbidden(connection);
         }
     }
 
@@ -2313,7 +2388,79 @@ static error_t create_taf_temp_dir(const settings_t *settings, char *out_path, s
     return ERROR_FAILURE;
 }
 
-static error_t handleApiContentTrackExport(HttpConnection *connection, const char *file_path, const char *tracks_param, settings_t *settings)
+static void tonie_album_name(const toniesJson_item_t *item, char *out, size_t out_len)
+{
+    out[0] = '\0';
+    if (item == NULL || item->series == NULL)
+    {
+        return;
+    }
+    if (item->episodes != NULL && item->episodes[0] != '\0')
+    {
+        osSnprintf(out, out_len, "%s - %s", item->series, item->episodes);
+    }
+    else
+    {
+        osSnprintf(out, out_len, "%s", item->series);
+    }
+}
+
+/* streams the Ogg file as MP3, encoded by ffmpeg while it is sent */
+static error_t sendOggAsMp3(HttpConnection *connection, const char *ogg_path, size_t skip_bytes, const char *title, const char *album, int track)
+{
+    char q_path[TAF_TEMP_FILE_LEN * 2];
+    char q_title[512];
+    char q_album[512];
+    char command[sizeof(q_path) + sizeof(q_title) + sizeof(q_album) + 256];
+
+    if (!osShellQuote(q_path, sizeof(q_path), ogg_path) || !osShellQuote(q_title, sizeof(q_title), title) || !osShellQuote(q_album, sizeof(q_album), album))
+    {
+        return ERROR_INVALID_PARAMETER;
+    }
+    osSnprintf(command, sizeof(command),
+               "ffmpeg -v error -skip_initial_bytes %" PRIuSIZE " -f ogg -i %s -map_metadata -1 -metadata title=%s -metadata album=%s -metadata track=%d -c:a libmp3lame -q:a 4 -f mp3 -",
+               skip_bytes, q_path, q_title, q_album, track);
+
+    /* not connection->buffer: httpWriteHeader() formats the header in there */
+    uint8_t *buffer = osAllocMem(HTTP_SERVER_BUFFER_SIZE);
+    if (buffer == NULL)
+    {
+        return ERROR_OUT_OF_MEMORY;
+    }
+    FILE *pipe = osPopen(command, "r");
+    if (pipe == NULL)
+    {
+        osFreeMem(buffer);
+        return ERROR_FAILURE;
+    }
+    size_t n = fread(buffer, 1, HTTP_SERVER_BUFFER_SIZE, pipe);
+    if (n == 0)
+    {
+        osFreeMem(buffer);
+        osPclose(pipe);
+        TRACE_ERROR("ffmpeg could not encode %s as MP3\r\n", ogg_path);
+        return httpSendErrorResponse(connection, 500, "MP3 encoding failed (is ffmpeg installed?)");
+    }
+
+    httpInitResponseHeader(connection);
+    connection->response.contentType = "audio/mpeg";
+    connection->response.chunkedEncoding = TRUE;
+    error_t error = httpWriteHeader(connection);
+    while (error == NO_ERROR && n > 0)
+    {
+        error = httpWriteStream(connection, buffer, n);
+        n = fread(buffer, 1, HTTP_SERVER_BUFFER_SIZE, pipe);
+    }
+    osFreeMem(buffer);
+    osPclose(pipe);
+    if (error == NO_ERROR)
+    {
+        error = httpCloseStream(connection);
+    }
+    return error;
+}
+
+static error_t handleApiContentTrackExport(HttpConnection *connection, const char *file_path, const char *tracks_param, settings_t *settings, bool_t mp3)
 {
     FILE *src = NULL;
     tonie_info_t *tafInfo = NULL;
@@ -2325,6 +2472,7 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
     char titles[TAF_TRACK_EXPORT_MAX][96];
     char *out_paths[TAF_TRACK_EXPORT_MAX];
     char *entry_names[TAF_TRACK_EXPORT_MAX];
+    char album[200];
     size_t page_count = 0;
     size_t track_count = 0;
     uint64_t num_bytes = 0;
@@ -2371,6 +2519,7 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
     osMemcpy(pages, tafInfo->tafHeader->track_page_nums, page_count * sizeof(uint32_t));
     num_bytes = tafInfo->tafHeader->num_bytes;
     tonieItem = tonies_byAudioId(tafInfo->tafHeader->audio_id);
+    tonie_album_name(tonieItem, album, sizeof(album));
     if (tonieItem != NULL)
     {
         size_t name_count = tonieItem->tracks_count;
@@ -2411,7 +2560,7 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
             p = end;
         }
     }
-    if (track_count == 0)
+    if (track_count == 0 || (mp3 && track_count > 1))
     {
         fclose(src);
         return httpSendErrorResponse(connection, 400, "Invalid track selection");
@@ -2499,7 +2648,11 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
         goto cleanup;
     }
 
-    if (track_count == 1)
+    if (mp3)
+    {
+        error = sendOggAsMp3(connection, out_paths[0], 0, titles[track_numbers[0] - 1], album, track_numbers[0]);
+    }
+    else if (track_count == 1)
     {
         /* the uri only selects the content type by extension */
         error = httpSendResponseUnsafe(connection, "track.ogg", out_paths[0]);
@@ -2535,6 +2688,30 @@ cleanup:
     return error;
 }
 
+static error_t handleApiContentMp3(HttpConnection *connection, const char *file_path, settings_t *settings)
+{
+    char album[200] = "";
+    const char *episode = "";
+    tonie_info_t *tafInfo = getTonieInfo(file_path, false, settings);
+
+    if (tafInfo == NULL || !tafInfo->valid || tafInfo->tafHeader == NULL)
+    {
+        if (tafInfo != NULL)
+        {
+            freeTonieInfo(tafInfo);
+        }
+        return ERROR_NOT_FOUND;
+    }
+    toniesJson_item_t *tonieItem = tonies_byAudioId(tafInfo->tafHeader->audio_id);
+    freeTonieInfo(tafInfo);
+    if (tonieItem != NULL)
+    {
+        tonie_album_name(tonieItem, album, sizeof(album));
+        episode = tonieItem->episodes ? tonieItem->episodes : "";
+    }
+    return sendOggAsMp3(connection, file_path, 4096, episode[0] ? episode : album, album, 1);
+}
+
 error_t handleApiContent(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
     TRACE_DEBUG("Query: '%s'\r\n", queryString);
@@ -2563,12 +2740,22 @@ error_t handleApiContent(HttpConnection *connection, const char_t *uri, const ch
 
     TRACE_DEBUG("Request for '%s', ogg: %s\r\n", file_path, ogg);
 
+    char format[8] = "";
+    queryGet(queryString, "format", format, sizeof(format));
+    bool_t mp3 = osStrcmp(format, "mp3") == 0;
+
     char tracks_param[TAF_TRACK_EXPORT_MAX * 4];
     if (queryGet(queryString, "tracks", tracks_param, sizeof(tracks_param)))
     {
-        error_t export_error = handleApiContentTrackExport(connection, file_path, tracks_param, client_ctx->settings);
+        error_t export_error = handleApiContentTrackExport(connection, file_path, tracks_param, client_ctx->settings, mp3);
         free(file_path);
         return export_error;
+    }
+    if (mp3)
+    {
+        error_t mp3_error = handleApiContentMp3(connection, file_path, client_ctx->settings);
+        free(file_path);
+        return mp3_error;
     }
 
     error_t error;
@@ -2633,7 +2820,11 @@ error_t handleApiContent(HttpConnection *connection, const char_t *uri, const ch
         connection->response.statusCode = 200;
         connection->response.contentLength = length;
     }
-    connection->response.contentType = "audio/ogg";
+    /* content files are mostly extensionless TAFs; anything else gets the type of its extension, as browsers
+       (iOS) name a download after its type (#556) */
+    const char *name = strrchr(uri, '/') ? strrchr(uri, '/') + 1 : uri;
+    const char *ext = strrchr(name, '.');
+    connection->response.contentType = (ext == NULL || !osStrcasecmp(ext, ".taf")) ? "audio/ogg" : mimeGetType(name);
     connection->response.chunkedEncoding = FALSE;
 
     error = httpWriteHeader(connection);
@@ -2734,8 +2925,13 @@ error_t handleApiContentDownload(HttpConnection *connection, const char_t *uri, 
     char *path = (char *)uri + 1 + 7 + 1 + 8 + 1;
     char *pathAbsolute = custom_asprintf("%s%c%s", rootPath, PATH_SEPARATOR, path);
 
+    char format[8] = "";
+    queryGet(queryString, "format", format, sizeof(format));
+    bool_t mp3 = osStrcmp(format, "mp3") == 0;
+
     char tracks_param[TAF_TRACK_EXPORT_MAX * 4];
-    if (queryGet(queryString, "tracks", tracks_param, sizeof(tracks_param)))
+    bool_t tracks = queryGet(queryString, "tracks", tracks_param, sizeof(tracks_param));
+    if (tracks || mp3)
     {
         /* export from the TAF the tag points to (e.g. a lib:// source), same as /content/ does */
         tonie_info_t *tonieInfo = getTonieInfo(pathAbsolute, false, client_ctx->settings);
@@ -2745,7 +2941,8 @@ error_t handleApiContentDownload(HttpConnection *connection, const char_t *uri, 
         if (tonieInfo->exists && tonieInfo->valid &&
             (tonieInfo->json._source_type == CT_SOURCE_NONE || tonieInfo->json._source_type == CT_SOURCE_TAF || tonieInfo->json._source_type == CT_SOURCE_TAP_CACHED))
         {
-            export_error = handleApiContentTrackExport(connection, tonieInfo->contentPath, tracks_param, client_ctx->settings);
+            export_error = tracks ? handleApiContentTrackExport(connection, tonieInfo->contentPath, tracks_param, client_ctx->settings, mp3)
+                                  : handleApiContentMp3(connection, tonieInfo->contentPath, client_ctx->settings);
         }
         else
         {
@@ -3165,19 +3362,27 @@ error_t handleApiTafUpload(HttpConnection *connection, const char_t *uri, const 
         }
 
         multipart_cbr_t cbr;
-        file_save_ctx ctx;
+        library_save_ctx ctx;
 
         osMemset(&cbr, 0x00, sizeof(cbr));
         osMemset(&ctx, 0x00, sizeof(ctx));
 
         cbr.multipart_start = &file_save_start;
         cbr.multipart_add = &file_save_add;
-        cbr.multipart_end = &file_save_end;
+        cbr.multipart_end = &file_save_end_library;
 
-        ctx.root_path = pathAbsolute;
-        ctx.overlay = overlay;
+        ctx.base.root_path = pathAbsolute;
+        ctx.base.overlay = overlay;
+        ctx.connection = connection;
 
-        switch (multipart_handle(connection, &cbr, &ctx))
+        error_t error = multipart_handle(connection, &cbr, &ctx);
+        if (ctx.denied)
+        {
+            osFreeMem(filename);
+            osFreeMem(pathAbsolute);
+            return web_acl_forbidden(connection);
+        }
+        switch (error)
         {
         case NO_ERROR:
             if (!isValidTaf(filename, true))
@@ -3408,6 +3613,13 @@ error_t handleApiFileDelete(HttpConnection *connection, const char_t *uri, const
     if (err == NO_ERROR && !isDir)
     {
         tap_deleted(pathAbsolute);
+        if (!osStrcmp(rootPath, settings_get_string_ovl("internal.librarydirfull", overlay)))
+        {
+            /* its content json (<file>.json beside it) goes too */
+            char *json = custom_asprintf("%s.json", pathAbsolute);
+            fsDeleteFile(json);
+            osFreeMem(json);
+        }
     }
     if (isDir && special_is_library(queryString) && !fsDirExists(pathAbsolute))
     {
@@ -3472,7 +3684,9 @@ error_t handleApiFileMove(HttpConnection *connection, const char_t *uri, const c
 
     sanitizePath(target, false);
     /* a moved folder takes the folders below along: all of them must be writable */
-    if (!web_acl_folder_tree_writable(connection, source) || !web_acl_folder_allowed(connection, target, "folder.write"))
+    /* a file renamed to a playlist would skip the check of its files */
+    bool_t new_tap = library_name_ends(target, ".tap") && !library_name_ends(source, ".tap") && !web_acl_is_admin(connection);
+    if (new_tap || !web_acl_folder_tree_writable(connection, source) || !web_acl_folder_allowed(connection, target, "folder.write"))
     {
         osFreeMem(sourceAbsolute);
         return web_acl_forbidden(connection);
@@ -5033,6 +5247,15 @@ static void libraryMoved(const char *fromAbsolute, const char *toAbsolute, setti
         return;
     }
     tap_moved(fromAbsolute, toAbsolute);
+    /* a file's content json (<file>.json beside it) goes along */
+    char *fromJson = custom_asprintf("%s.json", fromAbsolute);
+    char *toJson = custom_asprintf("%s.json", toAbsolute);
+    if (fsFileExists(fromJson) && !fsFileExists(toJson))
+    {
+        fsMoveFile(fromJson, toJson, false);
+    }
+    osFreeMem(fromJson);
+    osFreeMem(toJson);
     char *from = custom_asprintf("lib://%s", &fromAbsolute[libLen + 1]);
     char *to = custom_asprintf("lib://%s", &toAbsolute[libLen + 1]);
     updateContentJsonSourcesForMove(from, to, settings);
@@ -5672,6 +5895,7 @@ error_t getTagInfoJson(char ruid[17], cJSON *jsonTarget, client_ctx_t *client_ct
             cJSON_AddBoolToObject(jsonEntry, "hasCloudAuth", tafInfo->json._has_cloud_auth && !tafInfo->json.cloud_override);
             cJSON_AddBoolToObject(jsonEntry, "hide", tafInfo->json.hide);
             cJSON_AddBoolToObject(jsonEntry, "claimed", tafInfo->json.claimed);
+            cJSON_AddItemToObject(jsonEntry, "boxes", tafInfo->json.boxes ? cJSON_Duplicate(tafInfo->json.boxes, true) : cJSON_CreateArray());
             cJSON_AddStringToObject(jsonEntry, "source", tafInfo->json.source);
 
             cJSON *tracksArray = cJSON_AddArrayToObject(jsonEntry, "trackSeconds");

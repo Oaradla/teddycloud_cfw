@@ -13,14 +13,34 @@
 
 static OsMutex tap_build_mutex;
 
+/* playlists waiting for tap_build_later() */
+#define TAP_BUILD_PENDING_MAX 8
+static OsMutex tap_pending_mutex;
+static char *tap_pending[TAP_BUILD_PENDING_MAX];
+
+/* playlists whose TAF could not be put together: they are encoded instead until they or their files change */
+static struct
+{
+    char *taf;
+    time_t inputs;
+} tap_failed[TAP_BUILD_PENDING_MAX];
+static size_t tap_failed_next;
+
 void tap_init(void)
 {
     osCreateMutex(&tap_build_mutex);
+    osCreateMutex(&tap_pending_mutex);
 }
 
 void tap_deinit(void)
 {
+    for (size_t i = 0; i < TAP_BUILD_PENDING_MAX; i++)
+    {
+        osFreeMem(tap_failed[i].taf);
+        tap_failed[i].taf = NULL;
+    }
     osDeleteMutex(&tap_build_mutex);
+    osDeleteMutex(&tap_pending_mutex);
 }
 
 /* Upper bound on playlist entries, matching the fixed source array the
@@ -41,11 +61,26 @@ bool_t is_valid_tap_file(char *filename)
     return false;
 }
 
+/* a part ".." of the path; names like "Part 1...mp3" are fine */
+static bool_t tap_path_has_parent(const char *path)
+{
+    for (const char *p = path; (p = osStrstr(p, "..")) != NULL; p += 2)
+    {
+        bool_t start = p == path || p[-1] == '/' || p[-1] == '\\';
+        bool_t end = p[2] == '\0' || p[2] == '/' || p[2] == '\\';
+        if (start && end)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 /* playlists only point into the library (and, for files, to tonie content); the
    path must not leave it */
 static bool_t tap_path_allowed(const char *path, bool_t output)
 {
-    if (path == NULL || osStrstr(path, "..") != NULL)
+    if (path == NULL || tap_path_has_parent(path))
     {
         return false;
     }
@@ -73,28 +108,32 @@ static time_t file_mtime(const char *path)
     return convertDateToUnixTime(&stat.modified);
 }
 
-/* the playlist TAF is current when it is no older than the playlist and every file in it */
-static bool_t tap_is_current(const char *filename, tonie_audio_playlist_t *tap)
+/* the newest change of the files of a playlist, at least the given time */
+static time_t tap_newest(time_t newest, tonie_audio_playlist_t *tap)
 {
-    time_t built = file_mtime(tap->_filepath_resolved);
-    if (built == 0 || file_mtime(filename) > built)
-    {
-        return false;
-    }
     for (size_t i = 0; i < tap->filesCount; i++)
     {
-        if (file_mtime(tap->files[i]._filepath_resolved) > built)
+        time_t changed = file_mtime(tap->files[i]._filepath_resolved);
+        if (changed > newest)
         {
-            return false;
+            newest = changed;
         }
     }
-    return true;
+    return newest;
+}
+
+/* the playlist TAF is current when it is no older than the playlist and every file in it */
+static bool_t tap_is_current(tonie_audio_playlist_t *tap)
+{
+    time_t built = file_mtime(tap->_filepath_resolved);
+    return built != 0 && built >= tap->_inputs;
 }
 
 error_t tap_load(char *filename, tonie_audio_playlist_t *tap)
 {
     size_t fileSize = 0;
     error_t error = fsGetFileSize(filename, (uint32_t *)(&fileSize));
+    time_t changed = file_mtime(filename);
     tap->_cached = false;
     tap->_valid = false;
 
@@ -203,7 +242,8 @@ error_t tap_load(char *filename, tonie_audio_playlist_t *tap)
     cJSON_Delete(tapJson);
     if (error == NO_ERROR)
     {
-        if (isValidTaf(tap->_filepath_resolved, get_settings()->core.tap_taf_validation) && tap_is_current(filename, tap))
+        tap->_inputs = tap_newest(changed, tap);
+        if (isValidTaf(tap->_filepath_resolved, get_settings()->core.tap_taf_validation) && tap_is_current(tap))
         {
             tap->_cached = true;
         }
@@ -340,9 +380,53 @@ void tap_generate_task(void *param)
     osDeleteTask((OsTaskId) OS_SELF_TASK_ID);
 }
 
+/* the slot of a playlist in tap_failed, -1 when it is not there; under tap_pending_mutex */
+static int tap_failed_slot(tonie_audio_playlist_t *tap)
+{
+    for (int i = 0; i < TAP_BUILD_PENDING_MAX; i++)
+    {
+        if (tap_failed[i].taf != NULL && !osStrcmp(tap_failed[i].taf, tap->_filepath_resolved))
+        {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static void tap_build_failed(tonie_audio_playlist_t *tap, bool_t failed)
+{
+    osAcquireMutex(&tap_pending_mutex);
+    int slot = tap_failed_slot(tap);
+    if (failed && slot < 0)
+    {
+        slot = tap_failed_next;
+        tap_failed_next = (tap_failed_next + 1) % TAP_BUILD_PENDING_MAX;
+        osFreeMem(tap_failed[slot].taf);
+        tap_failed[slot].taf = strdup(tap->_filepath_resolved);
+    }
+    if (failed)
+    {
+        tap_failed[slot].inputs = tap->_inputs;
+    }
+    else if (slot >= 0)
+    {
+        osFreeMem(tap_failed[slot].taf);
+        tap_failed[slot].taf = NULL;
+    }
+    osReleaseMutex(&tap_pending_mutex);
+}
+
 bool_t tap_can_remux(tonie_audio_playlist_t *tap)
 {
     if (tap->filesCount == 0)
+    {
+        return false;
+    }
+    osAcquireMutex(&tap_pending_mutex);
+    int slot = tap_failed_slot(tap);
+    bool_t failed = slot >= 0 && tap_failed[slot].inputs == tap->_inputs;
+    osReleaseMutex(&tap_pending_mutex);
+    if (failed)
     {
         return false;
     }
@@ -367,7 +451,7 @@ error_t tap_build(char *filename, tonie_audio_playlist_t *tap)
 
     /* another request may have built it meanwhile */
     error_t error = NO_ERROR;
-    if (!(isValidTaf(tap->_filepath_resolved, false) && tap_is_current(filename, tap)))
+    if (!(isValidTaf(tap->_filepath_resolved, false) && tap_is_current(tap)))
     {
         const char **sources = osAllocMem(tap->filesCount * sizeof(char *));
         char *tmp_taf = custom_asprintf("%s.build", tap->_filepath_resolved);
@@ -393,6 +477,11 @@ error_t tap_build(char *filename, tonie_audio_playlist_t *tap)
 
             TRACE_INFO("Build TAP %s (%" PRIuSIZE " files) into %s\r\n", filename, tap->filesCount, tap->_filepath_resolved);
             error = taf_remux_concat(sources, tap->filesCount, tmp_taf, audio_id);
+            if (error == NO_ERROR && tap_newest(file_mtime(filename), tap) != tap->_inputs)
+            {
+                /* changed since it was loaded: the result would count as current, the next request builds again */
+                error = ERROR_ABORTED;
+            }
             if (error == NO_ERROR)
             {
                 error = fsMoveFile(tmp_taf, tap->_filepath_resolved, true);
@@ -401,6 +490,10 @@ error_t tap_build(char *filename, tonie_audio_playlist_t *tap)
             {
                 TRACE_ERROR("Could not build TAP %s: %s\r\n", filename, error2text(error));
                 fsDeleteFile(tmp_taf);
+            }
+            if (error != ERROR_ABORTED)
+            {
+                tap_build_failed(tap, error != NO_ERROR);
             }
             osFreeMem(sources);
         }
@@ -413,6 +506,66 @@ error_t tap_build(char *filename, tonie_audio_playlist_t *tap)
 
     osReleaseMutex(&tap_build_mutex);
     return error;
+}
+
+static void tap_build_task(void *param)
+{
+    char *path = param;
+    tonie_audio_playlist_t tap;
+    osMemset(&tap, 0, sizeof(tap));
+    if (tap_load(path, &tap) == NO_ERROR && tap._valid && !tap._cached && tap_can_remux(&tap))
+    {
+        tap_build(path, &tap);
+    }
+    tap_free(&tap);
+
+    osAcquireMutex(&tap_pending_mutex);
+    for (size_t i = 0; i < TAP_BUILD_PENDING_MAX; i++)
+    {
+        if (tap_pending[i] == path)
+        {
+            tap_pending[i] = NULL;
+        }
+    }
+    osReleaseMutex(&tap_pending_mutex);
+    osFreeMem(path);
+    osDeleteTask((OsTaskId)OS_SELF_TASK_ID);
+}
+
+void tap_build_later(const char *filename)
+{
+    char *path = NULL;
+    osAcquireMutex(&tap_pending_mutex);
+    bool_t pending = false;
+    int slot = -1;
+    for (int i = 0; i < TAP_BUILD_PENDING_MAX; i++)
+    {
+        pending |= tap_pending[i] != NULL && !osStrcmp(tap_pending[i], filename);
+        if (tap_pending[i] == NULL && slot < 0)
+        {
+            slot = i;
+        }
+    }
+    if (!pending && slot >= 0)
+    {
+        path = strdup(filename);
+        tap_pending[slot] = path;
+    }
+    osReleaseMutex(&tap_pending_mutex);
+    if (path == NULL)
+    {
+        return; /* already waiting, or too many: a later request asks again */
+    }
+
+    OsTaskParameters params = OS_TASK_DEFAULT_PARAMS;
+    params.stackSize = 32 * 1024;
+    if (osCreateTask("TAP build", tap_build_task, path, &params) == OS_INVALID_TASK_ID)
+    {
+        osAcquireMutex(&tap_pending_mutex);
+        tap_pending[slot] = NULL;
+        osReleaseMutex(&tap_pending_mutex);
+        osFreeMem(path);
+    }
 }
 
 static bool_t tap_has_suffix(const char *path, const char *suffix)
@@ -569,4 +722,59 @@ void tap_moved(const char *fromPath, const char *toPath)
     osReleaseMutex(&tap_build_mutex);
     osFreeMem(from);
     osFreeMem(to);
+}
+
+/* scratch folders of the web UI's parts upload ("_upload-*") that a closed tab left behind */
+#define TAP_UPLOAD_PREFIX "_upload-"
+#define TAP_UPLOAD_MAX_AGE (24 * 60 * 60)
+#define TAP_UPLOAD_SWEEP_INTERVAL (6 * 60 * 60)
+
+static void tap_sweep_uploads(const char *path, time_t now)
+{
+    FsDir *dir = fsOpenDir(path);
+    if (dir == NULL)
+    {
+        return;
+    }
+    FsDirEntry entry;
+    while (fsReadDir(dir, &entry) == NO_ERROR)
+    {
+        if (!(entry.attributes & FS_FILE_ATTR_DIRECTORY) || !osStrcmp(entry.name, ".") || !osStrcmp(entry.name, ".."))
+        {
+            continue;
+        }
+        char *child = custom_asprintf("%s%c%s", path, PATH_SEPARATOR, entry.name);
+        if (osStrncmp(entry.name, TAP_UPLOAD_PREFIX, osStrlen(TAP_UPLOAD_PREFIX)) != 0)
+        {
+            tap_sweep_uploads(child, now);
+        }
+        else if (now - (time_t)convertDateToUnixTime(&entry.modified) > TAP_UPLOAD_MAX_AGE)
+        {
+            TRACE_INFO("Removing the stale upload folder %s\r\n", child);
+            fsRemoveTree(child);
+        }
+        osFreeMem(child);
+    }
+    fsCloseDir(dir);
+}
+
+static void tap_sweep_task(void *param)
+{
+    (void)param;
+    while (!settings_get_bool("internal.exit"))
+    {
+        tap_sweep_uploads(settings_get_string("internal.librarydirfull"), time(NULL));
+        for (int i = 0; i < TAP_UPLOAD_SWEEP_INTERVAL && !settings_get_bool("internal.exit"); i++)
+        {
+            osDelayTask(1000);
+        }
+    }
+    osDeleteTask((OsTaskId)OS_SELF_TASK_ID);
+}
+
+void tap_sweep_uploads_start(void)
+{
+    OsTaskParameters params = OS_TASK_DEFAULT_PARAMS;
+    params.stackSize = 32 * 1024;
+    osCreateTask("Upload sweep", tap_sweep_task, NULL, &params);
 }

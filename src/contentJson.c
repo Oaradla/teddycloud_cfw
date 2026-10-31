@@ -85,6 +85,10 @@ error_t load_content_json(const char *content_path, contentJson_t *content_json,
                 content_json->tonie_model = jsonGetString(contentJson, "tonie_model");
                 content_json->hide = jsonGetBool(contentJson, "hide");
                 content_json->claimed = jsonGetBool(contentJson, "claimed");
+                if (cJSON_IsArray(cJSON_GetObjectItem(contentJson, "boxes")))
+                {
+                    content_json->boxes = cJSON_DetachItemFromObject(contentJson, "boxes");
+                }
 
                 // TODO: use checkCustomTonie to validate
                 // TODO validate rUID
@@ -113,10 +117,20 @@ error_t load_content_json(const char *content_path, contentJson_t *content_json,
                         error_t tap_error = looks_like_tap ? tap_load(content_json->_source_resolved, &content_json->_tap) : ERROR_INVALID_FILE;
                         if (tap_error == NO_ERROR && content_json->_tap._valid)
                         {
-                            /* TAF files are put together right away; anything else gets encoded while the box plays it */
+                            /* TAF files are put together without encoding; anything else gets encoded while the box
+                               plays it. A changed playlist plays its last TAF until the new one is ready, so that no
+                               request waits for it; only a playlist without any TAF yet is put together right away */
                             if (!content_json->_tap._cached && tap_can_remux(&content_json->_tap))
                             {
-                                tap_build(content_json->_source_resolved, &content_json->_tap);
+                                if (isValidTaf(content_json->_tap._filepath_resolved, false))
+                                {
+                                    content_json->_tap._cached = true;
+                                    tap_build_later(content_json->_source_resolved);
+                                }
+                                else
+                                {
+                                    tap_build(content_json->_source_resolved, &content_json->_tap);
+                                }
                             }
                             if (content_json->_tap._cached)
                             {
@@ -213,6 +227,7 @@ error_t save_content_json(const char *json_path, contentJson_t *content_json)
     jsonAddStringToObject(contentJson, "tonie_model", content_json->tonie_model);
     cJSON_AddBoolToObject(contentJson, "hide", content_json->hide);
     cJSON_AddBoolToObject(contentJson, "claimed", content_json->claimed);
+    cJSON_AddItemToObject(contentJson, "boxes", content_json->boxes ? cJSON_Duplicate(content_json->boxes, true) : cJSON_CreateArray());
     cJSON_AddNumberToObject(contentJson, "_version", CONTENT_JSON_VERSION);
 
     char *jsonRaw = cJSON_Print(contentJson);
@@ -311,6 +326,26 @@ void free_content_json(contentJson_t *content_json)
         osFreeMem(content_json->_source_resolved);
         content_json->_source_resolved = NULL;
     }
+    cJSON_Delete(content_json->boxes);
+    content_json->boxes = NULL;
     tap_free(&content_json->_tap);
     content_json->cloud_auth_len = 0;
+}
+
+void content_json_add_box(contentJson_t *content_json, const char *box_id)
+{
+    if (content_json->boxes == NULL)
+    {
+        content_json->boxes = cJSON_CreateArray();
+    }
+    cJSON *item;
+    cJSON_ArrayForEach(item, content_json->boxes)
+    {
+        if (cJSON_IsString(item) && osStrcmp(item->valuestring, box_id) == 0)
+        {
+            return;
+        }
+    }
+    cJSON_AddItemToArray(content_json->boxes, cJSON_CreateString(box_id));
+    content_json->_updated = true;
 }

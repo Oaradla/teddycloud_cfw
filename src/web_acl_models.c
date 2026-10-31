@@ -307,21 +307,42 @@ bool web_acl_image_allowed(HttpConnection *connection, const char *name)
     {
         return web_acl_system_allowed(connection, "model.create");
     }
+    if (!web_acl_system_allowed(connection, "model.create"))
+    {
+        return false;
+    }
+    /* every custom tonie showing it may be changed: the ones not owned are looked up in one go */
     cJSON *root = load_models();
+    cJSON *others = cJSON_CreateArray();
     int shown = 0;
-    bool ok = true;
     const cJSON *entry = NULL;
     cJSON_ArrayForEach(entry, root)
     {
         const char *pic = picture_of(entry);
-        if (ok && pic != NULL && !osStrcmp(pic, name))
+        if (pic != NULL && !osStrcmp(pic, name))
         {
             shown++;
-            ok = web_acl_model_allowed(connection, entry);
+            if (!owned_model(connection, entry))
+            {
+                cJSON_AddItemReferenceToArray(others, (cJSON *)entry);
+            }
         }
     }
+    bool ok = shown > 0;
+    int n = cJSON_GetArraySize(others);
+    if (ok && n > 0)
+    {
+        tally_t t = {connection, others, NULL, 0};
+        tally(&t);
+        for (int i = 0; i < n; i++)
+        {
+            ok = ok && t.uses[i] > 0 && !t.blocked[i];
+        }
+        tally_free(&t);
+    }
+    cJSON_Delete(others);
     cJSON_Delete(root);
-    return ok && shown > 0;
+    return ok;
 }
 
 cJSON *web_acl_model_orphans(HttpConnection *connection, const char *const *paths, size_t count)

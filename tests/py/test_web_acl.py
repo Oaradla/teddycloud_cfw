@@ -9,6 +9,7 @@ shares of boxes, tonies and library folders, admin restrictions, user management
 import http.client
 import json
 import os
+import shutil
 import sys
 import urllib.parse
 from pathlib import Path
@@ -193,6 +194,40 @@ def test_admin_restricts_a_user(world):
     assert alice.post("/api/auth/users/update", {"username": "alice", "deny": ""})[0] == 403
     assert admin.post("/api/auth/users/update", {"username": "alice", "deny": ""})[0] == 200
     assert alice.post("/api/settings/set/toniebox.max_vol_spk?overlay=%s" % b1, "2", raw=True)[0] == 200
+    # a refused change changes nothing
+    level = alice.get("/api/acl/mine")[1]["level"]
+    assert admin.post("/api/auth/users/update", {"username": "alice", "level": "guest", "deny": "no.such.right"})[0] == 400
+    assert alice.get("/api/acl/mine")[1]["level"] == level
+
+
+def test_box_owner_can_not_pick_the_cache_folder(world):
+    # matches the box setting cloud.cacheToLibrary by its prefix, but names a library folder
+    assert Client("alice").post("/api/settings/set/cloud.cacheToLibraryDir?overlay=%s" % world["box1"], "private/bob", raw=True)[0] == 403
+
+
+def test_library_file_is_no_tonie_download(world):
+    # a library path that reads like a ruid is still a library file
+    assert Client("bob").get("/content/download/0123ABCD/89ABCDEF/x.taf?special=library")[0] == 403
+
+
+def test_deleted_user_takes_the_shares_of_the_private_folder(world):
+    admin = Client("admin")
+    assert admin.post("/api/auth/users/create", {"username": "leaver", "password": "Leaver-Password-1"})[0] == 200
+    (Path(SANDBOX) / "data" / "library" / "private/leaver/photos").mkdir(parents=True, exist_ok=True)
+    assert admin.post("/api/acl/set", {"type": "folder", "id": "private/leaver/photos", "shares": {"bob": "folder.read"}})[0] == 200
+    listing = "/api/fileIndexV2?special=library&path=private/leaver/photos"
+    assert Client("bob").get(listing)[0] == 200
+    assert admin.post("/api/auth/users/delete", {"username": "leaver"})[0] == 200
+    assert Client("bob").get(listing)[0] == 403
+
+
+def test_release_package_is_for_admins(world):
+    assert Client("bob").get("/api/cfw/firmware/package?build=1")[0] == 403
+
+
+def test_users_list_is_not_for_guests(world):
+    assert Client("gast").get("/api/acl/users")[0] == 403
+    assert Client("bob").get("/api/acl/users")[0] == 200
 
 
 def test_tag_belongs_to_the_box_owner_after_first_placement(world):
@@ -212,6 +247,8 @@ def test_tag_belongs_to_the_box_owner_after_first_placement(world):
     assert alice.post("/api/acl/set", {"type": "tonie", "id": RUID_A, "shares": {"bob": "tonie.view"}})[0] == 200
     assert bob.get("/api/getTagInfo?ruid=%s" % RUID_A)[0] != 403
     assert bob.post("/content/json/set/%s" % RUID_A, "live=true", raw=True)[0] == 403
+    assert bob.get("/api/acl/mine")[1]["tonies"][RUID_A.upper()]["rights"] == ["tonie.view"]
+    assert "tonie.edit" in alice.get("/api/acl/mine")[1]["tonies"][RUID_A.upper()]["rights"]
     # admin assigns an unplaced tag by hand
     assert Client("admin").post("/api/acl/set", {"type": "tonie", "id": RUID_B, "owners": ["bob"]})[0] == 200
     assert alice.get("/api/getTagInfo?ruid=%s" % RUID_B)[0] == 403
@@ -249,28 +286,38 @@ def test_playlist_files_must_be_readable(world):
     # splitting needs read on the TAF and write next to it
     assert alice.post("/api/tafSplit?special=library", "path=private/bob/secret.taf", raw=True)[0] == 403
 
-    # an uploaded playlist pointing to other users' files is not kept
-    boundary = "----acltap"
-    body = (
-        f'--{boundary}\r\nContent-Disposition: form-data; name="up.tap"; filename="up.tap"\r\n'
-        "Content-Type: application/json\r\n\r\n" + playlist("lib://private/bob/secret.taf") + f"\r\n--{boundary}--\r\n"
-    ).encode()
-    conn = http.client.HTTPConnection(BASE.hostname, BASE.port, timeout=20)
-    try:
-        conn.request(
-            "POST",
-            "/api/fileUpload?special=library&path=private/alice",
-            body=body,
-            headers={
-                "Sec-Fetch-Site": "same-origin",
-                "Cookie": "tc_web_session=" + alice.cookie,
-                "Content-Type": f"multipart/form-data; boundary={boundary}",
-            },
-        )
-        assert conn.getresponse().status == 403
-    finally:
-        conn.close()
-    assert not (lib / "private/alice/up.tap").exists()
+    # an uploaded playlist pointing to other users' files is not kept, whichever part it is in
+    def upload(url, *names):
+        boundary = "----acltap"
+        body = "".join(
+            f'--{boundary}\r\nContent-Disposition: form-data; name="{n}"; filename="{n}"\r\n'
+            "Content-Type: application/json\r\n\r\n" + playlist("lib://private/bob/secret.taf" if n.startswith("up") else "lib://private/alice/x.taf") + "\r\n"
+            for n in names
+        ) + f"--{boundary}--\r\n"
+        conn = http.client.HTTPConnection(BASE.hostname, BASE.port, timeout=20)
+        try:
+            conn.request(
+                "POST",
+                url,
+                body=body.encode(),
+                headers={
+                    "Sec-Fetch-Site": "same-origin",
+                    "Cookie": "tc_web_session=" + alice.cookie,
+                    "Content-Type": f"multipart/form-data; boundary={boundary}",
+                },
+            )
+            return conn.getresponse().status
+        finally:
+            conn.close()
+
+    assert upload("/api/fileUpload?special=library&path=private/alice", "up.tap") == 403
+    assert upload("/api/fileUpload?special=library&path=private/alice", "up2.tap", "ok.tap") == 403
+    assert upload("/api/tafUpload?special=library&path=private/alice&name=x.taf", "up3.tap") == 403
+    for name in ("up.tap", "up2.tap", "up3.tap"):
+        assert not (lib / "private/alice" / name).exists()
+    # nor does a file become a playlist by its name
+    (lib / "private/alice/list.txt").write_text(playlist("lib://private/bob/secret.taf"))
+    assert alice.post("/api/fileMove?special=library", "source=private/alice/list.txt&target=private/alice/list.tap", raw=True)[0] == 403
 
 
 def test_library_folders(world):
@@ -299,6 +346,16 @@ def test_library_folders(world):
     assert status == 200 and {f["name"] for f in data["files"] if f["name"] != ".."} == {"forbob"}
     assert bob.post("/api/fileDelete?special=library", "private/alice/forbob", raw=True)[0] == 403
     assert bob.post("/api/dirDelete?special=library", "private/alice", raw=True)[0] == 403
+    assert bob.get("/api/acl/mine")[1]["folders"]["private/alice/forbob"]["rights"] == ["folder.read"]
+
+
+def test_mine_has_the_effective_tonie_rights(world):
+    admin = Client("admin")
+    assert "tonie.edit" in Client("bob").get("/api/acl/mine")[1]["unassignedRights"]["tonie"]
+    assert admin.post("/api/auth/users/update", {"username": "bob", "deny": "tonie.edit"})[0] == 200
+    rights = Client("bob").get("/api/acl/mine")[1]["unassignedRights"]["tonie"]
+    assert "tonie.view" in rights and "tonie.edit" not in rights
+    assert admin.post("/api/auth/users/update", {"username": "bob", "deny": ""})[0] == 200
 
 
 def test_user_management_by_level(world):
@@ -629,3 +686,29 @@ def test_deleting_a_folder_with_its_content_drops_its_owners(world):
     # a new folder of the same name is open again, not alice's
     assert bob.post("/api/dirCreate?special=library", "gone", raw=True)[0] == 200
     assert bob.post("/api/dirCreate?special=library", "gone/sub", raw=True)[0] == 200
+
+
+def test_entries_of_gone_folders_are_dropped(world):
+    admin, alice = Client("admin"), Client("alice")
+
+    def owned():
+        return {f["id"] for f in admin.get("/api/acl/owned?user=bob")[1]["folders"]}
+
+    for name in ("deleted", "renamed", "outside"):
+        assert alice.post("/api/dirCreate?special=library", "private/alice/" + name, raw=True)[0] == 200
+        assert admin.post("/api/acl/set", {"type": "folder", "id": "private/alice/" + name, "owners": ["alice"], "shares": {"bob": "folder.read"}})[0] == 200
+    # an empty folder deleted as a file, a rename, a folder removed outside teddyCloud
+    assert alice.post("/api/fileDelete?special=library", "private/alice/deleted", raw=True)[0] == 200
+    assert alice.post("/api/fileMove?special=library", "source=private/alice/renamed&target=private/alice/renamed2", raw=True)[0] == 200
+    (Path(SANDBOX) / "data" / "library" / "private/alice/outside").rmdir()
+    gone = {"private/alice/deleted", "private/alice/renamed", "private/alice/outside"}
+    assert not owned() & gone and "private/alice/renamed2" in owned()
+    assert not set(Client("bob").get("/api/acl/mine")[1]["folders"]) & gone
+
+
+def test_owned_lists_only_existing_folders(world):
+    by = Path(SANDBOX) / "data" / "library" / "by"
+    if by.is_dir():
+        shutil.rmtree(by)
+    folders = [f["id"] for f in Client("admin").get("/api/acl/owned?user=bob")[1]["folders"]]
+    assert "by" not in folders and "" in folders

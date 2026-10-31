@@ -704,6 +704,10 @@ bool_t taf_remux_possible(const char *path)
 
 error_t taf_remux_concat(const char *const *sources, size_t count, const char *target, uint32_t audio_id)
 {
+    if (count == 0)
+    {
+        return ERROR_INVALID_PARAMETER;
+    }
     taf_writer_t *w = osAllocMem(sizeof(taf_writer_t));
     taf_reader_t *r = osAllocMem(sizeof(taf_reader_t));
     if (w == NULL || r == NULL)
@@ -714,7 +718,7 @@ error_t taf_remux_concat(const char *const *sources, size_t count, const char *t
     }
 
     uint8_t first_channels = 0;
-    error_t error = count > 0 ? writer_open(w, target, audio_id) : ERROR_INVALID_PARAMETER;
+    error_t error = writer_open(w, target, audio_id);
     for (size_t k = 0; k < count && error == NO_ERROR; k++)
     {
         error = reader_open(r, sources[k]);
@@ -726,7 +730,7 @@ error_t taf_remux_concat(const char *const *sources, size_t count, const char *t
 
         taf_page_t page;
         uint8_t channels;
-        uint16_t preskip;
+        uint16_t preskip = 0;
         error = reader_opus_header(r, k == 0 ? w : NULL, &channels, &preskip);
         if (error == NO_ERROR && k == 0)
         {
@@ -738,8 +742,9 @@ error_t taf_remux_concat(const char *const *sources, size_t count, const char *t
             error = ERROR_INVALID_FILE;
         }
 
-        /* the granule positions of this source continue after the previous ones */
-        int64_t offset = w->granule;
+        /* the granule positions of this source continue after the previous ones; its pre-skip counted
+           only at the start of the stream, the decoder drops it there alone */
+        int64_t offset = k == 0 ? w->granule : w->granule - preskip;
         bool_t first_audio = true;
         while (error == NO_ERROR)
         {

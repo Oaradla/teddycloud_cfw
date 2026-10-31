@@ -23,6 +23,8 @@ typedef struct
     size_t filesCount;
     bool_t _cached;
     bool_t _valid;
+    /* the newest change of the playlist and its files when it was loaded */
+    time_t _inputs;
 } tonie_audio_playlist_t;
 
 typedef struct
@@ -39,10 +41,13 @@ error_t tap_save(char *filename, tonie_audio_playlist_t *tap);
 void tap_free(tonie_audio_playlist_t *tap);
 error_t tap_generate_taf(tonie_audio_playlist_t *tap, size_t *current_source, bool_t *active, bool_t force);
 void tap_generate_task(void *param);
-/* true when all files are TAFs, so the playlist TAF can be put together without encoding */
+/* true when all files are TAFs, so the playlist TAF can be put together without encoding, and that did not
+   fail before for the same playlist and files */
 bool_t tap_can_remux(tonie_audio_playlist_t *tap);
 /* puts the playlist TAF together from TAF files unless it is current */
 error_t tap_build(char *filename, tonie_audio_playlist_t *tap);
+/* tap_build in a task of its own, for requests that must not wait */
+void tap_build_later(const char *filename);
 /* true for "<name>.tap.taf" with "<name>.tap" next to it: the TAF that playlist builds */
 bool_t tap_is_built_taf(const char *path);
 /* after a playlist was deleted: removes the TAF it built next to itself */
@@ -50,3 +55,5 @@ void tap_deleted(const char *tapPath);
 /* after a file or folder in the library was moved or renamed: a playlist takes its TAF next to it
    along, and all playlists name the new paths */
 void tap_moved(const char *fromPath, const char *toPath);
+/* removes the web UI's parts upload folders left behind for a day, now and every few hours */
+void tap_sweep_uploads_start(void);

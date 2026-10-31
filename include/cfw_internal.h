@@ -13,6 +13,7 @@
 #define CFW_CAP_EVENT_TAGS (1 << 3)
 #define CFW_CAP_EVENT_TAG_EXT (1 << 9)
 #define CFW_CAP_REMOTE (1 << 10)
+#define CFW_CAP_BATTERY (1 << 11)
 #define CFW_CAP_IDLE_TIMES (1 << 12)
 
 #define CFW_CMD_SYNC 6
@@ -30,6 +31,15 @@
 #define CFW_REMOTE_QUEUE 8
 #define CFW_REMOTE_ARGS_MAX 300
 #define CFW_ROLLED_BACK_MAX 8
+
+/* why a build counts as rolled back */
+typedef enum
+{
+    CFW_ROLLBACK_NONE,     /* not rolled back: the build runs, or a newer one */
+    CFW_ROLLBACK_BOX,      /* the box reported it: the bootloader went back after a failed trial start */
+    CFW_ROLLBACK_LEFT,     /* it ran, then the box started an older build again */
+    CFW_ROLLBACK_ATTEMPTS, /* it was offered several times and never ran */
+} cfw_rollback_t;
 
 /* build number of the original firmware; builds of the CFW are newer. Only a plausibility check
    of uploaded images: which firmware a box runs is told by X-CFW-Build */
@@ -54,6 +64,7 @@ typedef struct
     uint8_t command;
     uint8_t args[CFW_REMOTE_ARGS_MAX];
     size_t argsLength;
+    time_t queued;
 } cfw_remote_t;
 
 typedef struct
@@ -67,6 +78,8 @@ typedef struct
     uint32_t capabilities;
     uint32_t updateResult;
     uint32_t rolledBackBuild;
+    cfw_rollback_t rolledBackReason;
+    time_t rolledBackTime;
     uint32_t rolledBack[CFW_ROLLED_BACK_MAX];
     size_t rolledBackCount;
     time_t helloTime;
@@ -80,6 +93,7 @@ typedef struct
     time_t offerTime;
     uint32_t offerAttempts;
     bool offerStarted;
+    bool offerDowngrade; /* the offered build is older than the one the box ran then */
     uint8_t globalBody[32];
     size_t globalLength;
     uint32_t globalTimestamp;
@@ -87,18 +101,18 @@ typedef struct
 
     /* the current start of the box */
     bool helloValid;
-    uint64_t lastUptime;
     uint32_t lastSequence;
     time_t lastLogTime;
     cfw_known_t *known;
     size_t knownCount;
     size_t knownSize;
-    time_t lastSyncCommand;
+    time_t lastSyncCheck;
     uint32_t syncUnanswered; /* command 6 sent without a freshness check since */
     bool syncStalled;        /* files are due but none fitted into the last answer */
     time_t lastGlobalCheck;
     const HttpConnection *connection;
-    bool helloSent; /* command 63 on that connection */
+    bool helloSent;      /* command 63 on that connection */
+    bool checkRequested; /* command 73 queued: the next update check is no start of the box */
     cfw_remote_t queue[CFW_REMOTE_QUEUE];
     size_t queueCount;
     bool statusValid;
@@ -159,7 +173,7 @@ cfw_box_t *cfw_box_get(settings_t *settings);
 void cfw_box_save(cfw_box_t *box);
 bool cfw_box_online(const cfw_box_t *box);
 bool cfw_remote_queue(cfw_box_t *box, uint8_t command, const uint8_t *args, size_t argsLength);
-void cfw_box_rolled_back(cfw_box_t *box, uint32_t build, bool rolledBack);
+void cfw_box_rolled_back(cfw_box_t *box, uint32_t build, cfw_rollback_t reason);
 bool cfw_box_is_rolled_back(const cfw_box_t *box, uint32_t build);
 
 /* the library under <firmwaredir>/cfw/: changes of it (import, page, metadata, delete) under this lock; the
@@ -170,8 +184,11 @@ void cfw_library_unlock(void);
 
 uint32_t cfw_temp_number(void);
 uint8_t *cfw_read_file(const char *path, size_t maxLength, size_t *length);
-/* under the lock: feeds the last battery report to the box's model; a copy of the model to save */
-cfw_battery_model_t *cfw_battery_update(cfw_box_t *box, uint64_t uptimeMs);
+/* outside the lock: the box's model from its file, else learned from its battery log (which can be long) */
+cfw_battery_model_t *cfw_battery_load(const char *boxId);
+/* under the lock: feeds the last battery report to the box's model, taking the loaded one when the box has
+   none yet; a copy of the model to save */
+cfw_battery_model_t *cfw_battery_update(cfw_box_t *box, uint64_t uptimeMs, cfw_battery_model_t **loaded);
 /* outside the lock: writes the copy and frees it */
 void cfw_battery_save(const char *boxId, cfw_battery_model_t *model);
 void cfw_battery_free(cfw_box_t *box);

@@ -64,10 +64,9 @@ def frame(rpc):
     return struct.pack(">I", len(rpc)) + rpc
 
 
-# The server reads the start of a connection line by line before it detects the binary stream: a first
-# TLS record without a line feed waits for more data. The first record of a CC3200 on 3.1.0 BF2 has none
-# (see test_first_rtnl_record_without_line_feed). Ending a frame in field9 = CRLF makes
-# sure the tests are not held up by it.
+# Older servers read the start of a connection line by line before they detect the binary stream: a first
+# TLS record without a line feed waits for more data (see test_first_rtnl_record_without_line_feed).
+# Ending a frame in field9 = CRLF keeps the tests working with them.
 CRLF = b"\r\n"
 
 

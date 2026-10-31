@@ -1177,6 +1177,10 @@ void setLastRuid(char ruid[17], settings_t *settings)
         tonieInfo->json.hide = false;
         tonieInfo->json._updated = true;
     }
+    if (get_settings() != settings)
+    {
+        content_json_add_box(&tonieInfo->json, settings->internal.overlayUniqueId);
+    }
     saveTonieInfo(tonieInfo, true);
     freeTonieInfo(tonieInfo);
 }
@@ -1192,14 +1196,19 @@ char *getLibraryCachePath(settings_t *settings, uint32_t audioId, bool_t shortPa
     {
         libraryPathPrefix = settings->internal.librarydirfull;
     }
-    char *libraryByPath = custom_asprintf("%s/by", libraryPathPrefix);
-    char *libraryBasePath = custom_asprintf("%s/audioID", libraryByPath);
+    const char *cacheDir = settings->cloud.cacheToLibraryDir;
+    if (osStrstr(cacheDir, "..") != NULL)
+    {
+        TRACE_WARNING(">> Ignoring cloud.cacheToLibraryDir '%s', it must stay inside the library\r\n", cacheDir);
+        cacheDir = "";
+    }
+    char *libraryBasePath = cacheDir[0] ? custom_asprintf("%s/%s", libraryPathPrefix, cacheDir) : custom_asprintf("%s", libraryPathPrefix);
     char *libraryPath = custom_asprintf("%s/%" PRIu32 ".taf", libraryBasePath, audioId);
 
-    fsCreateDir(libraryByPath);
-    fsCreateDir(libraryBasePath);
-
-    osFreeMem(libraryByPath);
+    if (!shortPath)
+    {
+        fsCreateDirEx(libraryBasePath, true);
+    }
     osFreeMem(libraryBasePath);
 
     return libraryPath;

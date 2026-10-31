@@ -165,6 +165,57 @@ static bool save_unlocked(void)
     return ok;
 }
 
+/* the base entries stay even without their folder */
+static bool folder_entry_base(const char *key)
+{
+    return !osStrcmp(key, "") || !osStrcmp(key, "by") || !osStrcmp(key, PRIVATE_DIR) ||
+           (!osStrncmp(key, PRIVATE_DIR "/", 8) && strchr(key + 8, '/') == NULL);
+}
+
+static bool folder_exists(const char *key)
+{
+    char *dir = custom_asprintf("%s%c%s", settings_get_string("internal.librarydirfull"), PATH_SEPARATOR, key);
+    bool exists = dir != NULL && fsDirExists(dir);
+    osFreeMem(dir);
+    return exists;
+}
+
+/* entries of folders deleted or renamed outside teddyCloud, or before it kept them in step, go */
+static void drop_stale_folders_unlocked(void)
+{
+    const char *lib = settings_get_string("internal.librarydirfull");
+    if (lib == NULL || lib[0] == '\0' || !fsDirExists(lib))
+    {
+        return;
+    }
+    cJSON *folders = cJSON_GetObjectItemCaseSensitive(acl, "folders");
+    bool changed = false;
+    cJSON *entry = folders ? folders->child : NULL;
+    while (entry != NULL)
+    {
+        cJSON *next = entry->next;
+        if (entry->string != NULL && !folder_entry_base(entry->string))
+        {
+            char *dir = custom_asprintf("%s%c%s", lib, PATH_SEPARATOR, entry->string);
+            if (dir != NULL && !fsDirExists(dir))
+            {
+                TRACE_INFO("Permissions: dropping the entry of the missing folder %s\r\n", entry->string);
+                cJSON_Delete(cJSON_DetachItemViaPointer(folders, entry));
+                changed = true;
+            }
+            if (dir != NULL)
+            {
+                osFreeMem(dir);
+            }
+        }
+        entry = next;
+    }
+    if (changed)
+    {
+        save_unlocked();
+    }
+}
+
 static void load_unlocked(void)
 {
     if (acl != NULL)
@@ -176,9 +227,9 @@ static void load_unlocked(void)
     if (path != NULL)
     {
         uint32_t size = 0;
-        if (fsGetFileSize(path, &size) == NO_ERROR && size > 0 && size <= ACL_FILE_MAX)
+        if (fsGetFileSize(path, &size) == NO_ERROR && size > 0)
         {
-            char *buf = osAllocMem(size + 1);
+            char *buf = size <= ACL_FILE_MAX ? osAllocMem(size + 1) : NULL;
             FsFile *file = buf ? fsOpenFile(path, FS_FILE_MODE_READ) : NULL;
             size_t n = 0;
             if (file != NULL)
@@ -192,8 +243,11 @@ static void load_unlocked(void)
             }
             if (acl == NULL || !cJSON_IsObject(acl))
             {
-                /* keep the broken file for the admin; start from the defaults (owners then see nothing) */
-                TRACE_ERROR("Permissions: %s is invalid, using defaults\r\n", path);
+                /* keep the broken file for the admin, the next save would overwrite it; start from the defaults (owners then see nothing) */
+                char *broken = custom_asprintf("%s.broken", path);
+                fsRenameFile(path, broken);
+                TRACE_ERROR("Permissions: %s is invalid, moved to %s, using defaults\r\n", path, broken);
+                osFreeMem(broken);
                 if (acl)
                 {
                     cJSON_Delete(acl);
@@ -208,6 +262,7 @@ static void load_unlocked(void)
         osFreeMem(path);
     }
     apply_defaults_unlocked();
+    drop_stale_folders_unlocked();
 }
 
 void web_acl_init(void)
@@ -601,10 +656,7 @@ static void folder_entries_change(const char *src, const char *dst)
     {
         cJSON *next = entry->next;
         const char *key = entry->string;
-        /* the base entries stay */
-        bool protected_entry = !osStrcmp(key, "by") || !osStrcmp(key, PRIVATE_DIR) ||
-                               (!osStrncmp(key, PRIVATE_DIR "/", 8) && strchr(key + 8, '/') == NULL);
-        if (key != NULL && acl_path_within(key, from) && !protected_entry)
+        if (key != NULL && acl_path_within(key, from) && !folder_entry_base(key))
         {
             cJSON *item = cJSON_DetachItemViaPointer(folders, entry);
             if (dst != NULL)
@@ -732,7 +784,7 @@ static const char *const system_settings[] = {
     "core.allowNewBox", "core.boxCertAuth", "core.host_url", "core.allowOrigin", "core.allowPrivateFetch",
     "core.http_client_timeout", "toniebox.api_access", "toniebox.certPin", "cloud.remote_", "encode.", "log.", "rtnl.",
     "pcap.", "mqtt", "hass.", "web_auth.", "frontend.web_auth", "security_mit.", "debug.", "tonie_json.",
-    "cfw.firmware", "cfw.update", NULL};
+    "cfw.firmware", "cfw.update", "cloud.cacheToLibraryDir", NULL};
 
 /* global settings every user may read (the web UI needs them) */
 static const char *const public_settings[] = {
@@ -936,7 +988,8 @@ static const route_policy_t policies[] = {
     {"/api/cfw/status", P_BOX, "box.view", 0, NULL},
     {"/api/cfw/battery", P_BOX, "box.view", 0, NULL},
     {"/api/cfw/deliver", P_BOX, "box.update", 0, NULL},
-    /* the builds a box can get; changing them is the admin's */
+    /* the builds a box can get; changing them and the setup in the browser are the admin's */
+    {"/api/cfw/firmware/package", P_ADMIN, NULL, 0, NULL},
     {"/api/cfw/firmware", P_ALLOW, NULL, 0, "GET"},
     {"/api/", P_ADMIN, NULL, 0, NULL},
     {"/content/download/", P_TONIE_PATH, "tonie.view", 18, NULL},
@@ -1084,8 +1137,13 @@ bool web_acl_request_allowed(HttpConnection *connection, const char_t *uri, cons
             return web_acl_folder_visible(connection, norm, slash + 1);
         }
         case P_TONIE_PATH:
-            return osStrlen(uri) > (size_t)r->arg && ruid_from_path(uri + r->arg, ruid) && overlay_ok(connection, query) &&
-                   web_acl_tonie_allowed(connection, ruid, r->right);
+        {
+            /* with special the path is a file of that folder, not a tonie */
+            char special[32];
+            query_value(query, "special", special, sizeof(special));
+            return special[0] == '\0' && osStrlen(uri) > (size_t)r->arg && ruid_from_path(uri + r->arg, ruid) &&
+                   overlay_ok(connection, query) && web_acl_tonie_allowed(connection, ruid, r->right);
+        }
         case P_CONTENT:
         {
             const char *rest = uri + osStrlen("/content/");
@@ -1137,6 +1195,23 @@ bool web_acl_request_allowed(HttpConnection *connection, const char_t *uri, cons
 
 /* ---------- life cycle of users and tags ---------- */
 
+/* the private folder of a user and every entry below it */
+static void drop_private_folder_unlocked(cJSON *folders, const char *username)
+{
+    char rel[PATH_MAX_LEN];
+    size_t len = osSnprintf(rel, sizeof(rel), PRIVATE_DIR "/%s", username);
+    cJSON *entry = folders ? folders->child : NULL;
+    while (entry != NULL)
+    {
+        cJSON *next = entry->next;
+        if (entry->string && !osStrncmp(entry->string, rel, len) && (entry->string[len] == '\0' || entry->string[len] == '/'))
+        {
+            cJSON_Delete(cJSON_DetachItemViaPointer(folders, entry));
+        }
+        entry = next;
+    }
+}
+
 void web_acl_user_created(const char *username)
 {
     char rel[PATH_MAX_LEN];
@@ -1144,7 +1219,7 @@ void web_acl_user_created(const char *username)
     lock_acl();
     cJSON *folders = obj(acl, "folders");
     /* also replaces what is left of an earlier user with the same name */
-    cJSON_DeleteItemFromObjectCaseSensitive(folders, rel);
+    drop_private_folder_unlocked(folders, username);
     cJSON_AddItemToObject(folders, rel, folder_entry(username, NULL));
     save_unlocked();
     unlock_acl();
@@ -1207,6 +1282,8 @@ void web_acl_user_deleted(const char *username)
     remove_user_from(cJSON_GetObjectItemCaseSensitive(acl, "boxes"), username);
     remove_user_from(cJSON_GetObjectItemCaseSensitive(acl, "tonies"), username);
     remove_user_from(cJSON_GetObjectItemCaseSensitive(acl, "folders"), username);
+    /* shares below it would stay readable for others, without an owner */
+    drop_private_folder_unlocked(cJSON_GetObjectItemCaseSensitive(acl, "folders"), username);
     remove_user_from(cJSON_GetObjectItemCaseSensitive(acl, "models"), username);
     remove_user_from(cJSON_GetObjectItemCaseSensitive(acl, "images"), username);
     save_unlocked();
@@ -1312,6 +1389,18 @@ static void add_allowed(HttpConnection *connection, cJSON *array, const char *sc
         if (ok)
         {
             cJSON_AddItemToArray(array, cJSON_CreateString(r->name));
+        }
+    }
+}
+
+/* the rights of a scope the user has on the entry (NULL: nobody owns the resource) */
+static void add_decided_unlocked(cJSON *array, const acl_user_t *u, cJSON *entry, const char *unassigned, const char *scope)
+{
+    for (size_t i = 0; i < acl_rights_count; i++)
+    {
+        if (!osStrcmp(acl_rights[i].scope, scope) && decide_unlocked(u, entry, unassigned, acl_rights[i].name))
+        {
+            cJSON_AddItemToArray(array, cJSON_CreateString(acl_rights[i].name));
         }
     }
 }
@@ -1455,17 +1544,21 @@ error_t handleApiAclMine(HttpConnection *connection, const char_t *uri, const ch
         unlock_acl();
         cJSON_AddItemToObject(boxes, id, b);
     }
-    /* tonies with an entry the user is part of; tonies without owner are open as "unassigned" says */
+    /* tonies and folders with an entry the user is part of, with the rights there; tonies without owner have unassignedRights */
     cJSON *tonies = cJSON_AddObjectToObject(json, "tonies");
     cJSON *folders = cJSON_AddObjectToObject(json, "folders");
     cJSON *models = cJSON_AddObjectToObject(json, "models");
     cJSON *images = cJSON_AddObjectToObject(json, "images");
     lock_acl();
+    drop_stale_folders_unlocked();
+    const char *unassigned_tonie = str(cJSON_GetObjectItemCaseSensitive(acl, "unassigned"), "tonie", default_unassigned_tonie);
     struct
     {
         const char *key;
         cJSON *out;
-    } maps[] = {{"tonies", tonies}, {"folders", folders}, {"models", models}, {"images", images}};
+        const char *scope;
+        const char *unassigned;
+    } maps[] = {{"tonies", tonies, "tonie", unassigned_tonie}, {"folders", folders, "folder", NULL}, {"models", models, NULL, NULL}, {"images", images, NULL, NULL}};
     for (int m = 0; m < 4; m++)
     {
         cJSON *entry = NULL;
@@ -1476,11 +1569,20 @@ error_t handleApiAclMine(HttpConnection *connection, const char_t *uri, const ch
             if (!u.known || u.level == ACL_LEVEL_ADMIN || in_owners(entry, u.user) || shared_rights(entry, u.user, granted, sizeof(granted)))
             {
                 cJSON *mine = u.known ? entry_for_user(entry, &u, &owner) : cJSON_CreateObject();
+                if (u.known && maps[m].scope != NULL)
+                {
+                    add_decided_unlocked(cJSON_AddArrayToObject(mine, "rights"), &u, entry, maps[m].unassigned, maps[m].scope);
+                }
                 cJSON_AddItemToObject(maps[m].out, entry->string, mine);
             }
         }
     }
     cJSON_AddItemToObject(json, "unassigned", cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(acl, "unassigned"), true));
+    cJSON *unassigned_rights = cJSON_AddObjectToObject(json, "unassignedRights");
+    if (u.known)
+    {
+        add_decided_unlocked(cJSON_AddArrayToObject(unassigned_rights, "tonie"), &u, NULL, unassigned_tonie, "tonie");
+    }
     unlock_acl();
     return send_json(connection, 200, json);
 }
@@ -2061,6 +2163,11 @@ error_t handleApiAclUsers(HttpConnection *connection, const char_t *uri, const c
     (void)uri;
     (void)queryString;
     (void)client_ctx;
+    acl_user_t u = current_user(connection);
+    if (u.known && u.level == ACL_LEVEL_GUEST)
+    {
+        return send_error(connection, 403, "forbidden", "Only owners and admins see the users");
+    }
     char(*names)[33] = osAllocMem(128 * 33);
     if (names == NULL)
     {
@@ -2097,6 +2204,7 @@ error_t handleApiAclOwned(HttpConnection *connection, const char_t *uri, const c
     static const char *const maps[] = {"boxes", "tonies", "folders", "models", "images"};
     cJSON *json = cJSON_CreateObject();
     lock_acl();
+    drop_stale_folders_unlocked();
     for (size_t m = 0; m < sizeof(maps) / sizeof(maps[0]); m++)
     {
         cJSON *out = cJSON_AddArrayToObject(json, maps[m]);
@@ -2105,7 +2213,7 @@ error_t handleApiAclOwned(HttpConnection *connection, const char_t *uri, const c
         {
             char granted[RIGHTS_MAX];
             bool owner = in_owners(entry, user);
-            if (owner || shared_rights(entry, user, granted, sizeof(granted)))
+            if ((owner || shared_rights(entry, user, granted, sizeof(granted))) && (m != 2 || folder_exists(entry->string)))
             {
                 cJSON *item = cJSON_CreateObject();
                 cJSON_AddStringToObject(item, "id", entry->string);

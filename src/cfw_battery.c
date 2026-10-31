@@ -154,7 +154,8 @@ static bool load_model(cfw_battery_model_t *model, const char *boxId)
     model->lastValid = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(last, "valid"));
     model->lastStation = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(last, "station"));
     model->lastState = (uint8_t)get_number(last, "state");
-    model->lastBand = (uint8_t)get_number(last, "band");
+    uint8_t band = (uint8_t)get_number(last, "band");
+    model->lastBand = band < CFW_BAT_BANDS ? band : 0;
     model->lastMv = (uint16_t)get_number(last, "mv");
     model->lastUptimeMs = (uint32_t)get_number(last, "uptimeMs");
     cJSON *window = cJSON_GetObjectItemCaseSensitive(last, "window");
@@ -237,21 +238,32 @@ void cfw_battery_save(const char *boxId, cfw_battery_model_t *model)
     osFreeMem(model);
 }
 
-cfw_battery_model_t *cfw_battery_update(cfw_box_t *box, uint64_t uptimeMs)
+cfw_battery_model_t *cfw_battery_load(const char *boxId)
+{
+    cfw_battery_model_t *model = osAllocMem(sizeof(cfw_battery_model_t));
+    if (model == NULL)
+    {
+        return NULL;
+    }
+    cfw_battery_model_init(model);
+    if (!load_model(model, boxId))
+    {
+        cfw_battery_model_init(model);
+        learn_from_log(model, boxId);
+    }
+    return model;
+}
+
+cfw_battery_model_t *cfw_battery_update(cfw_box_t *box, uint64_t uptimeMs, cfw_battery_model_t **loaded)
 {
     if (box->batteryModel == NULL)
     {
-        box->batteryModel = osAllocMem(sizeof(cfw_battery_model_t));
-        if (box->batteryModel == NULL)
+        if (*loaded == NULL)
         {
             return NULL;
         }
-        cfw_battery_model_init(box->batteryModel);
-        if (!load_model(box->batteryModel, box->id))
-        {
-            cfw_battery_model_init(box->batteryModel);
-            learn_from_log(box->batteryModel, box->id);
-        }
+        box->batteryModel = *loaded;
+        *loaded = NULL;
     }
     cfw_battery_report_t r;
     report_from_values(&r, box->battery[0], box->battery[1], box->battery[3], uptimeMs);

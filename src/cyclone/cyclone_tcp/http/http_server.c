@@ -480,7 +480,7 @@ void httpConnectionTask(void *param)
 
             // Read the HTTP request header and parse its contents
             error = httpReadRequestHeader(connection);
-            if (error == ERROR_INVALID_REQUEST && connection->response.contentLength > 4 && connection->buffer[0] == 0 && connection->buffer[1] == 0)
+            if (error == ERROR_INVALID_REQUEST && connection->response.contentLength >= 4 && connection->buffer[0] == 0 && connection->buffer[1] == 0)
             {
                error = NO_ERROR;
                connection->response.byteCount = 0;

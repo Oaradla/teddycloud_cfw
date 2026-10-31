@@ -4,6 +4,7 @@
 #include "stdbool.h"
 #include "error.h"
 #include "settings.h"
+#include "cJSON.h"
 #include "tonie_audio_playlist.h"
 #include "proto/toniebox.pb.taf-header.pb-c.h"
 
@@ -32,6 +33,7 @@ typedef struct
     char *_source_model;
     bool_t hide;
     bool_t claimed;
+    cJSON *boxes; /* IDs of the boxes the tag was placed on */
 
     bool_t _has_cloud_auth;
     ct_source_t _source_type;
@@ -77,3 +79,4 @@ error_t load_content_json(const char *content_path, contentJson_t *content_json,
 error_t save_content_json(const char *json_path, contentJson_t *content_json);
 void content_json_update_model(contentJson_t *content_json, uint32_t audio_id, uint8_t *hash);
 void free_content_json(contentJson_t *content_json);
+void content_json_add_box(contentJson_t *content_json, const char *box_id);

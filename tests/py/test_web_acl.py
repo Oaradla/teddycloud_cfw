@@ -688,7 +688,7 @@ def test_deleting_a_folder_with_its_content_drops_its_owners(world):
     assert bob.post("/api/dirCreate?special=library", "gone/sub", raw=True)[0] == 200
 
 
-def test_entries_of_gone_folders_are_dropped(world):
+def test_entries_of_gone_folders_are_hidden(world):
     admin, alice = Client("admin"), Client("alice")
 
     def owned():
@@ -704,6 +704,9 @@ def test_entries_of_gone_folders_are_dropped(world):
     gone = {"private/alice/deleted", "private/alice/renamed", "private/alice/outside"}
     assert not owned() & gone and "private/alice/renamed2" in owned()
     assert not set(Client("bob").get("/api/acl/mine")[1]["folders"]) & gone
+    # a folder only missing for a while, e.g. an unmounted share, keeps its rights
+    (Path(SANDBOX) / "data" / "library" / "private/alice/outside").mkdir()
+    assert "private/alice/outside" in owned()
 
 
 def test_owned_lists_only_existing_folders(world):
@@ -712,3 +715,8 @@ def test_owned_lists_only_existing_folders(world):
         shutil.rmtree(by)
     folders = [f["id"] for f in Client("admin").get("/api/acl/owned?user=bob")[1]["folders"]]
     assert "by" not in folders and "" in folders
+
+
+def test_mine_names_the_folders_where_rights_end(world):
+    folders = Client("bob").get("/api/acl/mine")[1]["folders"]
+    assert "folder.write" in folders[""]["rights"] and "folder.write" not in folders["private"]["rights"]

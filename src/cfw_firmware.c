@@ -1244,6 +1244,11 @@ bool cfw_ota_request(HttpConnection *connection, const char_t *uri, client_ctx_t
     {
         return esp32_install_request(connection, uri, settings, result);
     }
+    /* the CFW cannot install items 4, 5 and 6, and an offer of one would end its update check before item 3 */
+    if (fileId >= 4 && fileId <= 6 && cfw_enabled(settings) && cfwBuild != 0)
+    {
+        return not_modified(connection, result);
+    }
     /* only the CFW gets a CFW image: a request without X-CFW-Build is the original firmware's, which must not
        install one (a box fallen back to it from the card would write the CFW into its flash) */
     if (fileId != 3 || !cfw_enabled(settings) || cfwBuild == 0)
@@ -1259,6 +1264,16 @@ bool cfw_ota_request(HttpConnection *connection, const char_t *uri, client_ctx_t
     {
         cfw_unlock();
         return ownRequest ? not_modified(connection, result) : false;
+    }
+    /* a CC3200 asks item 3 before it sends the hello, so it reports a failed trial start here as well */
+    uint32_t rolledBack = connection->request.cfwRolledBack;
+    if (rolledBack != 0)
+    {
+        cfw_box_rolled_back(box, rolledBack, CFW_ROLLBACK_BOX);
+        if (box->offeredBuild == rolledBack)
+        {
+            box->offeredBuild = 0;
+        }
     }
     track_offer(box, currentVersion);
     cfw_box_t state = *box;

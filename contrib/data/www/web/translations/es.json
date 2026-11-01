@@ -12,6 +12,7 @@
     },
     "auth": {
         "backToLogin": "Volver al inicio de sesión",
+        "codeRequired": "Introduce el código",
         "loginBusy": "El servidor está ocupado, inténtalo de nuevo.",
         "loginFailed": "Usuario o contraseña no válidos",
         "loginLanOnly": "Este usuario solo puede iniciar sesión desde la red doméstica.",
@@ -383,7 +384,36 @@
             "notReachable": "La caja no está accesible ahora",
             "noBatteryLog": "No hay registro de batería para esta caja",
             "noCardPackage": "No hay paquete de versión con árbol de tarjeta para esta compilación",
-            "invalidJson": "JSON no válido"
+            "invalidJson": "JSON no válido",
+            "notOnline": "La caja no está en línea",
+            "actionRange": "Una acción necesita acción 1 a 18 y modo 0 a 3",
+            "actionValue": "Una acción necesita un valor de 0 a 16383 (acciones 17 y 18: minutos de 0 a 65535)",
+            "hostChars": "Un host solo puede contener letras, dígitos, puntos y guiones",
+            "noBuildTime": "Fecha y hora de compilación de la descripción de la app vacías o ilegibles",
+            "checksumWrong": "Suma de comprobación o SHA-256 añadido de la imagen incorrectos",
+            "imageNotStored": "No se pudo guardar la imagen",
+            "pageNotStored": "No se pudo guardar la página",
+            "debugBuild": "Compilación de depuración, la caja la rechazaría",
+            "flashMode": "Modo o tamaño de flash distinto de DIO, 80 MHz, 8 MB",
+            "imageTooLarge": "Imagen mayor que una ranura de app",
+            "noAppOrDump": "Ni una imagen de app ni un volcado de flash con el firmware original en una ranura de app",
+            "noGithubRepo": "No hay repositorio de GitHub configurado (cfw.firmware.github_repo, owner/name)",
+            "noEsp32Image": "No es una imagen de app ESP32 completa",
+            "noImageInPackage": "No hay imagen en el paquete",
+            "noSetupPage": "No es una página de configuración (un archivo HTML de 65536 bytes como máximo)",
+            "noBuildBlock": "No hay un bloque de compilación válido",
+            "notApplication": "No es una imagen de aplicación",
+            "notCfwImage": "No es una imagen del firmware personalizado (falta el marcador de familia CFW1)",
+            "patchNotPackage": "Los parches se aplican a una sola imagen original, no a un paquete de versión",
+            "patchEsp32Only": "Los parches solo se aplican al firmware original de la caja ESP32",
+            "patchOriginalOnly": "Los parches solo se aplican al firmware original",
+            "releaseNoImage": "Versión sin una imagen utilizable",
+            "serverBlock": "Bloque de servidor ausente o no presente exactamente una vez",
+            "digestMismatch": "El resumen SHA-256 al final de la imagen no coincide",
+            "oldEsp32Build": "La imagen lleva un bloque de compilación: una compilación ESP32 anterior al 14-10-2026",
+            "packageNotKept": "No se pudo conservar el paquete para la instalación en el navegador",
+            "patchedNoApp": "La imagen parcheada no es una imagen de app",
+            "portNotPatchable": "El puerto no se puede parchear en esta versión del firmware original"
         },
         "controls": {
             "title": "Manejo con el firmware personalizado",
@@ -916,6 +946,7 @@
             "noRowsSelected": "No se seleccionaron filas",
             "noRowsSelectedForDeletion": "No se seleccionaron filas para eliminar",
             "noRowsSelectedForMoving": "No se seleccionaron filas para mover",
+            "pathTooLong": "La ruta \"{{path}}\" es demasiado larga para el servidor. Usa nombres de carpetas o archivos más cortos.",
             "renaming": "Renombrando...",
             "renamingDetails": "Renombrando archivo \"{{file}}\"...",
             "renamingFailed": "Error al renombrar",
@@ -989,6 +1020,7 @@
             "name": "Nombre del archivo TAF",
             "noUnusedTafs": "¡No se encontraron TAF sin usar!",
             "ok": "Aceptar",
+            "skippedPlaylists": "No se pudieron leer estas listas de reproducción, por lo que sus TAF pueden aparecer aquí como no usados por error: {{list}}",
             "title": "Archivos TAF sin usar"
         },
         "upload": {
@@ -2361,6 +2393,8 @@
                 "cross_site": "La solicitud se ha rechazado porque no procedía de la interfaz web.",
                 "exists": "Este usuario ya existe.",
                 "invalid_code": "El código es incorrecto o ya se ha usado.",
+                "code_required": "Introduce el código de la app o un código de recuperación.",
+                "tfa_locked": "Demasiados códigos incorrectos. La confirmación está bloqueada durante un tiempo; inténtalo más tarde.",
                 "invalid_user": "Solo letras, dígitos, '.', '_' y '-' (máx. 32).",
                 "limit": "Se ha alcanzado el número máximo de usuarios.",
                 "login_disabled": "Esto requiere un inicio de sesión activo.",
@@ -3093,7 +3127,9 @@
                     "verifyFailed": "{{name}} se lee distinto de lo que se escribió.",
                     "certsMissing": "Falta en la caja: {{names}}",
                     "noPreloader": "El paquete no contiene ningún preloader.",
-                    "noMcuimg": "/sys/mcuimg.bin no estaba en la copia de seguridad."
+                    "noMcuimg": "/sys/mcuimg.bin no estaba en la copia de seguridad.",
+                    "unnamedFiles": "{{count}} archivos no tienen nombre en la tabla de archivos ni un nombre conocido.",
+                    "other": "{{message}}"
                 }
             },
             "createHostNamePatch": "Crear altUrl.custom.305.patch"

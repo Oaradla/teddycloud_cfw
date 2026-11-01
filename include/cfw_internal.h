@@ -57,6 +57,7 @@ typedef struct
 {
     uint64_t ruid;
     uint32_t timestamp;
+    time_t sent;
 } cfw_known_t;
 
 typedef struct
@@ -106,6 +107,8 @@ typedef struct
     cfw_known_t *known;
     size_t knownCount;
     size_t knownSize;
+    time_t answerTime;  /* the last freshness-check answer */
+    uint64_t applyRuid; /* the settings file sent last with command 64 */
     time_t lastSyncCheck;
     uint32_t syncUnanswered; /* command 6 sent without a freshness check since */
     bool syncStalled;        /* files are due but none fitted into the last answer */

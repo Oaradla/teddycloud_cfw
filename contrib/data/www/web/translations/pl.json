@@ -12,6 +12,7 @@
     },
     "auth": {
         "backToLogin": "Powrót do logowania",
+        "codeRequired": "Wpisz kod",
         "loginBusy": "Serwer jest zajęty, spróbuj ponownie.",
         "loginFailed": "Nieprawidłowa nazwa użytkownika lub hasło",
         "loginLanOnly": "Ten użytkownik może logować się tylko z sieci domowej.",
@@ -383,7 +384,36 @@
             "notReachable": "Box jest teraz nieosiągalny",
             "noBatteryLog": "Brak dziennika baterii dla tego boxa",
             "noCardPackage": "Brak pakietu wydania z drzewem karty dla tego buildu",
-            "invalidJson": "Nieprawidłowy JSON"
+            "invalidJson": "Nieprawidłowy JSON",
+            "notOnline": "Box nie jest online",
+            "actionRange": "Akcja wymaga akcji od 1 do 18 i trybu od 0 do 3",
+            "actionValue": "Akcja wymaga wartości od 0 do 16383 (akcje 17 i 18: minuty od 0 do 65535)",
+            "hostChars": "Host może zawierać tylko litery, cyfry, kropki i myślniki",
+            "noBuildTime": "Data i godzina kompilacji w opisie aplikacji są puste lub nieczytelne",
+            "checksumWrong": "Suma kontrolna lub dołączony SHA-256 obrazu jest błędny",
+            "imageNotStored": "Nie można zapisać obrazu",
+            "pageNotStored": "Nie można zapisać strony",
+            "debugBuild": "Kompilacja debug, box by ją odrzucił",
+            "flashMode": "Tryb lub rozmiar flash inny niż DIO, 80 MHz, 8 MB",
+            "imageTooLarge": "Obraz większy niż slot aplikacji",
+            "noAppOrDump": "Ani obraz aplikacji, ani zrzut flash z oryginalnym firmware w slocie aplikacji",
+            "noGithubRepo": "Nie ustawiono repozytorium GitHub (cfw.firmware.github_repo, owner/name)",
+            "noEsp32Image": "Brak kompletnego obrazu aplikacji ESP32",
+            "noImageInPackage": "Brak obrazu w pakiecie",
+            "noSetupPage": "Brak strony konfiguracji (plik HTML o rozmiarze najwyżej 65536 bajtów)",
+            "noBuildBlock": "Brak prawidłowego bloku kompilacji",
+            "notApplication": "To nie jest obraz aplikacji",
+            "notCfwImage": "To nie jest obraz niestandardowego firmware (brak znacznika rodziny CFW1)",
+            "patchNotPackage": "Poprawki dotyczą pojedynczego oryginalnego obrazu, nie pakietu wydania",
+            "patchEsp32Only": "Poprawki dotyczą tylko oryginalnego firmware boxa ESP32",
+            "patchOriginalOnly": "Poprawki dotyczą tylko oryginalnego firmware",
+            "releaseNoImage": "Wydanie bez użytecznego obrazu",
+            "serverBlock": "Brak bloku serwera lub nie występuje dokładnie raz",
+            "digestMismatch": "Skrót SHA-256 na końcu obrazu nie pasuje",
+            "oldEsp32Build": "Obraz zawiera blok kompilacji: kompilacja ESP32 sprzed 14.10.2026",
+            "packageNotKept": "Nie można zachować pakietu do instalacji w przeglądarce",
+            "patchedNoApp": "Poprawiony obraz nie jest obrazem aplikacji",
+            "portNotPatchable": "Portu nie można poprawić w tej wersji oryginalnego firmware"
         },
         "controls": {
             "title": "Obsługa z Custom Firmware",
@@ -916,6 +946,7 @@
             "noRowsSelected": "Nie zaznaczono żadnych wierszy",
             "noRowsSelectedForDeletion": "Nie zaznaczono żadnych wierszy do usunięcia",
             "noRowsSelectedForMoving": "Nie zaznaczono żadnych wierszy do przeniesienia",
+            "pathTooLong": "Ścieżka \"{{path}}\" jest za długa dla serwera. Użyj krótszych nazw folderów lub plików.",
             "renaming": "Zmienianie nazwy...",
             "renamingDetails": "Zmienianie nazwy pliku \"{{file}}\"...",
             "renamingFailed": "Zmiana nazwy nie powiodła się",
@@ -989,6 +1020,7 @@
             "name": "Nazwa pliku TAF",
             "noUnusedTafs": "Nie znaleziono nieużywanych plików TAF!",
             "ok": "OK",
+            "skippedPlaylists": "Nie udało się odczytać tych playlist, więc ich pliki TAF mogą tu błędnie wyglądać na nieużywane: {{list}}",
             "title": "Nieużywane pliki TAF"
         },
         "upload": {
@@ -2361,6 +2393,8 @@
                 "cross_site": "Żądanie zostało odrzucone, bo nie pochodziło z interfejsu webowego.",
                 "exists": "Taki użytkownik już istnieje.",
                 "invalid_code": "Kod jest błędny lub został już użyty.",
+                "code_required": "Wpisz kod z aplikacji lub kod odzyskiwania.",
+                "tfa_locked": "Zbyt wiele błędnych kodów. Potwierdzanie jest przez chwilę zablokowane, spróbuj później.",
                 "invalid_user": "Tylko litery, cyfry, '.', '_' i '-' (maks. 32).",
                 "limit": "Osiągnięto maksymalną liczbę użytkowników.",
                 "login_disabled": "To wymaga aktywnego logowania.",
@@ -3093,7 +3127,9 @@
                     "verifyFailed": "{{name}} odczytany różni się od zapisanego.",
                     "certsMissing": "Brak na boxie: {{names}}",
                     "noPreloader": "Pakiet nie zawiera preloadera.",
-                    "noMcuimg": "/sys/mcuimg.bin nie było w kopii zapasowej."
+                    "noMcuimg": "/sys/mcuimg.bin nie było w kopii zapasowej.",
+                    "unnamedFiles": "{{count}} plików nie ma nazwy w tabeli plików ani znanej nazwy.",
+                    "other": "{{message}}"
                 }
             },
             "createHostNamePatch": "Utwórz altUrl.custom.305.patch"

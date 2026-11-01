@@ -2163,6 +2163,7 @@ error_t handleApiAuthLogin(HttpConnection *connection, const char_t *uri, const 
     bool needs_challenge = false;
     char canonical[USERNAME_MAX + 1];
     const char *reason = NULL;
+    bool lan_only = false;
 
     lock_auth();
     /* the user may have been deleted or changed while hashing */
@@ -2171,14 +2172,14 @@ error_t handleApiAuthLogin(HttpConnection *connection, const char_t *uri, const 
     {
         reason = "unknown user";
     }
-    else if (user->lan_only && !lan)
-    {
-        /* said whatever the password: a right one must not look wrong */
-        reason = "user may log in from local networks only";
-    }
     else if (!ok || osStrcmp(stored, user->hash) != 0)
     {
         reason = "wrong password";
+    }
+    else if (user->lan_only && !lan)
+    {
+        reason = "user may log in from local networks only";
+        lan_only = true;
     }
     else if (!lan && user->remote_locked_until > now)
     {
@@ -2186,7 +2187,6 @@ error_t handleApiAuthLogin(HttpConnection *connection, const char_t *uri, const 
     }
     if (reason != NULL)
     {
-        bool lan_only = user != NULL && user->lan_only && !lan;
         login_register_failure_unlocked(ip, user, lan, username, reason);
         unlock_auth();
         wipe(new_hash, sizeof(new_hash));
@@ -2645,7 +2645,9 @@ static bool confirm_second_factor(HttpConnection *connection, const char *userna
     web_user_t *user = find_user_unlocked(username);
     /* without 2FA the password is all there is to confirm */
     bool ok = user != NULL && !user_has_totp(user);
-    if (user != NULL && user_has_totp(user) && (lan || user->tfa_locked_until <= now))
+    bool locked = !ok && user != NULL && !lan && user->tfa_locked_until > now;
+    bool given = cJSON_GetObjectItemCaseSensitive(body, "code") != NULL || cJSON_GetObjectItemCaseSensitive(body, "recoveryCode") != NULL;
+    if (user != NULL && user_has_totp(user) && !locked && given)
     {
         if (json_string(body, "code", code, sizeof(code)))
         {
@@ -2675,7 +2677,9 @@ static bool confirm_second_factor(HttpConnection *connection, const char *userna
     unlock_auth();
     if (!ok)
     {
-        *err = send_message(connection, 403, "invalid_code", "Invalid code");
+        *err = locked ? send_message(connection, 403, "tfa_locked", "Too many wrong codes, try again later")
+               : given ? send_message(connection, 403, "invalid_code", "Invalid code")
+                       : send_message(connection, 403, "code_required", "Code required");
     }
     return ok;
 }
@@ -3242,6 +3246,15 @@ error_t handleApiAuthUsersPassword(HttpConnection *connection, const char_t *uri
         wipe(current, sizeof(current));
         return send_message(connection, 400, "invalid_body", "Username and password required");
     }
+    /* before a 2FA code is used up below */
+    const char *problem = password_problem(username, password);
+    if (problem != NULL)
+    {
+        delete_body(body);
+        wipe(password, sizeof(password));
+        wipe(current, sizeof(current));
+        return send_message(connection, 400, problem, password_message(problem));
+    }
     session_info_t info = current_session(connection, false);
     bool own = info.found && osStrcasecmp(info.username, username) == 0;
     error_t err = NO_ERROR;
@@ -3277,12 +3290,6 @@ error_t handleApiAuthUsersPassword(HttpConnection *connection, const char_t *uri
     {
         wipe(password, sizeof(password));
         return err;
-    }
-    const char *problem = password_problem(username, password);
-    if (problem != NULL)
-    {
-        wipe(password, sizeof(password));
-        return send_message(connection, 400, problem, password_message(problem));
     }
     char hash[WEB_AUTH_HASH_MAX];
     char hash_ip[WEB_AUTH_IP_STR_MAX];

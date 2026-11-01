@@ -135,11 +135,11 @@ def box_entry(box):
     raise AssertionError("box %s not in /api/cfw/boxes" % box.mac)
 
 
-def ota(box, version):
+def ota(box, version, rolled_back=0):
     """item 3 of a box running build version: the CFW sends it in X-CFW-Build and the original firmware's build
     as cv; the original firmware sends its own build as cv"""
     if "X-CFW-Build" in box.headers:
-        return box.request("GET", f"/v1/ota/3?cv={OFW_BUILD}", headers={"X-CFW-Build": str(version)})
+        return box.request("GET", f"/v1/ota/3?cv={OFW_BUILD}", headers=cfw.update_headers(version, rolled_back))
     return box.request("GET", f"/v1/ota/3?cv={version}")
 
 
@@ -287,9 +287,38 @@ def test_every_start_gets_every_file_again(box, start):
     assert api("POST", f"/api/cfw/tag?ruid={FIGURE_RUID}", {"kind": "profile", "profile": profile})[0] == 200
     files(freshness(box), FIGURE_RUID)
     assert not files(freshness(box), FIGURE_RUID)
-    start.__init__(sequence=10)
+    time.sleep(2)
+    start.__init__(sequence=1)
     box.rtnl(cfw.hello(BUILD, CAPS_ALL, **start.next()))
     wait_until(lambda: files(freshness(box), FIGURE_RUID))
+
+
+def test_files_of_the_first_answer_of_a_start_stay_held(box, start):
+    profile = {"resume": False, "sleepMinutes": 15, "ledLevel": 1}
+    assert api("POST", f"/api/cfw/tag?ruid={FIGURE_RUID}", {"kind": "profile", "profile": profile})[0] == 200
+    time.sleep(1)
+    start.__init__(sequence=1)
+    files(freshness(box), FIGURE_RUID)
+    box.rtnl(cfw.hello(BUILD, CAPS_ALL, **start.next()))
+    time.sleep(1)
+    assert not files(freshness(box), FIGURE_RUID)
+
+
+def test_files_of_an_answer_the_box_lost_go_again(box, box_id, start):
+    # without remote control: the profile goes in freshness answers only, not by command 64
+    set_setting("cfw.remote_control", False, box_id)
+    try:
+        profile = {"resume": True, "sleepMinutes": 20, "ledLevel": 2}
+        assert api("POST", f"/api/cfw/tag?ruid={FIGURE_RUID}", {"kind": "profile", "profile": profile})[0] == 200
+        time.sleep(1)
+        start.__init__(sequence=1)
+        assert files(freshness(box), FIGURE_RUID)  # lost on the way to the box
+        time.sleep(1)
+        assert not files(freshness(box), FIGURE_RUID)  # the retry, answered with the hello
+        box.rtnl(cfw.hello(BUILD, CAPS_ALL, **start.next()))
+        wait_until(lambda: files(freshness(box), FIGURE_RUID))
+    finally:
+        reset_setting("cfw.remote_control", box_id)
 
 
 def test_event_tag_round_trip():
@@ -658,13 +687,58 @@ def test_rolled_back_image_is_not_offered_again(box, box_id, start):
         assert box_entry(box)["rolledBackBuild"] == BUILD - 10
 
         # a rollback the box reports in its hello: the bootloader went back after a failed trial start
-        box.rtnl(cfw.hello(BUILD, CAPS_ALL, rolled_back=BUILD + 37, **start.next()))
+        box.rtnl(cfw.hello(BUILD, CAPS_ALL, result=2, rolled_back=BUILD + 37, **start.next()))
         entry = box_entry(box)
         assert entry["rolledBackBuild"] == BUILD + 37 and entry["rolledBackReason"] == "box"
     finally:
         api("POST", f"/api/cfw/deliver?overlay={box_id}", {"build": 0})
         reset_setting("cfw.update.mode", box_id)
         reset_setting("cfw.update.channel", box_id)
+
+
+def test_failed_downgrade_in_the_hello_counts_as_rolled_back(box, start):
+    box.rtnl(cfw.hello(BUILD, CAPS_ALL, result=2, rolled_back=BUILD - 5, **start.next()))
+    wait_until(lambda: box_entry(box)["rolledBackBuild"] == BUILD - 5)
+
+
+def test_rolled_back_build_of_an_earlier_update_is_not_shown_again(box, start):
+    box.rtnl(cfw.hello(BUILD, CAPS_ALL, result=2, rolled_back=BUILD - 6, **start.next()))
+    wait_until(lambda: box_entry(box)["rolledBackBuild"] == BUILD - 6)
+    box.rtnl(cfw.hello(BUILD, CAPS_ALL, result=1, rolled_back=BUILD - 6, **start.next()))
+    wait_until(lambda: box_entry(box)["updateResult"] == 1)
+    assert box_entry(box)["rolledBackBuild"] == 0
+
+
+def test_rollback_reported_with_the_update_check(box, box_id):
+    image = cfw.slot_image(BUILD + 80)
+    assert upload(image, "alpha")[0] == 200
+    try:
+        assert api("POST", f"/api/cfw/deliver?overlay={box_id}", {"build": BUILD + 80})[0] == 200
+        assert ota(box, BUILD)[2] == image
+        # its trial start failed; the next start reports it on item 3, before any hello
+        assert ota(box, BUILD, rolled_back=BUILD + 80)[0] == 304
+        assert box_entry(box)["rolledBackBuild"] == BUILD + 80
+        assert ota(box, BUILD)[0] == 304
+    finally:
+        api("POST", f"/api/cfw/deliver?overlay={box_id}", {"build": 0})
+
+
+def test_cfw_gets_no_items_4_to_6():
+    """the CFW cannot install them; an offer would end its update check before item 3"""
+    folder = Path(SANDBOX) / "data" / "firmware" / "ota" / "cc3200" / "4"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "2000000000_servicepack.bin").write_bytes(b"servicepack")
+    set_setting("cloud.localOta", True)
+    cfw_box = Box("deadbeefcf07", SANDBOX, BASE.hostname, HTTPS_API_PORT, user_agent=CFW_AGENT, headers={"X-CFW-Build": str(BUILD)})
+    original = Box("deadbeefcf08", SANDBOX, BASE.hostname, HTTPS_API_PORT, user_agent=CFW_AGENT)
+    try:
+        assert original.request("GET", "/v1/ota/4?cv=1")[0] == 200
+        for item in (4, 5, 6):
+            assert cfw_box.request("GET", f"/v1/ota/{item}?cv=1")[0] == 304
+    finally:
+        reset_setting("cloud.localOta")
+        cfw_box.close()
+        original.close()
 
 
 def test_image_without_a_platform_in_its_metadata_is_for_the_cc3200(box_id):
@@ -970,6 +1044,7 @@ def test_esp32_cfw_box_gets_only_esp32_images():
     esp = Box("deadbeefe302", SANDBOX, BASE.hostname, HTTPS_API_PORT, user_agent=ESP32_OFW_AGENT, headers={"X-CFW-Build": str(BUILD + 50)})
     try:
         assert esp.request("GET", "/v1/time")[0] == 200
+        box_entry(esp)  # the new box's overlay is written and loaded again before its settings change
         newer = cfw.esp32_image(BUILD + 60)
         assert upload(newer, "release")[0] == 200
         set_setting("cfw.update.mode", 1, "deadbeefe302")

@@ -12,6 +12,7 @@
     },
     "auth": {
         "backToLogin": "Torna all'accesso",
+        "codeRequired": "Inserisci il codice",
         "loginBusy": "Il server è occupato, riprova.",
         "loginFailed": "Nome utente o password non validi",
         "loginLanOnly": "Questo utente può accedere solo dalla rete domestica.",
@@ -383,7 +384,36 @@
             "notReachable": "Il box non è raggiungibile ora",
             "noBatteryLog": "Nessun registro della batteria per questo box",
             "noCardPackage": "Nessun pacchetto di release con albero della scheda per questa build",
-            "invalidJson": "JSON non valido"
+            "invalidJson": "JSON non valido",
+            "notOnline": "Il box non è online",
+            "actionRange": "Un'azione richiede azione da 1 a 18 e modalità da 0 a 3",
+            "actionValue": "Un'azione richiede un valore da 0 a 16383 (azioni 17 e 18: minuti da 0 a 65535)",
+            "hostChars": "Un host può contenere solo lettere, cifre, punti e trattini",
+            "noBuildTime": "Data e ora di compilazione della descrizione dell'app vuote o illeggibili",
+            "checksumWrong": "Checksum o SHA-256 aggiunto dell'immagine errati",
+            "imageNotStored": "Impossibile salvare l'immagine",
+            "pageNotStored": "Impossibile salvare la pagina",
+            "debugBuild": "Build di debug, il box lo rifiuterebbe",
+            "flashMode": "Modalità o dimensione flash diversa da DIO, 80 MHz, 8 MB",
+            "imageTooLarge": "Immagine più grande di uno slot app",
+            "noAppOrDump": "Né un'immagine app né un dump flash con il firmware originale in uno slot app",
+            "noGithubRepo": "Nessun repository GitHub impostato (cfw.firmware.github_repo, owner/name)",
+            "noEsp32Image": "Nessuna immagine app ESP32 completa",
+            "noImageInPackage": "Nessuna immagine nel pacchetto",
+            "noSetupPage": "Nessuna pagina di configurazione (un file HTML di al massimo 65536 byte)",
+            "noBuildBlock": "Nessun blocco di build valido",
+            "notApplication": "Non è un'immagine di applicazione",
+            "notCfwImage": "Non è un'immagine del firmware personalizzato (manca il marcatore di famiglia CFW1)",
+            "patchNotPackage": "Le patch si applicano a una singola immagine originale, non a un pacchetto di release",
+            "patchEsp32Only": "Le patch si applicano solo al firmware originale del box ESP32",
+            "patchOriginalOnly": "Le patch si applicano solo al firmware originale",
+            "releaseNoImage": "Release senza un'immagine utilizzabile",
+            "serverBlock": "Blocco server mancante o non presente esattamente una volta",
+            "digestMismatch": "Il digest SHA-256 alla fine dell'immagine non corrisponde",
+            "oldEsp32Build": "L'immagine contiene un blocco di build: una build ESP32 precedente al 14/10/2026",
+            "packageNotKept": "Impossibile conservare il pacchetto per l'installazione nel browser",
+            "patchedNoApp": "L'immagine modificata non è un'immagine app",
+            "portNotPatchable": "La porta non può essere modificata in questa versione del firmware originale"
         },
         "controls": {
             "title": "Uso con il firmware personalizzato",
@@ -916,6 +946,7 @@
             "noRowsSelected": "Nessuna riga selezionata",
             "noRowsSelectedForDeletion": "Nessuna riga selezionata per l'eliminazione",
             "noRowsSelectedForMoving": "Nessuna riga selezionata per lo spostamento",
+            "pathTooLong": "Il percorso \"{{path}}\" è troppo lungo per il server. Usa nomi di cartelle o file più corti.",
             "renaming": "Ridenominazione...",
             "renamingDetails": "Ridenominazione del file \"{{file}}\"...",
             "renamingFailed": "Ridenominazione non riuscita",
@@ -989,6 +1020,7 @@
             "name": "Nome file TAF",
             "noUnusedTafs": "Nessun file TAF inutilizzato trovato!",
             "ok": "OK",
+            "skippedPlaylists": "Queste playlist non sono state lette, quindi i loro TAF possono apparire qui erroneamente come non usati: {{list}}",
             "title": "File TAF inutilizzati"
         },
         "upload": {
@@ -2361,6 +2393,8 @@
                 "cross_site": "La richiesta è stata rifiutata perché non proveniva dall'interfaccia web.",
                 "exists": "Questo utente esiste già.",
                 "invalid_code": "Il codice è errato o è già stato usato.",
+                "code_required": "Inserisci il codice dell'app o un codice di recupero.",
+                "tfa_locked": "Troppi codici errati. La conferma è bloccata per un po', riprova più tardi.",
                 "invalid_user": "Solo lettere, cifre, '.', '_' e '-' (max. 32).",
                 "limit": "È stato raggiunto il numero massimo di utenti.",
                 "login_disabled": "Serve un accesso attivo.",
@@ -3093,7 +3127,9 @@
                     "verifyFailed": "{{name}} riletto è diverso da quanto scritto.",
                     "certsMissing": "Mancante sul box: {{names}}",
                     "noPreloader": "Il pacchetto non contiene alcun preloader.",
-                    "noMcuimg": "/sys/mcuimg.bin non era nel backup."
+                    "noMcuimg": "/sys/mcuimg.bin non era nel backup.",
+                    "unnamedFiles": "{{count}} file non hanno un nome nella tabella dei file né un nome noto.",
+                    "other": "{{message}}"
                 }
             },
             "createHostNamePatch": "Crea altUrl.custom.305.patch"

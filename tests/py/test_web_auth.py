@@ -264,10 +264,10 @@ def test_account_lockout_from_outside_keeps_lan_working():
 def test_lan_only_user():
     a = admin()
     assert a.post("/api/auth/users/create", {"username": "lanuser", "password": "Lan-User-Password", "lanOnly": True})[0] == 200
-    # from outside it is refused as such, with the right password and with a wrong one
-    for password in ("Lan-User-Password", "wrong-password"):
-        status, data, _ = Client(forwarded_for="198.51.100.40").login("lanuser", password)
-        assert status == 403 and data["error"] == "lan_only"
+    # from outside the right password is refused as such; a wrong one tells nothing about the user
+    status, data, _ = Client(forwarded_for="198.51.100.40").login("lanuser", "Lan-User-Password")
+    assert status == 403 and data["error"] == "lan_only"
+    assert Client(forwarded_for="198.51.100.40").login("lanuser", "wrong-password")[0] == 401
     assert Client(forwarded_for="192.168.1.40").login("lanuser", "Lan-User-Password")[0] == 200
     unlock(a, ip="198.51.100.40")
 
@@ -505,8 +505,12 @@ def test_own_password_change_needs_the_2fa_code():
     assert c.post("/api/auth/2fa/enable", {"code": totp(setup["secret"])})[0] == 200
     change = {"username": "pwotp", "password": "Pw-Otp-Password-2", "currentPassword": "Pw-Otp-Password"}
     status, data, _ = c.post("/api/auth/users/updatePassword", change)
-    assert status == 403 and data["error"] == "invalid_code"
-    status, data, _ = c.post("/api/auth/users/updatePassword", dict(change, code=totp(setup["secret"], step_offset=1)))
+    assert status == 403 and data["error"] == "code_required"
+    code = totp(setup["secret"], step_offset=1)
+    # a refused new password does not use the code up
+    status, data, _ = c.post("/api/auth/users/updatePassword", dict(change, password="x", code=code))
+    assert status == 400
+    status, data, _ = c.post("/api/auth/users/updatePassword", dict(change, code=code))
     assert status == 200
 
 

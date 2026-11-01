@@ -12,6 +12,7 @@
     },
     "auth": {
         "backToLogin": "Zurück zur Anmeldung",
+        "codeRequired": "Gib den Code ein",
         "loginBusy": "Der Server ist ausgelastet, bitte erneut versuchen.",
         "loginFailed": "Ungültiger Benutzername oder Passwort",
         "loginLanOnly": "Dieser Benutzer darf sich nur aus dem Heimnetz anmelden.",
@@ -383,7 +384,36 @@
             "notReachable": "Die Box ist gerade nicht erreichbar",
             "noBatteryLog": "Kein Akku-Protokoll für diese Box",
             "noCardPackage": "Kein Release-Paket mit Kartenbaum für diesen Build",
-            "invalidJson": "Ungültiges JSON"
+            "invalidJson": "Ungültiges JSON",
+            "notOnline": "Die Box ist nicht online",
+            "actionRange": "Eine Aktion braucht Aktion 1 bis 18 und Modus 0 bis 3",
+            "actionValue": "Eine Aktion braucht den Wert 0 bis 16383 (Aktionen 17 und 18: Minuten 0 bis 65535)",
+            "hostChars": "Ein Host darf nur Buchstaben, Ziffern, Punkte und Bindestriche enthalten",
+            "noBuildTime": "Build-Datum und -Uhrzeit der App-Beschreibung leer oder nicht lesbar",
+            "checksumWrong": "Prüfsumme oder angehängter SHA-256 des Images falsch",
+            "imageNotStored": "Das Image konnte nicht gespeichert werden",
+            "pageNotStored": "Die Seite konnte nicht gespeichert werden",
+            "debugBuild": "Debug-Build, die Box würde ihn ablehnen",
+            "flashMode": "Flash-Modus oder -Größe nicht DIO, 80 MHz, 8 MB",
+            "imageTooLarge": "Image größer als ein App-Slot",
+            "noAppOrDump": "Weder ein App-Image noch ein Flash-Dump mit der Original-Firmware in einem App-Slot",
+            "noGithubRepo": "Kein GitHub-Repository eingestellt (cfw.firmware.github_repo, owner/name)",
+            "noEsp32Image": "Kein vollständiges ESP32-App-Image",
+            "noImageInPackage": "Kein Image im Paket",
+            "noSetupPage": "Keine Einrichtungsseite (eine HTML-Datei mit höchstens 65536 Bytes)",
+            "noBuildBlock": "Kein gültiger Build-Block",
+            "notApplication": "Kein Anwendungs-Image",
+            "notCfwImage": "Kein Image der Custom Firmware (Familienkennung CFW1 fehlt)",
+            "patchNotPackage": "Patches gelten für ein einzelnes Original-Image, nicht für ein Release-Paket",
+            "patchEsp32Only": "Patches gelten nur für die Original-Firmware der ESP32-Box",
+            "patchOriginalOnly": "Patches gelten nur für die Original-Firmware",
+            "releaseNoImage": "Release ohne verwendbares Image",
+            "serverBlock": "Server-Block fehlt oder ist nicht genau einmal vorhanden",
+            "digestMismatch": "Der SHA-256-Hash am Ende des Images stimmt nicht",
+            "oldEsp32Build": "Das Image hat einen Build-Block: ein ESP32-Build von vor dem 14.10.2026",
+            "packageNotKept": "Das Paket konnte für die Installation im Browser nicht aufbewahrt werden",
+            "patchedNoApp": "Das gepatchte Image ist kein App-Image",
+            "portNotPatchable": "Der Port kann in dieser Version der Original-Firmware nicht gepatcht werden"
         },
         "controls": {
             "title": "Bedienung mit der Custom Firmware",
@@ -916,6 +946,7 @@
             "noRowsSelected": "Keine Zeilen ausgewählt",
             "noRowsSelectedForDeletion": "Keine Zeilen zum Löschen ausgewählt",
             "noRowsSelectedForMoving": "Keine Zeilen zum Verschieben ausgewählt",
+            "pathTooLong": "Der Pfad \"{{path}}\" ist für den Server zu lang. Bitte kürzere Ordner- oder Dateinamen verwenden.",
             "renaming": "Benenne um...",
             "renamingDetails": "Benenne Datei \"{{file}}\" um...",
             "renamingFailed": "Umbenennen fehlgeschlagen",
@@ -989,6 +1020,7 @@
             "name": "TAF Dateiname",
             "noUnusedTafs": "Keine ungenutzten TAFs gefunden!",
             "ok": "OK",
+            "skippedPlaylists": "Diese Wiedergabelisten konnten nicht gelesen werden, ihre TAFs können hier fälschlich als ungenutzt erscheinen: {{list}}",
             "title": "Ungenutzte TAF-Dateien"
         },
         "upload": {
@@ -2361,6 +2393,8 @@
                 "cross_site": "Die Anfrage wurde abgelehnt, weil sie nicht von der Weboberfläche kam.",
                 "exists": "Diesen Nutzer gibt es schon.",
                 "invalid_code": "Der Code ist falsch oder wurde schon verwendet.",
+                "code_required": "Gib den Code aus der App oder einen Wiederherstellungscode ein.",
+                "tfa_locked": "Zu viele falsche Codes. Die Bestätigung ist eine Weile gesperrt, bitte später erneut versuchen.",
                 "invalid_user": "Nur Buchstaben, Ziffern, '.', '_' und '-' (max. 32).",
                 "limit": "Die maximale Anzahl an Nutzern ist erreicht.",
                 "login_disabled": "Dafür ist eine aktive Anmeldung nötig.",
@@ -3093,7 +3127,9 @@
                     "verifyFailed": "{{name}} liest sich anders zurück als geschrieben.",
                     "certsMissing": "Fehlt auf der Box: {{names}}",
                     "noPreloader": "Das Paket enthält keinen Preloader.",
-                    "noMcuimg": "/sys/mcuimg.bin war nicht in der Sicherung."
+                    "noMcuimg": "/sys/mcuimg.bin war nicht in der Sicherung.",
+                    "unnamedFiles": "{{count}} Dateien haben keinen Namen in der Dateitabelle und keinen bekannten Namen.",
+                    "other": "{{message}}"
                 }
             },
             "createHostNamePatch": "Erstelle altUrl.custom.305.patch"

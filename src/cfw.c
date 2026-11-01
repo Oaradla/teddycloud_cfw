@@ -684,7 +684,7 @@ bool cfw_box_online(const cfw_box_t *box)
 }
 
 /* the version of each settings file the box holds, as far as the server knows; in memory only, so after
-   a server restart every box gets every file once more, and forgotten at every hello (see there) */
+   a server restart every box gets every file once more, and forgotten at every start (see known_forget_before) */
 static bool known_get(const cfw_box_t *box, uint64_t ruid, uint32_t *timestamp)
 {
     for (size_t i = 0; i < box->knownCount; i++)
@@ -698,6 +698,22 @@ static bool known_get(const cfw_box_t *box, uint64_t ruid, uint32_t *timestamp)
     return false;
 }
 
+/* a lost answer, a refused file or a new SD card would never be repaired: every start gets every file
+   again, what does not fit into one answer by command 6 every 30 s. The hello answers the latest
+   freshness-check answer of the start, so the files sent since then stay held. */
+static void known_forget_before(cfw_box_t *box, time_t start)
+{
+    size_t kept = 0;
+    for (size_t i = 0; i < box->knownCount; i++)
+    {
+        if (box->known[i].sent >= start)
+        {
+            box->known[kept++] = box->known[i];
+        }
+    }
+    box->knownCount = kept;
+}
+
 static void known_set(cfw_box_t *box, uint64_t ruid, uint32_t timestamp)
 {
     for (size_t i = 0; i < box->knownCount; i++)
@@ -705,6 +721,7 @@ static void known_set(cfw_box_t *box, uint64_t ruid, uint32_t timestamp)
         if (box->known[i].ruid == ruid)
         {
             box->known[i].timestamp = timestamp;
+            box->known[i].sent = time(NULL);
             return;
         }
     }
@@ -726,6 +743,7 @@ static void known_set(cfw_box_t *box, uint64_t ruid, uint32_t timestamp)
     }
     box->known[box->knownCount].ruid = ruid;
     box->known[box->knownCount].timestamp = timestamp;
+    box->known[box->knownCount].sent = time(NULL);
     box->knownCount++;
 }
 
@@ -942,6 +960,7 @@ size_t cfw_freshness_finalize(client_ctx_t *client_ctx, uint8_t *buffer, size_t 
     if (box != NULL)
     {
         box->syncUnanswered = 0;
+        box->answerTime = time(NULL);
     }
     if (box != NULL && box->isCfw && settings->cfw.settings_sync)
     {
@@ -998,8 +1017,9 @@ static void store_tag_report(cfw_box_t *box, uint64_t ruid, const uint8_t *body,
     if (haveCurrent && current[4] == CFW_TBS_KIND_EVENT)
     {
         TRACE_WARNING("CFW: box %s reported a profile for event tag %s, ignored\r\n", box->id, text);
+        return;
     }
-    else if (!haveCurrent || cfw_tbs_timestamp(current) <= timestamp)
+    if (!haveCurrent || cfw_tbs_timestamp(current) <= timestamp)
     {
         uint8_t file[CFW_TBS_MAX];
         size_t fileLength = cfw_tbs_build(CFW_TBS_KIND_PROFILE, CFW_TBS_ORIGIN_BOX, timestamp, body, bodyLength, file);
@@ -1283,19 +1303,23 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
             box->version = cfw_le32(&payload[0]);
             box->capabilities = cfw_le32(&payload[4]);
             box->updateResult = length >= 12 ? cfw_le32(&payload[8]) : 0;
-            if (length >= 16 && cfw_le32(&payload[12]) != 0)
+            /* the box keeps the rolled back build after later updates: it counts only
+             * while the last result is a rollback (2) */
+            if (box->updateResult == 2 && length >= 16 && cfw_le32(&payload[12]) != 0)
             {
                 cfw_box_rolled_back(box, cfw_le32(&payload[12]), CFW_ROLLBACK_BOX);
             }
-            cfw_box_rolled_back(box, box->version, CFW_ROLLBACK_NONE);
+            else
+            {
+                cfw_box_rolled_back(box, box->version, CFW_ROLLBACK_NONE);
+            }
             box->helloValid = true;
             box->helloUptime = log2->uptime;
             box->helloSequence = log2->sequence;
             box->helloTime = time(NULL);
             box->isCfw = true;
-            /* a lost answer, a refused file or a new SD card would never be repaired: every start gets
-               every file again, what does not fit into one answer by command 6 every 30 s */
-            box->knownCount = 0;
+            time_t start = box->helloTime - (time_t)(log2->uptime / 1000);
+            known_forget_before(box, start > box->answerTime ? start : box->answerTime);
             cfw_box_save(box);
             hello = true;
             eventName = "cfw-hello";
@@ -1346,6 +1370,14 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
             box->lastCommand = cfw_le32(&payload[0]);
             box->lastResult = cfw_le32(&payload[8]);
             box->lastResultTime = time(NULL);
+            if (box->lastCommand == CFW_CMD_UPDATE_CHECK && box->lastResult != 0)
+            {
+                box->checkRequested = false;
+            }
+            if (box->lastCommand == CFW_CMD_APPLY_SETTINGS && box->lastResult > 1)
+            {
+                known_forget(box, box->applyRuid);
+            }
             eventName = "cfw-result";
             osSnprintf(event, sizeof(event), "{\"box\":\"%s\",\"command\":%" PRIu32 ",\"result\":%" PRIu32 "}", box->id, box->lastCommand, box->lastResult);
         }
@@ -1539,6 +1571,7 @@ static size_t next_frame(cfw_box_t *box, settings_t *settings, bool received, ui
             osMemcpy(&sent->args[8], file, fileLength);
             sent->argsLength = 8 + fileLength;
             known_set(box, 0, cfw_tbs_timestamp(file));
+            box->applyRuid = 0;
             return build_frame(frame, sent->command, sent->args, sent->argsLength);
         }
     }
@@ -1548,6 +1581,10 @@ static size_t next_frame(cfw_box_t *box, settings_t *settings, bool received, ui
     }
     if (!remote)
     {
+        for (size_t i = 0; i < box->queueCount; i++)
+        {
+            box->checkRequested &= box->queue[i].command != CFW_CMD_UPDATE_CHECK;
+        }
         box->queueCount = 0;
         return 0;
     }
@@ -1557,11 +1594,13 @@ static size_t next_frame(cfw_box_t *box, settings_t *settings, bool received, ui
     if (sent->command != CFW_CMD_APPLY_SETTINGS && now - sent->queued > CFW_REMOTE_MAX_AGE)
     {
         TRACE_INFO("CFW: box %s: remote command %u dropped, it waited too long\r\n", box->id, sent->command);
+        box->checkRequested &= sent->command != CFW_CMD_UPDATE_CHECK;
         return 0;
     }
     if (sent->command == CFW_CMD_APPLY_SETTINGS)
     {
-        known_set(box, cfw_ruid_from_bytes(sent->args), cfw_tbs_timestamp(&sent->args[8]));
+        box->applyRuid = cfw_ruid_from_bytes(sent->args);
+        known_set(box, box->applyRuid, cfw_tbs_timestamp(&sent->args[8]));
     }
     return build_frame(frame, sent->command, sent->args, sent->argsLength);
 }

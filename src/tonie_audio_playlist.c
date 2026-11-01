@@ -729,6 +729,34 @@ void tap_moved(const char *fromPath, const char *toPath)
 #define TAP_UPLOAD_MAX_AGE (24 * 60 * 60)
 #define TAP_UPLOAD_SWEEP_INTERVAL (6 * 60 * 60)
 
+/* only what the parts upload leaves: "_upload-<milliseconds since 1970 in base 36>", older than a day, with part files only */
+static bool tap_stale_upload(const char *path, const char *name, time_t now)
+{
+    const char *stamp = name + osStrlen(TAP_UPLOAD_PREFIX);
+    size_t len = osStrlen(stamp);
+    if (len < 8 || len > 9 || strspn(stamp, "0123456789abcdefghijklmnopqrstuvwxyz") != len ||
+        now - (time_t)(strtoll(stamp, NULL, 36) / 1000) <= TAP_UPLOAD_MAX_AGE)
+    {
+        return false;
+    }
+    FsDir *dir = fsOpenDir(path);
+    if (dir == NULL)
+    {
+        return false;
+    }
+    bool parts = true;
+    FsDirEntry entry;
+    while (parts && fsReadDir(dir, &entry) == NO_ERROR)
+    {
+        const char *ext = strrchr(entry.name, '.');
+        parts = !osStrcmp(entry.name, ".") || !osStrcmp(entry.name, "..") ||
+                (!(entry.attributes & FS_FILE_ATTR_DIRECTORY) && ext != NULL &&
+                 (!osStrcasecmp(ext, ".taf") || !osStrcasecmp(ext, ".tap") || !osStrcasecmp(ext, ".json")));
+    }
+    fsCloseDir(dir);
+    return parts;
+}
+
 static void tap_sweep_uploads(const char *path, time_t now)
 {
     FsDir *dir = fsOpenDir(path);
@@ -748,7 +776,7 @@ static void tap_sweep_uploads(const char *path, time_t now)
         {
             tap_sweep_uploads(child, now);
         }
-        else if (now - (time_t)convertDateToUnixTime(&entry.modified) > TAP_UPLOAD_MAX_AGE)
+        else if (tap_stale_upload(child, entry.name, now))
         {
             TRACE_INFO("Removing the stale upload folder %s\r\n", child);
             fsRemoveTree(child);

@@ -12,6 +12,7 @@
     },
     "auth": {
         "backToLogin": "Back to login",
+        "codeRequired": "Enter the code",
         "loginBusy": "The server is busy, please try again.",
         "loginFailed": "Invalid username or password",
         "loginLanOnly": "This user may log in from the home network only.",
@@ -383,7 +384,36 @@
             "notReachable": "The box cannot be reached now",
             "noBatteryLog": "No battery log for this box",
             "noCardPackage": "No release package with a card tree for this build",
-            "invalidJson": "Invalid JSON"
+            "invalidJson": "Invalid JSON",
+            "notOnline": "The box is not online",
+            "actionRange": "An action needs action 1 to 18 and mode 0 to 3",
+            "actionValue": "An action needs value 0 to 16383 (actions 17 and 18: minutes 0 to 65535)",
+            "hostChars": "A host may hold letters, digits, dots and dashes only",
+            "noBuildTime": "Build date and time of the app description empty or unreadable",
+            "checksumWrong": "Checksum or appended SHA-256 of the image wrong",
+            "imageNotStored": "Could not store the image",
+            "pageNotStored": "Could not store the page",
+            "debugBuild": "Debug build, the box would refuse it",
+            "flashMode": "Flash mode or size not DIO, 80 MHz, 8 MB",
+            "imageTooLarge": "Image larger than an app slot",
+            "noAppOrDump": "Neither an app image nor a flash dump with the original firmware in an app slot",
+            "noGithubRepo": "No GitHub repository set (cfw.firmware.github_repo, owner/name)",
+            "noEsp32Image": "No complete ESP32 app image",
+            "noImageInPackage": "No image in the package",
+            "noSetupPage": "No setup page (an HTML file of at most 65536 bytes)",
+            "noBuildBlock": "No valid build block",
+            "notApplication": "Not an application image",
+            "notCfwImage": "Not an image of the custom firmware (family marker CFW1 missing)",
+            "patchNotPackage": "Patches apply to a single original image, not to a release package",
+            "patchEsp32Only": "Patches apply to the original firmware of the ESP32 box only",
+            "patchOriginalOnly": "Patches apply to the original firmware only",
+            "releaseNoImage": "Release without a usable image",
+            "serverBlock": "Server block missing or not once",
+            "digestMismatch": "The SHA-256 digest at the end of the image does not match",
+            "oldEsp32Build": "The image carries a build block: an ESP32 build from before 2026-10-14",
+            "packageNotKept": "The package could not be kept for the installation in the browser",
+            "patchedNoApp": "The patched image is no app image",
+            "portNotPatchable": "The port cannot be patched in this version of the original firmware"
         },
         "controls": {
             "title": "Using a box with the custom firmware",
@@ -916,6 +946,7 @@
             "noRowsSelected": "No rows selected",
             "noRowsSelectedForDeletion": "No rows selected for deletion",
             "noRowsSelectedForMoving": "No rows selected for moving",
+            "pathTooLong": "The path \"{{path}}\" is too long for the server. Please use shorter folder or file names.",
             "renaming": "Renaming...",
             "renamingDetails": "Renaming file \"{{file}}\"...",
             "renamingFailed": "Renaming failed",
@@ -989,6 +1020,7 @@
             "name": "TAF filename",
             "noUnusedTafs": "No unused TAFs found!",
             "ok": "OK",
+            "skippedPlaylists": "These playlists could not be read, so their TAFs may wrongly appear as unused here: {{list}}",
             "title": "Unused TAF files"
         },
         "upload": {
@@ -2361,6 +2393,8 @@
                 "cross_site": "The request was rejected because it did not come from the web interface.",
                 "exists": "This user already exists.",
                 "invalid_code": "The code is wrong or was already used.",
+                "code_required": "Enter the code from the app or a recovery code.",
+                "tfa_locked": "Too many wrong codes. Confirming is locked for a while, try again later.",
                 "invalid_user": "Letters, digits, '.', '_' and '-' only (max. 32).",
                 "limit": "The maximum number of users is reached.",
                 "login_disabled": "This needs an active login.",
@@ -3093,7 +3127,9 @@
                     "verifyFailed": "{{name}} reads back different from what was written.",
                     "certsMissing": "Missing on the box: {{names}}",
                     "noPreloader": "The package has no preloader.",
-                    "noMcuimg": "/sys/mcuimg.bin was not in the backup."
+                    "noMcuimg": "/sys/mcuimg.bin was not in the backup.",
+                    "unnamedFiles": "{{count}} files have no name in the file table and no known name.",
+                    "other": "{{message}}"
                 }
             },
             "createHostNamePatch": "Create altUrl.custom.305.patch"

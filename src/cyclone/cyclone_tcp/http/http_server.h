@@ -511,6 +511,7 @@ typedef struct
    char_t host[HTTP_SERVER_HOST_MAX_LEN + 1];                ///<Host name
    char_t userAgent[128 + 1];
    uint32_t cfwBuild;                                        ///< X-CFW-Build: build of the custom firmware, 0: none
+   uint32_t cfwRolledBack;                                   ///< X-CFW-Rolled-Back: build the last trial start rolled back, 0: none
    char_t ifRange[HTTP_SERVER_IFRANGE_MAX_LEN + 1];          ///< IfRange tag
    HttpRangeHeader Range;                                    ///< Range field
    bool_t keepAlive;

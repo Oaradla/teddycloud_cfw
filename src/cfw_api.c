@@ -1020,16 +1020,6 @@ error_t handleApiCfwFirmwareGithubDownload(HttpConnection *connection, const cha
     return send_message(connection, err == NO_ERROR ? 200 : (tag ? 502 : 400), message);
 }
 
-/* asks the box to check for an update at once (remote command); false: not possible now */
-static bool update_check_now(settings_t *settings)
-{
-    cfw_lock();
-    cfw_box_t *box = cfw_box_get(settings);
-    bool checking = box != NULL && box->helloValid && (box->capabilities & CFW_CAP_REMOTE) && settings->cfw.remote_control && cfw_remote_queue(box, CFW_CMD_UPDATE_CHECK, NULL, 0);
-    cfw_unlock();
-    return checking;
-}
-
 /* assigns an image to the box (manual delivery, build 0: none); with "now", the box checks at once;
    "now" without "build" keeps the assignment and only starts the check (automatic delivery) */
 error_t handleApiCfwDeliver(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
@@ -1051,8 +1041,9 @@ error_t handleApiCfwDeliver(HttpConnection *connection, const char_t *uri, const
     cJSON_Delete(json);
     if (!hasBuild && now)
     {
-        bool checking = update_check_now(settings);
-        return send_message(connection, checking ? 200 : 409, checking ? "the box checks for an update now" : "the box cannot be reached now");
+        char message[128];
+        uint_t status = cfw_remote_send(settings, CFW_CMD_UPDATE_CHECK, NULL, 0, message, sizeof(message));
+        return send_message(connection, status, status == 200 ? "the box checks for an update now" : message);
     }
     cfw_image_t image;
     if (!valid || (build != 0 && !cfw_firmware_get(cfw_box_platform(settings), build, &image)))
@@ -1084,6 +1075,7 @@ error_t handleApiCfwDeliver(HttpConnection *connection, const char_t *uri, const
         return send_message(connection, 200, "assignment removed");
     }
 
-    bool checking = now && update_check_now(settings);
+    char message[128];
+    bool checking = now && cfw_remote_send(settings, CFW_CMD_UPDATE_CHECK, NULL, 0, message, sizeof(message)) == 200;
     return send_message(connection, 200, checking ? "assigned; the box checks for the update now" : "assigned; the box takes it at its next start");
 }

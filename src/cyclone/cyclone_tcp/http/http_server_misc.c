@@ -519,6 +519,11 @@ void httpParseHeaderField(HttpConnection *connection,
    {
       connection->request.cfwBuild = (uint32_t)osStrtoul(value, NULL, 10);
    }
+   //X-CFW-Rolled-Back header field (custom firmware)?
+   else if (osStrcasecmp(name, "X-CFW-Rolled-Back") == 0)
+   {
+      connection->request.cfwRolledBack = (uint32_t)osStrtoul(value, NULL, 10);
+   }
    else if (osStrcasecmp(name, "Origin") == 0)
    {
       strSafeCopy(connection->request.origin, value, sizeof(connection->request.origin));

@@ -39,6 +39,14 @@ def hello(version, capabilities, uptime, sequence, result=0, rolled_back=0):
     return record(FUNC_HELLO, struct.pack("<IIII", version, capabilities, result, rolled_back), uptime, sequence)
 
 
+def update_headers(build, rolled_back=0):
+    """headers of the CFW's item 3 request: its build, and the build its last trial start rolled back"""
+    headers = {"X-CFW-Build": str(build)}
+    if rolled_back:
+        headers["X-CFW-Rolled-Back"] = str(rolled_back)
+    return headers
+
+
 def freshness_request(uid, audio_id):
     """TonieFreshnessCheckRequest with one tonie"""
     info = rtnl._tag(1, 1) + struct.pack("<Q", uid) + rtnl._tag(2, 5) + struct.pack("<I", audio_id)

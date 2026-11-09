@@ -157,6 +157,22 @@ size_t cfw_event_for_basic_box(const uint8_t *file, uint8_t *out)
     return cfw_tbs_build(CFW_TBS_KIND_EVENT, file[5], cfw_tbs_timestamp(file), body, length, out);
 }
 
+/* an event tag whose box settings hold only until the box switches off: a box without that feature
+   would keep them */
+bool cfw_event_temporary(const uint8_t *file)
+{
+    size_t pos = 0;
+    cfw_record_t record;
+    while (cfw_tbs_next_record(file, &pos, &record))
+    {
+        if (record.key == 0x12 && record.length == 1 && record.value[0] != 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 static size_t put_record(uint8_t *body, uint8_t key, uint32_t value, uint8_t length)
 {
     body[0] = key;
@@ -199,7 +215,7 @@ size_t cfw_report_body(uint32_t packed, uint32_t values, uint32_t idle, uint8_t 
             n += put_record(&body[n], key, (values >> 20) & 0x0F, 1);
             break;
         case 0x06:
-            n += put_record(&body[n], key, (packed >> 14) & 3, 1);
+            n += put_record(&body[n], key, ((packed >> 14) & 3) | ((packed >> 19) & 1) << 2, 1);
             break;
         case 0x07:
             n += put_record(&body[n], key, (packed >> 16) & 1, 1);

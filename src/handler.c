@@ -1,3 +1,4 @@
+#include "error_text.h"
 #include "handler.h"
 #include "cfw.h"
 #include "web_acl.h"
@@ -288,7 +289,7 @@ void cbrCloudHeaderPassthrough(void *src_ctx, HttpClientContext *cloud_ctx, cons
     {
         if (ctx->client_ctx->settings->internal.overlayNumber == 0)
         {
-            char_t *allowOrigin = ctx->connection->serverContext->settings.allowOrigin;
+            const char_t *allowOrigin = httpExtAllowOrigin();
             if (allowOrigin != NULL && osStrlen(allowOrigin) > 0)
             {
                 httpSendHeaderLine(ctx->connection, "Access-Control-Allow-Origin", allowOrigin);
@@ -736,7 +737,17 @@ void setTonieboxSettings(TonieFreshnessCheckResponse *freshResp, settings_t *set
     freshResp->max_vol_hdp = cfw_derived_setting(settings, "toniebox.max_vol_hdp", settings->toniebox.max_vol_hdp);
     freshResp->slap_en = cfw_derived_setting(settings, "toniebox.slap_enabled", settings->toniebox.slap_enabled);
     freshResp->slap_dir = settings->toniebox.slap_back_left;
-    freshResp->led = settings->toniebox.led;
+    /* off and dimmed permanently (5, 6) are the custom firmware's own, the field knows on, off and dimmed */
+    uint32_t led = settings->toniebox.led;
+    if (led == 5 || led == 6)
+    {
+        led -= 4;
+    }
+    else if (led > 2)
+    {
+        led = 0;
+    }
+    freshResp->led = led;
     if (settings->toniebox.overrideFields)
     {
         freshResp->field2 = settings->toniebox.field2;
@@ -755,7 +766,7 @@ bool_t isValidTaf(const char *contentPath, bool checkHashAndSize)
         fsReadFile(file, headerBuffer, 4, &read_length);
         if (read_length == 4)
         {
-            uint32_t protobufSize = (uint32_t)((headerBuffer[0] << 24) | (headerBuffer[1] << 16) | (headerBuffer[2] << 8) | headerBuffer[3]);
+            uint32_t protobufSize = ((uint32_t)headerBuffer[0] << 24) | ((uint32_t)headerBuffer[1] << 16) | ((uint32_t)headerBuffer[2] << 8) | headerBuffer[3];
             if (protobufSize <= TAF_HEADER_SIZE)
             {
                 fsReadFile(file, headerBuffer, protobufSize, &read_length);
@@ -980,7 +991,7 @@ tonie_info_t *getTonieInfoV2(const char *contentPath, bool lock, bool force_taf_
             fsReadFile(file, headerBuffer, 4, &read_length);
             if (read_length == 4)
             {
-                uint32_t protobufSize = (uint32_t)((headerBuffer[0] << 24) | (headerBuffer[1] << 16) | (headerBuffer[2] << 8) | headerBuffer[3]);
+                uint32_t protobufSize = ((uint32_t)headerBuffer[0] << 24) | ((uint32_t)headerBuffer[1] << 16) | ((uint32_t)headerBuffer[2] << 8) | headerBuffer[3];
                 if (protobufSize <= TAF_HEADER_SIZE)
                 {
                     fsReadFile(file, headerBuffer, protobufSize, &read_length);
@@ -1002,6 +1013,11 @@ tonie_info_t *getTonieInfoV2(const char *contentPath, bool lock, bool force_taf_
                                     content_json_update_model(&tonieInfo->json, tonieInfo->tafHeader->audio_id, tonieInfo->tafHeader->sha1_hash.data);
                                 }
                                 toniesJson_item_t *toniesJson = tonies_byAudioIdHash(tonieInfo->tafHeader->audio_id, tonieInfo->tafHeader->sha1_hash.data);
+                                if (toniesJson == NULL && tonieInfo->json._source_type == CT_SOURCE_TAP_CACHED)
+                                {
+                                    /* a built playlist has a new hash each time, its model goes by the playlist's audio id */
+                                    toniesJson = tonies_byAudioId((uint32_t)tonieInfo->json._tap.audio_id);
+                                }
                                 if (toniesJson != NULL)
                                 {
                                     tonieInfo->json._source_model = strdup(toniesJson->model);
@@ -1214,6 +1230,14 @@ char *getLibraryCachePath(settings_t *settings, uint32_t audioId, bool_t shortPa
     return libraryPath;
 }
 
+/* libraryPath (ending in ".taf") with the first 8 hex digits of the TAF's SHA1 added before the extension. */
+static char *libraryPathWithHash(const char *libraryPath, const TonieboxAudioFileHeader *tafHeader)
+{
+    const uint8_t *sha1 = tafHeader->sha1_hash.data;
+    size_t baseLen = osStrlen(libraryPath) - osStrlen(".taf");
+    return custom_asprintf("%.*s-%02x%02x%02x%02x.taf", (int)baseLen, libraryPath, sha1[0], sha1[1], sha1[2], sha1[3]);
+}
+
 error_t moveTAF2Lib(tonie_info_t *tonieInfo, settings_t *settings, bool_t rootDir)
 {
     error_t error = NO_ERROR;
@@ -1252,6 +1276,20 @@ error_t moveTAF2Lib(tonie_info_t *tonieInfo, settings_t *settings, bool_t rootDi
         if (libraryPath)
         {
             tonie_info_t *tonieInfoLib = getTonieInfo(libraryPath, false, settings);
+            if (tonieInfoLib->valid && osMemcmp(tonieInfoLib->tafHeader->sha1_hash.data, tonieInfo->tafHeader->sha1_hash.data, tonieInfoLib->tafHeader->sha1_hash.len))
+            {
+                /* The audio id is the time the audio was encoded, so different TAFs can share it.
+                   When that name holds other audio, this TAF goes next to it under a name that
+                   adds the start of its hash. */
+                char *suffixedPath = libraryPathWithHash(libraryPath, tonieInfo->tafHeader);
+                char *suffixedShortPath = libraryPathWithHash(libraryShortPath, tonieInfo->tafHeader);
+                osFreeMem(libraryPath);
+                osFreeMem(libraryShortPath);
+                libraryPath = suffixedPath;
+                libraryShortPath = suffixedShortPath;
+                freeTonieInfo(tonieInfoLib);
+                tonieInfoLib = getTonieInfo(libraryPath, false, settings);
+            }
             bool moveToLibrary = true;
             bool skipMove = false;
             if (tonieInfoLib->valid)
@@ -1338,7 +1376,7 @@ void cbrGenericHeaderPassthrough(void *src_ctx, HttpClientContext *cloud_ctx, co
     {
         if (ctx->client_ctx->settings->internal.overlayNumber == 0)
         {
-            char_t *allowOrigin = ctx->connection->serverContext->settings.allowOrigin;
+            const char_t *allowOrigin = httpExtAllowOrigin();
             if (allowOrigin != NULL && osStrlen(allowOrigin) > 0)
             {
                 httpSendHeaderLine(ctx->connection, "Access-Control-Allow-Origin", allowOrigin);

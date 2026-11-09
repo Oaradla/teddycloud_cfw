@@ -70,7 +70,9 @@
         "ledLevel": {
             "0": "An",
             "1": "Aus (nach der Hell-Phase)",
-            "2": "Gedimmt"
+            "2": "Gedimmt",
+            "5": "Dauerhaft aus",
+            "6": "Dauerhaft gedimmt"
         },
         "slapLock": "Klaps-Sperre",
         "tiltLock": "Kipp-Sperre",
@@ -109,6 +111,9 @@
             "actions": "Aktionen",
             "tones": "Bestätigungstöne",
             "tonesHint": "Steigende Töne für „eingeschaltet“, fallende für „ausgeschaltet“. Die LED-Bestätigung bleibt immer.",
+            "temporary": "Nur bis zum Ausschalten",
+            "temporaryHint": "Die Einstellungen gelten nur, bis die Box ausgeht, und werden nicht gespeichert. Danach gelten wieder die gespeicherten Einstellungen. Eine dauerhafte Änderung derselben Einstellung beendet den vorübergehenden Wert.",
+            "temporaryOld": "Diese Boxen haben eine ältere Custom Firmware: Sie übernehmen diesen Tag nicht und behalten seine frühere Fassung, deren Einstellungen bleiben: {{boxes}}",
             "noSource": "Ein Event-Tag spielt keinen Inhalt ab, deshalb ist die Quelle ausgeblendet. Eine zugewiesene Quelle bleibt gespeichert, damit du schnell zurückwechseln kannst, wird aber an keine Box ausgeliefert. Boxen ohne Custom Firmware hören stattdessen eine Ansage."
         },
         "action": {
@@ -129,7 +134,8 @@
             "volumeLockGlobal": "Lautstärke-Sperre der Box",
             "bothEarsOff": "Ausschalten mit beiden Ohren",
             "idleOffBattery": "Ausschaltzeit im Akkubetrieb",
-            "idleOffStation": "Ausschaltzeit auf der Ladestation"
+            "idleOffStation": "Ausschaltzeit auf der Ladestation",
+            "sleepTimerOnceGlobal": "Sleep-Timer (einmalig, für die nächste Figur)"
         },
         "mode": {
             "0": "Umschalten",
@@ -189,7 +195,6 @@
             "selectTonie": "Tonie auswählen",
             "play": "Abspielen",
             "playHint": "Nur wenn keine Figur auf der Box steht und die Box bereit ist.",
-            "updateCheck": "Jetzt nach Firmware-Update suchen",
             "commandFailed": "Befehl nicht gesendet",
             "lastResult": "Letzter Befehl: {{command}} – {{result}} ({{time}})",
             "results": {
@@ -413,7 +418,10 @@
             "oldEsp32Build": "Das Image hat einen Build-Block: ein ESP32-Build von vor dem 14.10.2026",
             "packageNotKept": "Das Paket konnte für die Installation im Browser nicht aufbewahrt werden",
             "patchedNoApp": "Das gepatchte Image ist kein App-Image",
-            "portNotPatchable": "Der Port kann in dieser Version der Original-Firmware nicht gepatcht werden"
+            "portNotPatchable": "Der Port kann in dieser Version der Original-Firmware nicht gepatcht werden",
+            "assignedUpdateOff": "Zugewiesen, aber „Firmware-Update“ ist für diese Box aus, daher wird es nicht angeboten",
+            "assignedRunning": "Zugewiesen; die Box läuft bereits mit diesem Image",
+            "assignedRolledBack": "Zugewiesen, aber die Box hat dieses Image zurückgerollt; es wird nur mit „Zurückgerolltes Image erneut anbieten“ angeboten"
         },
         "controls": {
             "title": "Bedienung mit der Custom Firmware",
@@ -756,6 +764,9 @@
             "action": "Tonie zuweisen",
             "failedDetails": "Zuweisung an \"{{series}}\" fehlgeschlagen: ",
             "failedMessage": "Zuweisung fehlgeschlagen!",
+            "replace": "Ersetzen",
+            "replaceText": "{{tonie}} spielt \"{{current}}\". Stattdessen den neuen Inhalt abspielen?",
+            "replaceTitle": "Inhalt ersetzen?",
             "searchPlaceholder": "Tonies durchsuchen...",
             "successDetails": "Datei erfolgreich \"{{series}}\" zugewiesen!",
             "successMessage": "Tonie zugewiesen!",
@@ -994,9 +1005,12 @@
             "descriptionCount": "Die {{count}} Kapitel werden je ein eigenes TAF im neuen Ordner \"{{folder}}\". Dort entsteht auch eine Playlist, die die Titel wieder zusammensetzt; darin lassen sich Titel umsortieren, entfernen oder neue einfügen.",
             "failed": "Aufteilen fehlgeschlagen",
             "failedDetails": "\"{{file}}\" konnte nicht aufgeteilt werden:",
+            "originalKept": "\"{{file}}\" bleibt unverändert, wo es ist; verknüpfte Tonies spielen es weiter. Die Playlist setzt aus den Titeln ein eigenes TAF \"{{playlist}}\" zusammen (in der Bibliothek ausgeblendet), mit Cover und Titeln des Originals; die Audiodaten werden dabei nur kopiert, nicht neu kodiert. Soll ein Tonie die Playlist spielen, verknüpfe ihn mit der Playlist.",
             "originalStays": "\"{{file}}\" wandert unverändert mit in den Ordner, verknüpfte Tonies spielen es weiter. Die Playlist setzt aus den Titeln ein eigenes TAF \"{{playlist}}\" zusammen (in der Bibliothek ausgeblendet), mit Cover und Titeln des Originals; die Audiodaten werden dabei nur kopiert, nicht neu kodiert. Soll ein Tonie die Playlist spielen, verknüpfe ihn mit der Playlist.",
             "success": "TAF aufgeteilt",
             "successDetails": "\"{{file}}\" wurde in {{count}} Titel in \"{{folder}}\" aufgeteilt.",
+            "target": "Neuen Ordner anlegen in:",
+            "targetPlaceholder": "Ordner wählen, in den du schreiben darfst",
             "title": "\"{{file}}\" in Titel aufteilen"
         },
         "tap": {
@@ -1027,6 +1041,9 @@
             "cancel": "Abbrechen",
             "hideUploadFilesDragNDrop": "Dateiupload ausblenden",
             "modalTitle": "Datei(en) hochladen",
+            "replace": "Ersetzen",
+            "replaceText": "Schon in diesem Ordner: {{names}}. Ersetzen? Tonies, die diese Dateien abspielen, bekommen den neuen Inhalt.",
+            "replaceTitle": "Dateien ersetzen?",
             "showUploadFilesDragNDrop": "Dateiupload",
             "upload": "Hochladen",
             "uploadFailed": "Einige Dateien konnten nicht hochgeladen werden. Versuche es erneut.",
@@ -1042,6 +1059,7 @@
             "uploadedFileFailed": "Datei-Upload fehlgeschlagen!",
             "uploading": "Lädt hoch..."
         },
+        "deleteUsedBy": "Diese Tonies spielen es ab und verlieren ihren Inhalt: {{names}}.",
         "deleteOrphanModels": "Eigene Figuren mitlöschen, die sonst nirgends verwendet werden ({{n}}), samt ihren Bildern"
     },
     "footer": {
@@ -1546,7 +1564,8 @@
             "tonie_json": "Tonie JSON",
             "debug": "Debug",
             "debug_web": "Weboberfläche",
-            "mqtt_server_cert": "Zertifikat"
+            "mqtt_server_cert": "Zertifikat",
+            "web_auth": "Sicherheit des Web-Logins"
         },
         "guiSettings": {
             "exportSettings": "Exportieren",
@@ -1996,7 +2015,7 @@
             },
             "toniebox_led": {
                 "label": "LED-Helligkeit",
-                "description": "LED, während die Box bereit ist"
+                "description": "LED, während die Box bereit ist; dauerhaft aus und dauerhaft gedimmt nur mit Custom Firmware (andere Boxen: aus bzw. gedimmt)"
             },
             "toniebox_overrideFields": {
                 "label": "Unbekannte Felder überschreiben",
@@ -2096,7 +2115,7 @@
             },
             "cfw_update_channel": {
                 "label": "Update-Kanal",
-                "description": "Welche Firmware-Images die Box nimmt: nur Release oder auch Beta/Alpha"
+                "description": "Nur für die automatische Auslieferung: welche Firmware-Images die Box nimmt, nur Release oder auch Beta/Alpha (Keiner: kein Image). Ein zugewiesenes Image wird unabhängig von seinem Kanal ausgeliefert"
             },
             "cfw_update_mode": {
                 "label": "Update-Auslieferung",
@@ -2245,6 +2264,66 @@
             "debug_web_pcm_encode_console_url": {
                 "label": "PCM-Konsolen-URL",
                 "description": "Speichert das PCM der Kodierung im Browser zwischen und gibt einen Download-Link in der Browser-Konsole aus."
+            },
+            "core_server_cert_file_web_crt": {
+                "label": "Web-Zertifikat",
+                "description": "Zertifikatskette (PEM, z. B. fullchain.pem von Let's Encrypt) für den HTTPS-Webport. Leer nutzt das Serverzertifikat. Wird neu geladen, wenn sich die Datei ändert."
+            },
+            "core_server_cert_file_web_key": {
+                "label": "Schlüssel des Web-Zertifikats",
+                "description": "Privater Schlüssel (PEM) des Web-Zertifikats."
+            },
+            "frontend_default_ui": {
+                "label": "Standard-Weboberfläche",
+                "description": "Was die Adresse von teddyCloud öffnet: die klassische Weboberfläche oder web2 (die neue, unter /web/v2/), wenn sie installiert ist"
+            },
+            "web_auth_require_2fa": {
+                "label": "2FA verlangen",
+                "description": "Jeder Webbenutzer muss beim nächsten Login die Zwei-Faktor-Anmeldung (TOTP) einrichten."
+            },
+            "web_auth_password_min_length": {
+                "label": "Minimale Passwortlänge",
+                "description": "Mindestlänge neuer Passwörter von Webbenutzern. Bestehende Passwörter gelten weiter."
+            },
+            "web_auth_session_days": {
+                "label": "Sitzungsdauer (Tage)",
+                "description": "Ein Login läuft spätestens nach so vielen Tagen ab."
+            },
+            "web_auth_session_idle_hours": {
+                "label": "Sitzungs-Leerlaufzeit (Stunden)",
+                "description": "Ein Login läuft nach so vielen Stunden ohne Nutzung ab. 0 schaltet die Leerlaufzeit ab."
+            },
+            "web_auth_lockout_attempts": {
+                "label": "Fehlversuche bis zur Sperre",
+                "description": "Fehlgeschlagene Logins von einer Adresse, bevor sie gesperrt wird. Jede weitere Sperre verdoppelt die Zeit (max. 24 Stunden)."
+            },
+            "web_auth_lockout_minutes": {
+                "label": "Sperrzeit (Minuten)",
+                "description": "Dauer der ersten Sperre nach fehlgeschlagenen Logins."
+            },
+            "web_auth_trusted_proxies": {
+                "label": "Vertrauenswürdige Reverse-Proxys",
+                "description": "Adressen oder Netze (z. B. 172.18.0.0/16) von Reverse-Proxys, deren X-Forwarded-For- und X-Forwarded-Proto-Header vertraut wird. Ohne Proxy leer lassen."
+            },
+            "web_auth_lan_networks": {
+                "label": "Lokale Netze",
+                "description": "Netze, die als lokal (LAN) gelten. Als „nur LAN“ markierte Benutzer können sich nur aus diesen Netzen anmelden."
+            },
+            "web_auth_remote_access": {
+                "label": "Weboberfläche von außen",
+                "description": "Erlaubt die Weboberfläche von Adressen außerhalb der lokalen Netze. Aus: nur lokale Netze und die erlaubten Netze erreichen sie."
+            },
+            "web_auth_remote_https_only": {
+                "label": "Von außen nur HTTPS",
+                "description": "Lehnt einfaches HTTP zur Weboberfläche von Adressen außerhalb der lokalen Netze ab (direktes TLS oder ein vertrauenswürdiger Proxy mit X-Forwarded-Proto: https)."
+            },
+            "web_auth_allow_networks": {
+                "label": "Erlaubte Netze",
+                "description": "Zusätzliche Netze (z. B. ein VPN), die die Weboberfläche erreichen dürfen, wenn der Zugriff von außen aus ist."
+            },
+            "web_auth_deny_networks": {
+                "label": "Gesperrte Netze",
+                "description": "Adressen oder Netze, die die Weboberfläche nie erreichen dürfen."
             }
         },
         "overlayDisabled": "Overlayed deaktiviert!",
@@ -2275,7 +2354,9 @@
             "toniebox_led": {
                 "0": "An",
                 "1": "Aus",
-                "2": "Gedimmt"
+                "2": "Gedimmt",
+                "5": "Dauerhaft aus",
+                "6": "Dauerhaft gedimmt"
             },
             "cfw_update_channel": {
                 "0": "Keiner",
@@ -2350,6 +2431,10 @@
                 "0": "Unbekannt",
                 "1": "Toniebox 1",
                 "2": "Toniebox 2"
+            },
+            "frontend_default_ui": {
+                "0": "Klassisch",
+                "1": "web2"
             }
         },
         "warning": "Achtung! Settings level",
@@ -2452,7 +2537,7 @@
                 },
                 "unlock": "Entsperren"
             },
-            "intro": "Admins dürfen alles. Nutzer besitzen Boxen, Tonies und Ordner und teilen sie; Kinder bekommen nur, was mit ihnen geteilt ist. Eigene Gruppen sind von einer dieser beiden Arten. Die Box-APIs sind davon nicht betroffen.",
+            "intro": "Admins dürfen alles. Nutzer besitzen Boxen, Tonies und Ordner, legen weitere Besitzer fest und teilen Ordner; Kinder bekommen nur, was ihnen gehört oder freigegeben ist. Eigene Gruppen sind von einer dieser beiden Arten. Die Box-APIs sind davon nicht betroffen.",
             "lanOnly": "Nur LAN",
             "lanOnlyHint": "Darf sich nur aus dem lokalen Netz anmelden",
             "lastLogin": "Letzte Anmeldung",
@@ -2473,8 +2558,8 @@
                 "name": "Name",
                 "kind": "Art",
                 "kindHints": {
-                    "user": "Wie Nutzer: besitzt Boxen, Tonies und Ordner und teilt sie.",
-                    "guest": "Wie Kind: bekommt nur, was mit ihm geteilt ist."
+                    "user": "Wie Nutzer: besitzt Boxen, Tonies und Ordner, legt weitere Besitzer fest und teilt Ordner.",
+                    "guest": "Wie Kind: bekommt nur, was ihm gehört oder freigegeben ist."
                 },
                 "delete": "Löschen",
                 "deleteTitle": "Gruppe löschen",
@@ -2573,6 +2658,7 @@
     },
     "sharing": {
         "add": "Mit einem Nutzer teilen",
+        "allOwners": "Alle Besitzer",
         "button": "Teilen",
         "everyone": "Alle",
         "inherited": "Diese Freigaben kommen vom Ordner {{folder}}. Speichern legt eigene Freigaben für diesen Ordner an.",
@@ -2583,8 +2669,11 @@
         },
         "noOwners": "niemand (nur Admins)",
         "noShares": "Nicht geteilt.",
+        "ownerFilterHint": "Nur zeigen, was einem der gewählten Nutzer gehört",
+        "ownerFilterFailed": "Was den gewählten Benutzern gehört, konnte nicht geladen werden; alles wird angezeigt.",
         "owners": "Besitzer",
         "ownersAdminOnly": "Besitzer legen nur Admins fest.",
+        "ownerRequired": "Mindestens ein Besitzer ist nötig; nur ein Admin kann den letzten entfernen.",
         "ownersHint": "Besitzer haben alle Rechte und teilen mit anderen. Besitzer legen nur Admins fest.",
         "pickUser": "Nutzer",
         "remove": "Entfernen",
@@ -2598,21 +2687,24 @@
             "tonie.assign": "Audio zuweisen",
             "tonie.edit": "Bearbeiten (Live, Cloud, Modell)",
             "tonie.view": "Sehen und abspielen",
-            "box.share": "Teilen",
-            "tonie.share": "Teilen",
+            "box.share": "Besitzer festlegen",
+            "tonie.share": "Besitzer festlegen",
             "folder.share": "Teilen",
             "users.manage": "Nutzer anlegen und verwalten",
             "model.create": "Eigene Figuren anlegen"
         },
         "save": "Speichern",
         "shares": "Geteilt mit",
-        "singleSettings": "Einzelne Einstellungen (wenn nicht alle)",
-        "title": "Teilen: {{name}}"
+        "title": "Teilen: {{name}}",
+        "ownersButton": "Besitzer",
+        "ownersTitle": "Besitzer: {{name}}",
+        "ownersOnlyHint": "Besitzer haben alle Rechte und legen weitere Besitzer fest. Steht ein Tonie auf der Box eines anderen Nutzers, sieht dieser ihn, ohne dass er ihm gehört, und kann ihn für sich ausblenden."
     },
     "teddycloud": {
         "newVersionAvailable": "Es ist eine neue Version verfügbar!",
         "newVersionDetailsAvailable": "Du verwendest nicht die neueste TeddyCloud-Version. Bitte aktualisiere, um alle Vorteile der neuesten Veröffentlichung zu erhalten!",
         "newVersionDetailsAvailableDevelop": "Du verwendest nicht die neueste TeddyCloud-Develop-Version. Bitte aktualisiere, um alle Vorteile der neuesten Develop-Version zu erhalten!",
+        "newVersionDetailsAvailableReleaseCandidate": "Du verwendest nicht die neueste TeddyCloud-Release-Kandidaten-Version. Bitte aktualisiere, um alle Vorteile der neuesten Release-Kandidaten-Version zu erhalten!",
         "newVersionShort": "Update verfügbar",
         "openNewVersionInGithub": "Neueste Version auf GitHub öffnen"
     },
@@ -3279,7 +3371,8 @@
                 "confirmFlashDialog": "Möchtest du deine Toniebox wirklich flashen? Bitte achte auf eine stabile Verbindung und unterbreche den Vorgang nicht!",
                 "confirmFlashDialogHint": "Für eine korrekte Funktionsweise deiner Toniebox ist die angegebene TeddyCloud-Instanz unbedingt notwendig. Falls deine TeddyCloud offline ist, kann deine Toniebox keine neuen Inhalte mehr abrufen!",
                 "confirmResetDialog": "Der ganze Flash der Toniebox wird mit der gewählten Datei überschrieben. Nimm nur die Sicherung genau dieser Box. Nicht unterbrechen und die Verbindung nicht trennen.",
-                "resetOtherBox": "Die Datei ist die Sicherung der Box {{file}}, angeschlossen ist die Box {{box}}. Nichts geschrieben.",
+                "resetOtherBox": "Die Datei ist die Sicherung der Box {{file}}, angeschlossen ist die Box {{box}}. Diese Box bekommt damit die Identität der Box {{file}}. Trotzdem schreiben?",
+                "resetNotWritten": "Nichts geschrieben.",
                 "confirmFlashModal": "Toniebox mit gepatchter Firmware flashen",
                 "connectESPCollapseTitle": "Hilfe: UART mit Toniebox verbinden",
                 "connected": "Verbunden",
@@ -3585,7 +3678,8 @@
                 "deleted": "Modell \"{{model}}\" wurde gelöscht.",
                 "description": "\"{{model}}\" wirklich löschen? Dies kann nicht rückgängig gemacht werden.",
                 "title": "Modell löschen",
-                "alsoPicture": "Bild mitlöschen, keine andere Figur zeigt es"
+                "alsoPicture": "Bild mitlöschen, keine andere Figur zeigt es",
+                "failed": "Löschen des Modells fehlgeschlagen!"
             },
             "duplicateTitleSuffix": "Kopie",
             "editModalTitle": "Modell {{current}} von {{total}} bearbeiten",
@@ -3673,7 +3767,8 @@
                 "text": "Bilder in custom_img über {{kb}} KB bekommen eine kleine Kopie (höchstens 512 Pixel, WebP, wo der Browser es schreiben kann); die Modelle nutzen danach die Kopie. Die Originale bleiben im Ordner.",
                 "title": "Bilder der eigenen Modelle optimieren"
             },
-            "readOnly": "Jemand anderes hat diese Figur angelegt. Du kannst sie ansehen, aber nicht ändern."
+            "readOnly": "Jemand anderes hat diese Figur angelegt. Du kannst sie ansehen, aber nicht ändern.",
+            "saveFailed": "Speichern des Modells fehlgeschlagen!"
         },
         "customImages": {
             "navigationTitle": "Bilder",
@@ -3705,6 +3800,7 @@
             "modelInfoSeries": "Serie",
             "modelInfoTitle": "Titel",
             "modelReadOnlyHint": "Original-Tonie: Modell kann nicht geändert werden. Du kannst nur eigenes Audio zuweisen.",
+            "modelNoEditRightHint": "Du darfst das Modell dieses Tonies nicht ändern.",
             "placeholderSearchForAModel": "Nach einem Modell suchen",
             "placeholderSearchForARadioStream": "Suche nach einem Radiostream",
             "save": "Speichern",
@@ -4088,6 +4184,7 @@
             },
             "cancel": "Abbrechen",
             "clear": "Blatt leeren",
+            "clearConfirm": "Alle Tonies, Texte und Bilder vom Bogen entfernen?",
             "clearSettings": "Standardwerte",
             "close": "Schliessen",
             "contentPadding": "Rand Label innen",
@@ -4171,7 +4268,19 @@
                 "text": "Jede TAF und Playlist mit Titel in diesem Ordner und den Ordnern darunter kommt aufs Blatt; ausgeblendete und solche, die schon drauf sind, bleiben weg.",
                 "title": "Bibliotheksordner hinzufügen"
             },
-            "downloadPdf": "PDF herunterladen"
+            "downloadPdf": "PDF herunterladen",
+            "errors": {
+                "noPrintableArea": "Die Papierränder lassen keine druckbare Fläche übrig.",
+                "labelTooBig": "Das eingestellte Etikett passt nicht auf das gewählte Papierformat.",
+                "labelPairTooBig": "Das eingestellte Bild-/Text-Etikettenpaar passt nicht auf das gewählte Papierformat.",
+                "noLabels": "Es gibt keine Etiketten zum Drucken.",
+                "noCanvas": "Canvas ist in diesem Browser nicht verfügbar.",
+                "pageEncodeFailed": "Die Druckseite konnte nicht erzeugt werden.",
+                "imageLoadFailed": "Bild {{url}} konnte nicht geladen werden: {{reason}}",
+                "fontLoadFailed": "Eine oder mehrere Druckschriften konnten nicht geladen werden: {{reason}}",
+                "resourcesSkipped": "{{count}} Ressourcen konnten beim Erstellen des PDF nicht geladen werden. Die betroffenen Inhalte wurden ausgelassen.",
+                "printFallback": "Der Browser konnte das fertige PDF nicht drucken oder öffnen. Das PDF wurde stattdessen heruntergeladen."
+            }
         },
         "title": "Tonies",
         "tonies": {

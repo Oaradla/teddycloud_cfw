@@ -1,5 +1,6 @@
 
 
+#include "error_text.h"
 #include <errno.h>     // for error_t
 #include <stdint.h>    // for uint8_t
 #include <stdio.h>     // for printf
@@ -320,7 +321,9 @@ error_t handleCacheDownload(HttpConnection *connection, const char_t *uri, const
         return httpSendRedirectResponse(connection, 301, entry->original_url);
     }
 
-    error_t err = httpSendResponseUnsafe(connection, uri, entry->file_path);
+    /* a cached picture does not change, the browser keeps it instead of loading it on every visit */
+    connection->response.maxAge = 7 * 24 * 3600;
+    error_t err = httpExtSendResponseUnsafe(connection, uri, entry->file_path);
     return err;
 }
 
@@ -331,7 +334,7 @@ static error_t handleCorsOptions(
     client_ctx_t *client_ctx)
 {
     char line[256];
-    const char_t *allowOrigin = connection->serverContext->settings.allowOrigin;
+    const char_t *allowOrigin = httpExtAllowOrigin();
 
     osSnprintf(line, sizeof(line), "HTTP/%d.%d 204 No Content\r\n", MSB(connection->request.version), LSB(connection->request.version));
 
@@ -604,7 +607,7 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
             break;
         }
 
-        if (connection->settings->isHttps && client_ctx->settings->core.boxCertAuth && connection->private.api_access_only && !connection->private.authenticated)
+        if (httpExtIsHttps(connection) && client_ctx->settings->core.boxCertAuth && connection->private.api_access_only && !connection->private.authenticated)
         {
             error = httpServerUriUnauthorizedCallback(connection, uri);
             break;
@@ -679,9 +682,15 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
                 uri = "/web/index.html";
             }
 
+            /* custom pictures may be replaced under the same name, so the browser keeps them for a while only */
+            if (!strncmp(uri, "/custom_img/", 12))
+            {
+                connection->response.maxAge = 3600;
+            }
+
             char_t *newUri = custom_asprintf("%s%s", client_ctx->settings->core.wwwdir, uri);
 
-            error = httpSendResponse(connection, newUri);
+            error = httpExtSendResponse(connection, newUri);
             free(newUri);
         }
         else
@@ -699,6 +708,11 @@ error_t httpServerWebRequestCallback(HttpConnection *connection, const char_t *u
 {
     return httpServerRequestCallback(connection, uri, false);
 }
+bool_t httpExtBinaryIdle(HttpConnection *connection)
+{
+    return cfw_rtnl_idle(connection);
+}
+
 error_t httpServerAPIRequestCallback(HttpConnection *connection, const char_t *uri)
 {
     return httpServerRequestCallback(connection, uri, true);
@@ -878,6 +892,7 @@ typedef struct
     FsFileStat crt_stat;
     FsFileStat key_stat;
     systime_t checked;
+    bool failed;
 } web_cert_t;
 
 static web_cert_t web_cert;
@@ -933,7 +948,7 @@ static bool httpServerLoadWebCertificate(TlsContext *tlsContext)
     settings_resolve_dir(&key_full, (char *)key, get_settings()->internal.basedirfull);
     systime_t now = osGetSystemTime();
     bool paths_changed = osStrcmp(crt_full, web_cert.crt_path) != 0 || osStrcmp(key_full, web_cert.key_path) != 0;
-    bool due = paths_changed || web_cert.chain == NULL || timeCompare(now, web_cert.checked + 60000) >= 0;
+    bool due = paths_changed || timeCompare(now, web_cert.checked + 60000) >= 0;
     if (due)
     {
         web_cert.checked = now;
@@ -941,6 +956,7 @@ static bool httpServerLoadWebCertificate(TlsContext *tlsContext)
         {
             osMemset(&web_cert.crt_stat, 0, sizeof(web_cert.crt_stat));
             osMemset(&web_cert.key_stat, 0, sizeof(web_cert.key_stat));
+            web_cert.failed = false;
         }
         bool crt_changed = web_cert_changed(crt_full, &web_cert.crt_stat);
         bool key_changed = web_cert_changed(key_full, &web_cert.key_stat);
@@ -954,6 +970,7 @@ static bool httpServerLoadWebCertificate(TlsContext *tlsContext)
             {
                 web_cert.chain = chain;
                 web_cert.key = pem_key;
+                web_cert.failed = false;
                 TRACE_INFO("Web certificate loaded from '%s'\r\n", crt_full);
             }
             else
@@ -966,19 +983,24 @@ static bool httpServerLoadWebCertificate(TlsContext *tlsContext)
                 {
                     osFreeMem(pem_key);
                 }
-                TRACE_ERROR("Web certificate '%s' or key '%s' could not be read, using the server certificate\r\n", crt_full, key_full);
+                if (!web_cert.failed)
+                {
+                    TRACE_ERROR("Web certificate '%s' or key '%s' could not be read, using the server certificate\r\n", crt_full, key_full);
+                }
+                web_cert.failed = true;
             }
             osSnprintf(web_cert.crt_path, sizeof(web_cert.crt_path), "%s", crt_full);
             osSnprintf(web_cert.key_path, sizeof(web_cert.key_path), "%s", key_full);
         }
     }
     bool ok = false;
-    if (web_cert.chain != NULL && web_cert.key != NULL)
+    if (web_cert.chain != NULL && web_cert.key != NULL && !web_cert.failed)
     {
         error_t error = tlsLoadCertificate(tlsContext, 0, web_cert.chain, osStrlen(web_cert.chain), web_cert.key, osStrlen(web_cert.key), NULL);
         if (error)
         {
-            TRACE_ERROR("Web certificate could not be used: %s\r\n", error2text(error));
+            TRACE_ERROR("Web certificate could not be used: %s, using the server certificate\r\n", error2text(error));
+            web_cert.failed = true;
         }
         ok = !error;
     }
@@ -1140,16 +1162,13 @@ void server_init(bool test)
     http_settings.uriNotFoundCallback = httpServerUriNotFoundCallback;
     http_settings.authCallback = httpServerAuthCallback;
     http_settings.port = settings_get_unsigned("core.server.http_port");
-    http_settings.allowOrigin = strdup(settings_get_string("core.allowOrigin"));
-    http_settings.isHttps = false;
+    httpExtSetAllowOrigin(settings_get_string("core.allowOrigin"));
 
     /* use them for HTTPS */
     https_web_settings = http_settings;
     https_web_settings.connections = httpsWebConnections;
     https_web_settings.port = settings_get_unsigned("core.server.https_web_port");
     https_web_settings.tlsInitCallback = httpServerTlsInitCallback;
-    https_web_settings.allowOrigin = strdup(settings_get_string("core.allowOrigin"));
-    https_web_settings.isHttps = true;
 
     /* use them for Box HTTPS */
     https_api_settings = https_web_settings;
@@ -1157,7 +1176,6 @@ void server_init(bool test)
     https_api_settings.port = settings_get_unsigned("core.server.https_api_port");
     https_api_settings.tlsInitCallback = httpServerBoxTlsInitCallback;
     https_api_settings.requestCallback = httpServerAPIRequestCallback;
-    https_api_settings.idleCallback = cfw_rtnl_idle;
 
     error_t err = httpServerInit(&http_context, &http_settings);
     if (err != NO_ERROR)

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Permissions of web users (src/web_acl.c): levels admin / user / guest, owners and
-shares of boxes, tonies and library folders, admin restrictions, user management.
+Permissions of web users (src/web_acl.c): levels admin / user / guest, owners of boxes,
+tonies and library folders, shares of folders, borrowed tonies, admin restrictions,
+user management.
 
     make test_py TESTS=web_acl
 """
@@ -11,14 +12,15 @@ import json
 import os
 import shutil
 import sys
+import time
 import urllib.parse
 from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from sim import taf  # noqa: E402
-from sim.box import Box  # noqa: E402
+from sim import rtnl, taf  # noqa: E402
+from sim.box import Box, SseListener  # noqa: E402
 
 BASE = urllib.parse.urlsplit(os.environ.get("TEDDYCLOUD_BASE_URL", "http://127.0.0.1:80"))
 SANDBOX = os.environ.get("TC_SANDBOX")
@@ -148,6 +150,40 @@ def test_box_settings_of_owner(world):
     assert "toniebox.max_vol_spk" in names and "core.contentdir" not in names
 
 
+def test_setting_answers_tell_a_refusal(world):
+    alice, b1 = Client("alice"), world["box1"]
+    conn = http.client.HTTPConnection(BASE.hostname, BASE.port, timeout=20)
+    h = {"Sec-Fetch-Site": "same-origin", "Cookie": "tc_web_session=" + alice.cookie, "Content-Type": "text/plain"}
+    try:
+        answers = []
+        # one keep-alive connection: each answer has its own body and nothing more
+        for value in ("5", "3", "4", "7", ""):
+            conn.request("POST", "/api/settings/set/toniebox.led?overlay=%s" % b1, body=value, headers=h)
+            r = conn.getresponse()
+            answers.append((r.status, r.read().decode()))
+        assert answers == [(200, "OK")] + [(400, "invalid value")] * 4
+    finally:
+        conn.close()
+    assert alice.get("/api/settings/get/toniebox.led?overlay=%s" % b1)[1] == 5
+    assert Client("admin").post("/api/settings/set/core.nosuchsetting", "1", raw=True) == (404, {"_text": "unknown setting"})
+    assert alice.post("/api/settings/set/toniebox.led?overlay=%s" % b1, "0", raw=True) == (200, {"_text": "OK"})
+
+
+def test_live_events_without_content_for_users(world):
+    alice = Client("alice")
+    sse = SseListener(BASE.hostname, BASE.port, {"Cookie": "tc_web_session=" + alice.cookie})
+    try:
+        world["boxes"][0].rtnl(rtnl.frame(rtnl.tag_placed(0xE0040350AABBCCDD)))
+        for _ in range(50):
+            events = [(name, data) for name, data in sse.events if name != "keep-alive"]
+            if events:
+                break
+            time.sleep(0.1)
+        assert events and all(data is None and not name.startswith("rtnl-raw") for name, data in events), events
+    finally:
+        sse.close()
+
+
 def test_admin_only_routes(world):
     alice = Client("alice")
     for path in ("/api/stats", "/api/cacheStats", "/api/toniesJsonReload", "/api/triggerWriteConfig", "/content/json/x", "/v1/ota"):
@@ -156,32 +192,29 @@ def test_admin_only_routes(world):
     assert alice.get("/api/auth/events/get")[0] == 403
 
 
-def test_share_box_with_limited_rights(world):
+def test_box_owners(world):
     alice, gast = Client("alice"), Client("gast")
     b1 = world["box1"]
     assert gast.get("/api/settings/getIndex?overlay=%s" % b1)[0] == 403
-    status, data = alice.post("/api/acl/set", {"type": "box", "id": b1, "shares": {"gast": "box.view, box.setting:toniebox.max_vol_spk"}})
+    # boxes are not shared; their owners name further owners, also guests
+    assert alice.post("/api/acl/set", {"type": "box", "id": b1, "shares": {"gast": "box.view"}})[0] == 400
+    assert alice.post("/api/acl/set", {"type": "box", "id": world["box2"], "owners": ["bob", "alice"]})[0] == 403
+    status, data = alice.post("/api/acl/set", {"type": "box", "id": b1, "owners": ["alice", "gast"]})
     assert status == 200, data
     assert {b["ID"] for b in gast.get("/api/getBoxes")[1]["boxes"]} == {b1}
-    assert gast.post("/api/settings/set/toniebox.max_vol_spk?overlay=%s" % b1, "1", raw=True)[0] == 200
-    assert gast.post("/api/settings/set/toniebox.max_vol_hdp?overlay=%s" % b1, "1", raw=True)[0] == 403
-    names = {o["ID"] for o in gast.get("/api/settings/getIndex?overlay=%s" % b1)[1]["options"]}
-    assert names == {"toniebox.max_vol_spk"}
-    # shared users do not share on, and only admins assign owners
-    assert gast.post("/api/acl/set", {"type": "box", "id": b1, "shares": {"bob": "box.view"}})[0] == 403
-    assert alice.post("/api/acl/set", {"type": "box", "id": b1, "owners": ["alice", "bob"]})[0] == 403
-    assert alice.post("/api/acl/set", {"type": "box", "id": b1, "shares": {"gast": "box.share"}})[0] == 400
-    assert alice.post("/api/acl/set", {"type": "box", "id": world["box2"], "shares": {"gast": "box.view"}})[0] == 403
-    # a guest gets no more than the guest level, even if everything is shared: no sharing on
-    # wildcards would include sharing on, so they are refused; everything else explicitly
-    assert alice.post("/api/acl/set", {"type": "box", "id": b1, "shares": {"gast": "box.*"}})[0] == 400
-    assert alice.post("/api/acl/set", {"type": "box", "id": b1, "shares": {"gast": "box.view, box.settings, box.cfw"}})[0] == 200
+    # a guest owner has what the guest level allows: no further owners, no users
     assert gast.post("/api/settings/set/toniebox.max_vol_hdp?overlay=%s" % b1, "1", raw=True)[0] == 200
-    assert gast.post("/api/acl/set", {"type": "box", "id": b1, "shares": {"bob": "box.view"}})[0] == 403
+    assert gast.post("/api/acl/set", {"type": "box", "id": b1, "owners": ["alice", "gast", "bob"]})[0] == 403
     assert gast.post("/api/auth/users/create", {"username": "gast2", "password": "Gast2-Password-1", "level": "guest"})[0] == 403
-    # withdraw
-    assert alice.post("/api/acl/set", {"type": "box", "id": b1, "shares": {}})[0] == 200
+    assert alice.post("/api/acl/set", {"type": "box", "id": b1, "owners": ["alice"]})[0] == 200
     assert gast.get("/api/getBoxes")[1]["boxes"] == []
+    # an owner may hand the box on, but not leave it without owners; admins may
+    status, data = alice.post("/api/acl/set", {"type": "box", "id": b1, "owners": []})
+    assert status == 400 and data["error"] == "owner_required", data
+    assert {b["ID"] for b in alice.get("/api/getBoxes")[1]["boxes"]} == {b1}
+    admin = Client("admin")
+    assert admin.post("/api/acl/set", {"type": "box", "id": world["box2"], "owners": []})[0] == 200
+    assert admin.post("/api/acl/set", {"type": "box", "id": world["box2"], "owners": ["bob"]})[0] == 200
 
 
 def test_admin_restricts_a_user(world):
@@ -240,15 +273,26 @@ def test_tag_belongs_to_the_box_owner_after_first_placement(world):
     assert bob.get("/api/getTagInfo?ruid=%s" % RUID_A)[0] == 403
     mine = alice.get("/api/acl/mine")[1]
     assert mine["tonies"][RUID_A.upper()]["owner"] is True
-    # a tag placed later on another box keeps its owner
+    # tonies are not shared
+    assert alice.post("/api/acl/set", {"type": "tonie", "id": RUID_A, "shares": {"bob": "tonie.view"}})[0] == 400
+    # placed on bob's box the tag keeps its owner; bob borrows it: sees it, changes nothing
     world["boxes"][1].request("GET", "/v1/claim/%s" % RUID_A)
-    assert bob.get("/api/getTagInfo?ruid=%s" % RUID_A)[0] == 403
-    # the owner shares it
-    assert alice.post("/api/acl/set", {"type": "tonie", "id": RUID_A, "shares": {"bob": "tonie.view"}})[0] == 200
     assert bob.get("/api/getTagInfo?ruid=%s" % RUID_A)[0] != 403
     assert bob.post("/content/json/set/%s" % RUID_A, "live=true", raw=True)[0] == 403
-    assert bob.get("/api/acl/mine")[1]["tonies"][RUID_A.upper()]["rights"] == ["tonie.view"]
+    assert bob.get("/api/acl/mine")[1]["tonies"][RUID_A.upper()] == {"owner": False, "granted": "tonie.view", "borrowed": True, "rights": ["tonie.view"]}
     assert "tonie.edit" in alice.get("/api/acl/mine")[1]["tonies"][RUID_A.upper()]["rights"]
+    # bob hides it for himself; alice does not notice
+    assert bob.post("/content/json/set/%s" % RUID_A, "hide=true", raw=True)[0] == 200
+    assert bob.get("/api/getTagInfo?ruid=%s" % RUID_A)[0] == 403
+    assert RUID_A.upper() not in bob.get("/api/acl/mine")[1]["tonies"]
+    status, content = alice.get("/content/json/get/%s" % RUID_A)
+    assert status == 200 and content.get("hide") is False, content
+    # placed again it is back; the owner can make bob an owner too
+    world["boxes"][1].request("GET", "/v1/claim/%s" % RUID_A)
+    assert bob.get("/api/getTagInfo?ruid=%s" % RUID_A)[0] != 403
+    assert alice.post("/api/acl/set", {"type": "tonie", "id": RUID_A, "owners": ["alice", "bob"]})[0] == 200
+    assert "tonie.edit" in bob.get("/api/acl/mine")[1]["tonies"][RUID_A.upper()]["rights"]
+    assert alice.post("/api/acl/set", {"type": "tonie", "id": RUID_A, "owners": ["alice"]})[0] == 200
     # admin assigns an unplaced tag by hand
     assert Client("admin").post("/api/acl/set", {"type": "tonie", "id": RUID_B, "owners": ["bob"]})[0] == 200
     assert alice.get("/api/getTagInfo?ruid=%s" % RUID_B)[0] == 403
@@ -282,6 +326,15 @@ def test_playlist_files_must_be_readable(world):
         assert alice.post("/api/tapBuild?special=library", "path=private/alice/%s.tap" % name, raw=True)[0] == 403
     assert alice.post("/content/json/set/%s" % RUID_A, "source=lib://private/alice/own.tap", raw=True)[0] != 403
     assert alice.post("/api/tapBuild?special=library", "path=private/alice/own.tap", raw=True)[0] != 403
+
+    # a playlist shared to read builds its TAF next to itself: reading it is enough
+    (lib / "shared").mkdir(exist_ok=True)
+    (lib / "shared/x.taf").write_bytes(b"x")
+    (lib / "shared/list.tap").write_text(playlist("lib://shared/x.taf", target="lib://shared/list.tap.taf"))
+    (lib / "shared/elsewhere.tap").write_text(playlist("lib://shared/x.taf", target="lib://shared/other.taf"))
+    assert Client("admin").post("/api/acl/set", {"type": "folder", "id": "shared", "shares": {"alice": "folder.read"}})[0] == 200
+    assert alice.post("/content/json/set/%s" % RUID_A, "source=lib://shared/list.tap", raw=True)[0] != 403
+    assert alice.post("/content/json/set/%s" % RUID_A, "source=lib://shared/elsewhere.tap", raw=True)[0] == 403
 
     # splitting needs read on the TAF and write next to it
     assert alice.post("/api/tafSplit?special=library", "path=private/bob/secret.taf", raw=True)[0] == 403
@@ -320,6 +373,50 @@ def test_playlist_files_must_be_readable(world):
     assert alice.post("/api/fileMove?special=library", "source=private/alice/list.txt&target=private/alice/list.tap", raw=True)[0] == 403
 
 
+@pytest.mark.skipif(not shutil.which("ffmpeg"), reason="needs ffmpeg")
+def test_guest_uses_but_does_not_change_its_own_folder(world):
+    gast = Client("gast")
+    lib = Path(SANDBOX) / "data" / "library"
+    (lib / "private/gast").mkdir(parents=True, exist_ok=True)
+    (lib / "private/gast/x.taf").write_bytes(b"x")
+    for name, target in (("next.tap", "lib://private/gast/next.tap.taf"), ("aside.tap", "lib://private/gast/aside.taf")):
+        files = [{"filepath": "lib://private/gast/x.taf", "name": "t"}]
+        (lib / "private/gast" / name).write_text(json.dumps({"type": "tap", "filepath": target, "name": "list", "files": files}))
+    assert gast.get("/api/fileIndexV2?special=library&path=private/gast")[0] == 200
+    mine = gast.get("/api/acl/mine")[1]["folders"]["private/gast"]
+    assert mine["owner"] and mine["rights"] == ["folder.read"]
+    assert gast.upload("/api/fileUpload?special=library&path=private/gast", "new.taf", b"x")[0] == 403
+    assert gast.post("/api/dirCreate?special=library", "private/gast/new", raw=True)[0] == 403
+    assert gast.post("/api/fileDelete?special=library", "private/gast/x.taf", raw=True)[0] == 403
+    assert gast.post("/api/fileMove?special=library", "source=private/gast/x.taf&target=private/gast/y.taf", raw=True)[0] == 403
+    assert (lib / "private/gast/x.taf").exists() and not (lib / "private/gast/new").exists()
+    assert gast.post("/api/fileSetListened?special=library&path=private/gast/x.taf", "listened=true", raw=True)[0] == 200
+    # an existing playlist is used: assigning it builds its TAF, wherever in the folder it goes
+    ruid = "1111222233334444"
+    for name in ("next.tap", "aside.tap"):
+        status, data = gast.post("/content/json/set/%s" % ruid, "source=lib://private/gast/%s" % name, raw=True)
+        assert status == 200, (name, data)
+
+
+def test_split_into_a_target(world):
+    from test_tap import noise_wav
+
+    admin, alice = Client("admin"), Client("alice")
+    lib = Path(SANDBOX) / "data" / "library"
+    for folder in ("shelf", "private/alice", "private/bob"):
+        (lib / folder).mkdir(parents=True, exist_ok=True)
+    (lib / "shelf/album.wav").write_bytes(noise_wav(2))
+    assert admin.post("/api/fileEncode?special=library", "source=shelf/album.wav&target=shelf/album.taf", raw=True)[0] == 200
+    assert admin.post("/api/acl/set", {"type": "folder", "id": "shelf", "shares": {"alice": "folder.read"}})[0] == 200
+
+    # a read-only TAF goes into a folder the user may write, and stays where it is
+    assert alice.post("/api/tafSplit?special=library", "path=shelf/album.taf", raw=True)[0] == 403
+    assert alice.post("/api/tafSplit?special=library", "path=shelf/album.taf&target=private/bob", raw=True)[0] == 403
+    status, result = alice.post("/api/tafSplit?special=library", "path=shelf/album.taf&target=private/alice", raw=True)
+    assert status == 200 and result["folder"] == "private/alice/album" and "original" not in result, result
+    assert (lib / "shelf/album.taf").exists() and (lib / "private/alice/album/album.tap").exists()
+
+
 def test_library_folders(world):
     alice, bob = Client("alice"), Client("bob")
     lib = "/api/fileIndexV2?special=library&path="
@@ -347,6 +444,8 @@ def test_library_folders(world):
     assert bob.post("/api/fileDelete?special=library", "private/alice/forbob", raw=True)[0] == 403
     assert bob.post("/api/dirDelete?special=library", "private/alice", raw=True)[0] == 403
     assert bob.get("/api/acl/mine")[1]["folders"]["private/alice/forbob"]["rights"] == ["folder.read"]
+    # the new entry keeps the owner of the parent
+    assert alice.get("/api/acl/mine")[1]["folders"]["private/alice/forbob"]["owner"] is True
 
 
 def test_mine_has_the_effective_tonie_rights(world):
@@ -409,15 +508,14 @@ def test_review_moving_a_folder_keeps_restricted_sub_folders(world):
 
 
 def test_review_wildcard_shares_respect_restrictions(world):
-    admin, alice = Client("admin"), Client("alice")
-    b1 = world["box1"]
-    assert admin.post("/api/auth/users/update", {"username": "alice", "deny": "box.cfw, box.setting:toniebox.*"})[0] == 200
+    admin, folder = Client("admin"), "private/alice/forbob"
+    assert admin.post("/api/auth/users/update", {"username": "alice", "deny": "folder.write"})[0] == 200
     alice = Client("alice")
-    for rights in ("box.*", "box.cfw", "box.settings", "box.setting:*", "box.setting:toniebox.max_vol_spk", "*"):
-        assert alice.post("/api/acl/set", {"type": "box", "id": b1, "shares": {"bob": rights}})[0] == 400, rights
-    assert alice.post("/api/acl/set", {"type": "box", "id": b1, "shares": {"bob": "box.view, box.setting:cloud.enabled"}})[0] == 200
+    for rights in ("folder.*", "folder.write", "*"):
+        status, data = alice.post("/api/acl/set", {"type": "folder", "id": folder, "shares": {"bob": rights}})
+        assert status == 400, (rights, data)
+    assert alice.post("/api/acl/set", {"type": "folder", "id": folder, "shares": {"bob": "folder.read"}})[0] == 200
     assert admin.post("/api/auth/users/update", {"username": "alice", "deny": ""})[0] == 200
-    assert Client("alice").post("/api/acl/set", {"type": "box", "id": b1, "shares": {}})[0] == 200
 
 
 def test_review_secret_and_system_settings_are_not_readable(world):
@@ -656,6 +754,41 @@ def test_pictures_of_custom_tonies_are_deleted_with_them(world):
     assert alice.post("/api/toniesCustomJsonUpsert", evil)[0] == 200
     assert alice.post("/api/toniesCustomJsonDelete", {"models": ["Pic-4"], "pictures": True})[0] == 200
     assert (Path(SANDBOX) / "data" / "www" / "index.html").exists()
+
+
+def test_pictures_used_only_in_private_folders_are_seen_by_their_owners(world):
+    admin, alice, bob = Client("admin"), Client("alice"), Client("bob")
+    upload = "/api/fileUpload?special=custom_img&path="
+
+    def sees(client, name):
+        files = client.get("/api/fileIndexV2?special=custom_img&path=")[1]["files"]
+        listed = name in [f["name"] for f in files]
+        loaded = client.get("/custom_img/" + name)[0] == 200
+        named = "/custom_img/" + name in [m.get("pic") for m in client.get("/api/toniesCustomJson")[1]]
+        assert listed == loaded and (named == listed or name == "free.png"), (listed, loaded, named)
+        return listed
+
+    def changed():
+        # what a user sees is kept a few seconds
+        time.sleep(5.5)
+
+    assert admin.upload(upload, "free.png", b"png")[0] == 200
+    assert sees(bob, "free.png")
+    assert admin.upload(upload, "private.png", b"png")[0] == 200
+    private = {**custom_tonie("Vis-1"), "pic": "/custom_img/private.png"}
+    assert admin.post("/api/toniesCustomJsonUpsert", private)[0] == 200
+    put_taf("library/private/alice/vis.taf", int(private["audio_id"][0]))
+    changed()
+    assert sees(alice, "private.png") and not sees(bob, "private.png") and sees(admin, "private.png")
+    assert bob.get("/custom_img//./private.png")[0] != 200
+    public = {**custom_tonie("Vis-2"), "pic": "/custom_img/private.png"}
+    assert admin.post("/api/toniesCustomJsonUpsert", public)[0] == 200
+    put_taf("library/vis/vis.taf", int(public["audio_id"][0]))
+    changed()
+    assert sees(bob, "private.png")
+    # the picture list does not reach out of custom_img
+    for path in ("..", "../..", "x/../.."):
+        assert bob.get("/api/fileIndexV2?special=custom_img&path=" + path)[0] == 403, path
 
 
 def test_users_never_take_the_audio_id_of_an_official_tonie(world):

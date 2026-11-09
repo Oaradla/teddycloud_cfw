@@ -138,7 +138,7 @@ cp -a "$TEMPLATE/." "$SANDBOX/"
 rm -f "$SANDBOX/.complete"
 # the web UI is a symlink, so the template stays relocatable (and cacheable)
 [ -d "$WEB_UI" ] && ln -s "$WEB_UI" "$SANDBOX/data/www/web"
-export TC_SANDBOX="$SANDBOX" TC_TEMPLATE="$TEMPLATE" # TC_TEMPLATE: tests may cache things signed by the template CA (box certs) there
+export TC_SANDBOX="$SANDBOX" TC_TEMPLATE="$TEMPLATE" TC_SERVER_LOG="$tmp_log" # TC_TEMPLATE: tests may cache things signed by the template CA (box certs) there
 
 start_server "$SANDBOX"
 

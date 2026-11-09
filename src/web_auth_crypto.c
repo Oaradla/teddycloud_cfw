@@ -107,7 +107,7 @@ bool web_auth_pw_hash(const char *password, const uint8_t salt[WEB_AUTH_SALT_BYT
     {
         return false;
     }
-    if (pbkdf2(SHA256_HASH_ALGO, (const uint8_t *)password, strlen(password), salt, WEB_AUTH_SALT_BYTES, iterations, dk, sizeof(dk)) != 0)
+    if (pbkdf2Hmac(SHA256_HASH_ALGO, (const uint8_t *)password, strlen(password), salt, WEB_AUTH_SALT_BYTES, iterations, dk, sizeof(dk)) != 0)
     {
         return false;
     }
@@ -202,7 +202,7 @@ bool web_auth_pw_verify(const char *stored, const char *password, bool *needs_re
         {
             return false;
         }
-        if (pbkdf2(SHA256_HASH_ALGO, (const uint8_t *)password, strlen(password), salt, sizeof(salt), iterations, actual, sizeof(actual)) != 0)
+        if (pbkdf2Hmac(SHA256_HASH_ALGO, (const uint8_t *)password, strlen(password), salt, sizeof(salt), iterations, actual, sizeof(actual)) != 0)
         {
             return false;
         }

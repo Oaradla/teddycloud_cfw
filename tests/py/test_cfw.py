@@ -269,6 +269,9 @@ def test_volume_fields_dropped_after_hello(box):
 
 
 def test_profile_is_delivered(box):
+    # 3 and 4 are no LED levels
+    for level in (3, 4):
+        assert api("POST", f"/api/cfw/tag?ruid={FIGURE_RUID}", {"kind": "profile", "profile": {"ledLevel": level}})[0] == 400
     profile = {"resume": True, "sleepMinutes": 30, "ledLevel": 2}
     assert api("POST", f"/api/cfw/tag?ruid={FIGURE_RUID}", {"kind": "profile", "profile": profile})[0] == 200
     tag = api_json("GET", f"/api/cfw/tag?ruid={FIGURE_RUID}")[1]
@@ -323,13 +326,17 @@ def test_files_of_an_answer_the_box_lost_go_again(box, box_id, start):
 
 def test_event_tag_round_trip():
     ruid = "11223344556677E0"
-    event = {"tones": False, "actions": [{"action": 13, "mode": 0, "value": 0}, {"action": 9, "mode": 1, "value": 6}]}
+    event = {"tones": False, "temporary": False, "actions": [{"action": 13, "mode": 0, "value": 0}, {"action": 9, "mode": 1, "value": 6}]}
     assert api("POST", f"/api/cfw/tag?ruid={ruid}", {"kind": "event", "event": event})[0] == 200
     assert api_json("GET", f"/api/cfw/tag?ruid={ruid}")[1]["event"] == event
     tags = api_json("GET", "/api/cfw/tags")[1]["tags"]
     assert next(tag for tag in tags if tag["ruid"] == ruid)["kind"] == "event"
     # the idle power-off times take the whole 16-bit parameter as minutes
-    event = {"tones": True, "actions": [{"action": 17, "mode": 0, "value": 30}, {"action": 18, "mode": 0, "value": 65535}]}
+    event = {"tones": True, "temporary": False, "actions": [{"action": 17, "mode": 0, "value": 30}, {"action": 18, "mode": 0, "value": 65535}]}
+    assert api("POST", f"/api/cfw/tag?ruid={ruid}", {"kind": "event", "event": event})[0] == 200
+    assert api_json("GET", f"/api/cfw/tag?ruid={ruid}")[1]["event"] == event
+    # box settings until switch-off, with a one-time sleep timer for the next figure
+    event = {"tones": True, "temporary": True, "actions": [{"action": 15, "mode": 1, "value": 0}, {"action": 19, "mode": 0, "value": 30}]}
     assert api("POST", f"/api/cfw/tag?ruid={ruid}", {"kind": "event", "event": event})[0] == 200
     assert api_json("GET", f"/api/cfw/tag?ruid={ruid}")[1]["event"] == event
     # "none" replaces it with an empty profile
@@ -341,7 +348,7 @@ def test_invalid_values_are_refused():
     for body in ({"kind": "profile", "profile": {"speakerLimit": 16}},
                  {"kind": "profile", "profile": {"sleepMinutes": 1.5}},
                  {"kind": "profile", "profile": {"sleepMinutes": -1}},
-                 {"kind": "event", "event": {"actions": [{"action": 19, "mode": 0, "value": 0}]}},
+                 {"kind": "event", "event": {"actions": [{"action": 20, "mode": 0, "value": 0}]}},
                  {"kind": "event", "event": {"actions": [{"action": 1, "mode": 0, "value": 16384}]}},
                  {"kind": "event", "event": {"actions": []}},
                  {"kind": "other"}):
@@ -366,6 +373,33 @@ def test_box_settings_are_delivered(box, box_id):
         set_setting("cfw.box.both_ears_off", True)
         reset_setting("cfw.box.headphone_limit", box_id)
         reset_setting("cfw.box.idle_off_station", box_id)
+
+
+def test_led_permanently_dimmed(box, box_id):
+    files(freshness(box), GLOBAL_RUID)
+    try:
+        set_setting("toniebox.led", 6, box_id)
+        answer = freshness(box)
+        # the global file has the CFW's own level, field 8 the nearest one of the original
+        assert cfw.tbs_body(files(answer, GLOBAL_RUID)[0])[6:9] == bytes([0x06, 1, 6])
+        assert dict(answer)[8] == 2
+    finally:
+        reset_setting("toniebox.led", box_id)
+
+
+def test_own_old_settings_of_a_box_are_taken_over(box, box_id, start):
+    try:
+        # 25 % and slap to skip on, set for this box only before it ran the CFW
+        set_setting("toniebox.max_vol_spk", 0, box_id)
+        set_setting("toniebox.slap_enabled", True, box_id)
+        send_hello(box, start)
+        wait_until(lambda: setting_value("cfw.box.speaker_limit", box_id) == "6")
+        assert setting_value("cfw.box.slap_lock", box_id) == "false"
+        shown = {o["ID"]: o for o in api_json("GET", f"/api/settings/getIndex?overlay={box_id}&nolevel=true")[1]["options"]}
+        assert shown["toniebox.max_vol_spk"]["value"] == 0 and shown["toniebox.max_vol_spk"].get("derived") is True
+    finally:
+        reset_setting("cfw.box.speaker_limit", box_id)
+        reset_setting("cfw.box.slap_lock", box_id)
 
 
 def test_original_box_gets_rounded_limits():
@@ -485,6 +519,22 @@ def test_event_tag_for_box_without_extensions(box, start):
         start.__init__(sequence=10)
         send_hello(box, start)
 
+
+def test_temporary_event_tag_only_for_box_with_the_feature(box, start):
+    ruid = "AABBCCDD000005E0"
+    event = {"tones": True, "temporary": True, "actions": [{"action": 15, "mode": 1, "value": 0}]}
+    try:
+        # the box of this test lacks bit 13: it would keep the settings
+        assert api("POST", f"/api/cfw/tag?ruid={ruid}", {"kind": "event", "event": event})[0] == 200
+        assert not files(freshness(box), ruid)
+        start.__init__(sequence=20)
+        send_hello(box, start, capabilities=CAPS_ALL | 1 << 13)
+        delivered = files(freshness(box), ruid)
+        assert len(delivered) == 1 and cfw.tbs_body(delivered[0]).endswith(bytes([0x12, 1, 1]))
+    finally:
+        api("POST", f"/api/cfw/tag?ruid={ruid}", {"kind": "none"})
+        start.__init__(sequence=10)
+        send_hello(box, start)
 
 def test_remote_command_reaches_the_box(box, box_id, start):
     sock = box.rtnl(cfw.hello(BUILD, CAPS_ALL, **start.next()), keep_open=True)
@@ -685,6 +735,8 @@ def test_rolled_back_image_is_not_offered_again(box, box_id, start):
             assert ota(box, BUILD)[2] == older
         assert ota(box, BUILD)[0] == 304
         assert box_entry(box)["rolledBackBuild"] == BUILD - 10
+        status, text = api("POST", f"/api/cfw/deliver?overlay={box_id}", {"build": BUILD - 10})
+        assert status == 200 and "rolled this image back" in text, text
 
         # a rollback the box reports in its hello: the bootloader went back after a failed trial start
         box.rtnl(cfw.hello(BUILD, CAPS_ALL, result=2, rolled_back=BUILD + 37, **start.next()))
@@ -879,12 +931,25 @@ def test_setup_page_as_item_7(box):
 def test_settings_index():
     options = api_json("GET", "/api/settings/getIndex?nolevel=true")[1]["options"]
     led = next(o for o in options if o["ID"] == "toniebox.led")
-    assert led["values"] == [{"value": 0, "label": "On"}, {"value": 1, "label": "Off"}, {"value": 2, "label": "Dimmed"}]
+    assert led["values"] == [{"value": 0, "label": "On"}, {"value": 1, "label": "Off"}, {"value": 2, "label": "Dimmed"},
+                             {"value": 5, "label": "Off permanently"}, {"value": 6, "label": "Dimmed permanently"}]
     # group titles only on request: older web UIs do not know them
     assert not any(o["type"] == "desc" for o in options)
     grouped = api_json("GET", "/api/settings/getIndex?nolevel=true&groups=true")[1]["options"]
     group = next(o for o in grouped if o["ID"] == "cfw.box")
     assert group["type"] == "desc" and group["label"] == "Custom firmware functions"
+
+
+def test_text_setting_can_be_emptied():
+    try:
+        set_setting("cfw.firmware.github_repo", "owner/name")
+        set_setting("cfw.firmware.github_repo", "")
+        assert setting_value("cfw.firmware.github_repo") == ""
+        # an empty number is no value
+        assert api("POST", "/api/settings/set/cfw.box.speaker_limit", "") == (400, "invalid value")
+        assert setting_value("cfw.box.speaker_limit") == "9"
+    finally:
+        reset_setting("cfw.firmware.github_repo")
 
 
 def test_github_needs_a_repository():

@@ -9,6 +9,7 @@
 #include "fs_ext.h"
 #include "os_port.h"
 #include "debug.h"
+#include "error_text.h"
 #include "opus.h"
 #include "ogg/ogg.h"
 #include "proto/toniebox.pb.taf-header.pb-c.h"

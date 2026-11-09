@@ -7,8 +7,9 @@
 /*
  * Permissions of the web UI users (only with the login on; without it everyone may
  * do everything, as before). Admins may do everything. Users of the level "user"
- * own boxes, tonies and library folders and share them with chosen rights; "guest"
- * users only get what is shared with them. Stored in config/web_acl.json.
+ * own boxes, tonies and library folders and share folders with chosen rights; "guest"
+ * users get the boxes and tonies they own and the folders shared with them, within
+ * the limit of their level. Stored in config/web_acl.json.
  */
 
 #define WEB_ACL_JSON_FILE "web_acl.json"
@@ -48,6 +49,10 @@ void web_acl_owned_renamed(const char *map, const char *from, const char *to);
 bool web_acl_model_allowed(HttpConnection *connection, const cJSON *entry);
 /* a picture in custom_img: own, or every custom tonie showing it may be changed */
 bool web_acl_image_allowed(HttpConnection *connection, const char *name);
+/* {"<picture>": true, ...}: the pictures in custom_img the user does not see */
+cJSON *web_acl_images_hidden(HttpConnection *connection);
+/* a picture is seen unless every custom tonie showing it is used only in private folders of others */
+bool web_acl_image_visible(HttpConnection *connection, const char *name);
 /* {"models": [...], "images": [...]}: the custom tonies the user may change, and the pictures shown only by those */
 cJSON *web_acl_models_changeable(HttpConnection *connection);
 /* names of the custom tonies used only below the library paths (and nowhere else) */
@@ -73,8 +78,11 @@ error_t web_acl_forbidden(HttpConnection *connection);
 
 void web_acl_user_created(const char *username);
 void web_acl_user_deleted(const char *username);
-/* a box asked for a tag: unassigned tags go to the owners of the box */
+/* a box asked for a tag: unassigned tags go to the owners of the box, tags of others are
+   borrowed by them (seen, not owned) */
 void web_acl_tag_placed(const char *ruid, const char *box_id);
+/* the user hides a borrowed tonie: only the user stops seeing it; false if not borrowed */
+bool web_acl_tonie_unborrow(HttpConnection *connection, const char *ruid);
 
 error_t handleApiAclCatalog(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiAclMine(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);

@@ -256,8 +256,8 @@ bool acl_allowed(const acl_subject_t *s, const char *right)
     switch (s->relation)
     {
     case ACL_REL_OWNER:
-        /* guests never own anything; an entry that says so gives them nothing more than a share */
-        return s->level != ACL_LEVEL_GUEST || acl_list_allows(s->granted, right);
+        /* also guests: their level limit (level_max) applies */
+        return true;
     case ACL_REL_SHARED:
         return acl_list_allows(s->granted, right);
     case ACL_REL_UNASSIGNED:

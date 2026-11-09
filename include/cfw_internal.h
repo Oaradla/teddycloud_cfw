@@ -15,6 +15,7 @@
 #define CFW_CAP_REMOTE (1 << 10)
 #define CFW_CAP_BATTERY (1 << 11)
 #define CFW_CAP_IDLE_TIMES (1 << 12)
+#define CFW_CAP_TEMPORARY (1 << 13)
 
 #define CFW_CMD_SYNC 6
 #define CFW_CMD_HELLO 63

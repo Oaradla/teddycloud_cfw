@@ -11,12 +11,25 @@
 #include "web_auth_net.h"
 #include "mutex_manager.h"
 #include "tls_adapter.h"
+#include "platform.h"
 
 #include "fs_port.h"
 #include "fs_ext.h"
 #include "os_ext.h"
 #include "server_helpers.h"
 #include "cert.h"
+
+int tc_log_level(void)
+{
+    return get_settings()->log.level;
+}
+
+bool tc_log_color(void)
+{
+    settings_t *settings = get_settings();
+    return settings->log.color && settings->internal.logColorSupport;
+}
+
 
 /* static functions*/
 static void settings_init_opt(setting_item_t *opt);
@@ -421,7 +434,7 @@ static void option_map_init(uint8_t settingsId)
     OPTION_ENUM("toniebox.max_vol_hdp", &settings->toniebox.max_vol_hdp, 3, 3, "Limit headphone volume", "0=25%, 1=50%, 2=75%, 3=100%", "0=25%|1=50%|2=75%|3=100%", LEVEL_BASIC)
     OPTION_BOOL("toniebox.slap_enabled", &settings->toniebox.slap_enabled, TRUE, "Slap to skip", "Enable track skip via slapping gesture", LEVEL_BASIC)
     OPTION_BOOL("toniebox.slap_back_left", &settings->toniebox.slap_back_left, FALSE, "Slap direction", "Determine slap direction for skipping track: False for left-backward, True for left-forward", LEVEL_BASIC)
-    OPTION_ENUM("toniebox.led", &settings->toniebox.led, 0, 2, "LED brightness", "0=on, 1=off, 2=dimmed", "0=On|1=Off|2=Dimmed", LEVEL_BASIC)
+    OPTION_ENUM("toniebox.led", &settings->toniebox.led, 0, 6, "LED brightness", "0=on, 1=off, 2=dimmed; custom firmware only: 5=off permanently, 6=dimmed permanently", "0=On|1=Off|2=Dimmed|5=Off permanently|6=Dimmed permanently", LEVEL_BASIC)
     OPTION_BOOL("toniebox.overrideFields", &settings->toniebox.overrideFields, FALSE, "Override unknown fields", "Override unknown fields 2 + 6", LEVEL_EXPERT)
     OPTION_UNSIGNED("toniebox.field2", &settings->toniebox.field2, 7, 0, UINT32_MAX, "Field 2", "Unknown Toniebox setting, default 7", LEVEL_EXPERT)
     OPTION_UNSIGNED("toniebox.field6", &settings->toniebox.field6, 1, 0, UINT32_MAX, "Field 6", "Unknown Toniebox setting, default 1", LEVEL_EXPERT)
@@ -449,7 +462,7 @@ static void option_map_init(uint8_t settingsId)
     OPTION_UNSIGNED("cfw.box.idle_off_station", &settings->cfw.box.idle_off_station, 10, 1, 65535, "Switch-off time on the charging station", "Minutes after which the idle box switches itself off while it stands on the charging station (1 to 65535, about 45 days). Boxes without the custom firmware always switch off after 10 minutes", LEVEL_BASIC)
     OPTION_TREE_DESC("cfw.update", "Firmware update", LEVEL_BASIC)
     OPTION_BOOL("cfw.update.enabled", &settings->cfw.update.enabled, TRUE, "Firmware update", "Offer custom firmware images to the box", LEVEL_BASIC)
-    OPTION_ENUM("cfw.update.channel", &settings->cfw.update.channel, 1, 3, "Update channel", "Which firmware images the box takes: release only, or beta / alpha as well", "0=None|1=Release|2=Beta|3=Alpha", LEVEL_BASIC)
+    OPTION_ENUM("cfw.update.channel", &settings->cfw.update.channel, 1, 3, "Update channel", "Automatic delivery only: which firmware images the box takes, release only or beta / alpha as well (None: no image). An assigned image is delivered whatever its channel", "0=None|1=Release|2=Beta|3=Alpha", LEVEL_BASIC)
     OPTION_ENUM("cfw.update.mode", &settings->cfw.update.mode, 0, 1, "Update delivery", "Manual: an image is delivered only when it is assigned to the box. Automatic: the newest image of the channel is delivered", "0=Manual|1=Automatic", LEVEL_BASIC)
     OPTION_STRING("cfw.update.target", &settings->cfw.update.target, "", "Assigned image", "Build number of the image assigned to this box (manual delivery); empty: none", LEVEL_EXPERT)
     OPTION_BOOL("cfw.update.allow_rolled_back", &settings->cfw.update.allow_rolled_back, FALSE, "Offer rolled-back image again", "Offer an image again that the box has rolled back", LEVEL_EXPERT)
@@ -987,7 +1000,7 @@ error_t settings_init(const char *cwd, const char *base_dir)
     settings_set_string("internal.version_web.v_long", WEB_FULL_NAME_LONG);
     settings_set_string("internal.version_web.v_full", WEB_FULL_NAME_FULL);
 
-    settings_set_bool("internal.logColorSupport", supportsAnsiColors());
+    settings_set_bool("internal.logColorSupport", platform_supports_ansi_colors());
     settings_set_bool("internal.autogen_certs", autogen_certs);
 
     Settings_Overlay[0].internal.config_init = true;
@@ -1627,6 +1640,23 @@ bool settings_set_unsigned_ovl(const char *item, uint32_t value, const char *ove
 {
     return settings_set_unsigned_id(item, value, get_overlay_id(overlay_name));
 }
+/* an enum may leave out values of its range: "0=On|1=Off|5=..." */
+static bool settings_value_listed(const char *values, uint32_t value)
+{
+    for (const char *item = values; item != NULL; item = osStrchr(item, '|'))
+    {
+        if (*item == '|')
+        {
+            item++;
+        }
+        if (strtoul(item, NULL, 10) == value)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool settings_set_unsigned_id(const char *item, uint32_t value, uint8_t settingsId)
 {
     if (!item)
@@ -1640,7 +1670,7 @@ bool settings_set_unsigned_id(const char *item, uint32_t value, uint8_t settings
         return false;
     }
 
-    if (value < opt->min.unsigned_value || value > opt->max.unsigned_value)
+    if (value < opt->min.unsigned_value || value > opt->max.unsigned_value || (opt->values != NULL && !settings_value_listed(opt->values, value)))
     {
         TRACE_ERROR("  %s = %u out of bounds\r\n", opt->option_name, value);
         return false;
@@ -1919,7 +1949,7 @@ bool settings_set_by_string_id(const char *item, const char *value, uint8_t sett
     if (opt == NULL)
     {
         TRACE_ERROR("Settings: %s not found\r\n", item);
-        return ERROR_NOT_FOUND;
+        return false;
     }
     else if (opt)
     {

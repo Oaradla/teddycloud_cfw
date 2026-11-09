@@ -1,5 +1,6 @@
 #include <ctype.h>
 
+#include "error_text.h"
 #include <sys/types.h>
 #include <time.h>
 #include <stdbool.h>
@@ -635,8 +636,8 @@ error_t handleApiSettingsGet(HttpConnection *connection, const char_t *uri, cons
 
 error_t handleApiSettingsSet(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
-    char response[256];
-    osSprintf(response, "ERROR");
+    const char *response = "invalid value";
+    uint_t statusCode = 400;
     const char *item = &uri[18];
 
     char_t data[BODY_BUFFER_SIZE];
@@ -671,15 +672,17 @@ error_t handleApiSettingsSet(HttpConnection *connection, const char_t *uri, cons
             TRACE_DEBUG("got overlay '%s'\r\n", overlay);
         }
 
-        bool success = false;
-        if (size > 0)
+        /* an empty value is valid for a text setting only */
+        setting_item_t *opt = settings_get_by_name_ovl(item, overlay);
+        if (opt == NULL)
         {
-            success = settings_set_by_string_ovl(item, data, overlay);
+            response = "unknown setting";
+            statusCode = 404;
         }
-
-        if (success)
+        else if ((size > 0 || opt->type == TYPE_STRING) && settings_set_by_string_ovl(item, data, overlay))
         {
-            osStrcpy(response, "OK");
+            response = "OK";
+            statusCode = 200;
             /* only admins may trigger the write of the config */
             if (!web_acl_is_admin(connection))
             {
@@ -688,8 +691,9 @@ error_t handleApiSettingsSet(HttpConnection *connection, const char_t *uri, cons
         }
     }
 
-    httpPrepareHeader(connection, "text/plain; charset=utf-8", 0);
-    return httpWriteResponseString(connection, response, false);
+    httpPrepareHeader(connection, "text/plain; charset=utf-8", osStrlen(response));
+    connection->response.statusCode = statusCode;
+    return httpWriteResponseString(connection, (char_t *)response, false);
 }
 error_t handleApiSettingsReset(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
@@ -931,6 +935,7 @@ error_t handleApiFileIndexV2(HttpConnection *connection, const char_t *uri, cons
 
     /* Fast path for custom_img: skip TAF parsing and content.json - images need only name, date, size, isDir */
     bool_t isCustomImg = (osStrcmp(special, "custom_img") == 0);
+    cJSON *hiddenImages = isCustomImg ? web_acl_images_hidden(connection) : NULL;
 
     while (true)
     {
@@ -951,13 +956,23 @@ error_t handleApiFileIndexV2(HttpConnection *connection, const char_t *uri, cons
             continue;
         }
         bool isDir = (entry.attributes & FS_FILE_ATTR_DIRECTORY);
+        if (isCustomImg)
+        {
+            char image[2 * 256 + 2];
+            const char *folder = path + strspn(path, "/");
+            osSnprintf(image, sizeof(image), "%s%s%s", folder, folder[0] ? "/" : "", entry.name);
+            if (!isDir && cJSON_HasObjectItem(hiddenImages, image))
+            {
+                continue;
+            }
+        }
         /* folders the user may not see are left out (private folders of others) */
-        if (isDir && osStrcmp(entry.name, "..") != 0 && !web_acl_folder_visible(connection, path, entry.name))
+        else if (isDir && osStrcmp(entry.name, "..") != 0 && !web_acl_folder_visible(connection, path, entry.name))
         {
             continue;
         }
         /* in a folder that is only on the way to a visible one, the files stay hidden */
-        if (!isDir && !web_acl_folder_allowed(connection, path, "folder.read"))
+        else if (!isDir && !web_acl_folder_allowed(connection, path, "folder.read"))
         {
             continue;
         }
@@ -1117,6 +1132,7 @@ error_t handleApiFileIndexV2(HttpConnection *connection, const char_t *uri, cons
     }
 
     osFreeMem(pathAbsolute);
+    cJSON_Delete(hiddenImages);
     char *jsonString = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
 
@@ -1712,7 +1728,7 @@ error_t handleApiGetCaDer(HttpConnection *connection, const char_t *uri, const c
     settings_t *settings = get_settings();
     char *ca_path = custom_asprintf("%s%c%s", settings->internal.basedirfull, PATH_SEPARATOR, settings->core.server_cert.file.ca_der);
 
-    error_t err = httpSendResponseUnsafe(connection, uri, ca_path);
+    error_t err = httpExtSendResponseUnsafe(connection, uri, ca_path);
     osFreeMem(ca_path);
     return err;
 }
@@ -2657,7 +2673,7 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
     else if (track_count == 1)
     {
         /* the uri only selects the content type by extension */
-        error = httpSendResponseUnsafe(connection, "track.ogg", out_paths[0]);
+        error = httpExtSendResponseUnsafe(connection, "track.ogg", out_paths[0]);
     }
     else
     {
@@ -2670,7 +2686,7 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
             error = ERROR_FAILURE;
             goto cleanup;
         }
-        error = httpSendResponseUnsafe(connection, "tracks.zip", zip_path);
+        error = httpExtSendResponseUnsafe(connection, "tracks.zip", zip_path);
     }
 
 cleanup:
@@ -2800,22 +2816,24 @@ error_t handleApiContent(HttpConnection *connection, const char_t *uri, const ch
     }
 
     char *range_hdr = NULL;
+    uint32_t first = 0, last = 0;
 
     // Format HTTP response header
-    // TODO add status 416 on invalid ranges
-    if (!isStream && connection->request.Range.start > 0)
+    HttpRangeResult range = isStream ? HTTP_RANGE_FULL : httpExtResolveRange(&connection->request.Range, length, &first, &last);
+    if (range == HTTP_RANGE_PARTIAL)
     {
-        connection->request.Range.size = length;
-        if (connection->request.Range.end >= connection->request.Range.size || connection->request.Range.end == 0)
-        {
-            connection->request.Range.end = connection->request.Range.size - 1;
-        }
-
-        range_hdr = custom_asprintf("bytes %" PRIu32 "-%" PRIu32 "/%" PRIu32, connection->request.Range.start, connection->request.Range.end, connection->request.Range.size);
+        range_hdr = custom_asprintf("bytes %" PRIu32 "-%" PRIu32 "/%" PRIu32, first, last, length);
         connection->response.contentRange = range_hdr;
         connection->response.statusCode = 206;
-        connection->response.contentLength = connection->request.Range.end - connection->request.Range.start + 1;
+        connection->response.contentLength = last - first + 1;
         TRACE_DEBUG("Added response range %s\r\n", connection->response.contentRange);
+    }
+    else if (range == HTTP_RANGE_UNSATISFIABLE)
+    {
+        range_hdr = custom_asprintf("bytes */%" PRIu32, length);
+        connection->response.contentRange = range_hdr;
+        connection->response.statusCode = 416;
+        connection->response.contentLength = 0;
     }
     else
     {
@@ -2834,6 +2852,7 @@ error_t handleApiContent(HttpConnection *connection, const char_t *uri, const ch
     if (range_hdr)
     {
         osFreeMem(range_hdr);
+        connection->response.contentRange = NULL;
     }
 
     if (error)
@@ -2842,15 +2861,20 @@ error_t handleApiContent(HttpConnection *connection, const char_t *uri, const ch
         return error;
     }
 
-    if (!isStream && connection->request.Range.start > 0 && connection->request.Range.start < connection->request.Range.size)
+    if (range == HTTP_RANGE_PARTIAL)
     {
-        TRACE_DEBUG("Seeking file to %" PRIu32 "\r\n", connection->request.Range.start);
-        fsSeekFile(file, startOffset + connection->request.Range.start, FS_SEEK_SET);
+        TRACE_DEBUG("Seeking file to %" PRIu32 "\r\n", first);
+        fsSeekFile(file, startOffset + first, FS_SEEK_SET);
+        length = last - first + 1;
     }
     else
     {
         TRACE_DEBUG("No seeking, sending from beginning\r\n");
         fsSeekFile(file, startOffset, FS_SEEK_SET);
+        if (range == HTTP_RANGE_UNSATISFIABLE)
+        {
+            length = 0; /* header only */
+        }
     }
 
     // Send response body
@@ -3749,7 +3773,7 @@ error_t handleApiToniesJson(HttpConnection *connection, const char_t *uri, const
 {
     char *tonies_path = custom_asprintf("%s%c%s", settings_get_string("internal.configdirfull"), PATH_SEPARATOR, TONIES_JSON_FILE);
 
-    error_t err = httpSendResponseUnsafe(connection, uri, tonies_path);
+    error_t err = httpExtSendResponseUnsafe(connection, uri, tonies_path);
     osFreeMem(tonies_path);
     return err;
 }
@@ -3775,6 +3799,19 @@ error_t handleApiToniesCustomJson(HttpConnection *connection, const char_t *uri,
         httpPrepareHeader(connection, "application/json; charset=utf-8", 2);
         return httpWriteResponseString(connection, "[]", false);
     }
+
+    /* the user does not learn the names of pictures hidden from him */
+    cJSON *hidden = web_acl_images_hidden(connection);
+    cJSON *entry = NULL;
+    cJSON_ArrayForEach(entry, root)
+    {
+        const cJSON *pic = cJSON_GetObjectItemCaseSensitive(entry, "pic");
+        if (cJSON_IsString(pic) && !osStrncmp(pic->valuestring, "/custom_img/", 12) && cJSON_HasObjectItem(hidden, pic->valuestring + 12))
+        {
+            cJSON_ReplaceItemInObjectCaseSensitive(entry, "pic", cJSON_CreateString(""));
+        }
+    }
+    cJSON_Delete(hidden);
 
     char *jsonString = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
@@ -5616,7 +5653,7 @@ error_t handleApiTonieboxCustomJson(HttpConnection *connection, const char_t *ur
         fsCloseFile(file);
     }
 
-    error_t err = httpSendResponseUnsafe(connection, uri, path);
+    error_t err = httpExtSendResponseUnsafe(connection, uri, path);
     osFreeMem(path);
     return err;
 }
@@ -5629,7 +5666,7 @@ error_t handleApiToniesJsonSearch(HttpConnection *connection, const char_t *uri,
     searchModel[0] = '\0';
     searchSeries[0] = '\0';
     searchEpisode[0] = '\0';
-    toniesJson_item_t *result[18];
+    toniesJson_item_t *result[TONIES_SEARCH_MAX];
     size_t result_size;
 
     queryGet(queryString, "searchModel", searchModel, sizeof(searchModel));
@@ -5662,7 +5699,7 @@ error_t handleApiContentJson(HttpConnection *connection, const char_t *uri, cons
         return ERROR_FAILURE;
     }
     char *file_path = custom_asprintf("%s%s", rootPath, &uri[13]);
-    return httpSendResponseUnsafe(connection, uri, file_path);
+    return httpExtSendResponseUnsafe(connection, uri, file_path);
 }
 
 error_t handleApiContentJsonBase(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx, char **contentPath)
@@ -5696,7 +5733,7 @@ error_t handleApiContentJsonGet(HttpConnection *connection, const char_t *uri, c
     }
 
     contentJsonPath = custom_asprintf("%s%s", contentPath, ".json");
-    error = httpSendResponseUnsafe(connection, uri, contentJsonPath);
+    error = httpExtSendResponseUnsafe(connection, uri, contentJsonPath);
     osFreeMem(contentPath);
     osFreeMem(contentJsonPath);
     return error;
@@ -5724,6 +5761,12 @@ error_t handleApiContentJsonSet(HttpConnection *connection, const char_t *uri, c
         const char *ruid = osStrlen(uri) >= 34 ? &uri[osStrlen(uri) - 16] : "";
         char value[256];
         bool allowed = true;
+        /* hiding a borrowed tonie takes it only from the user's own list */
+        if (queryGet(post_data, "hide", value, sizeof(value)) && !osStrcmp(value, "true") && web_acl_tonie_unborrow(connection, ruid))
+        {
+            osFreeMem(contentPath);
+            return httpOkResponse(connection);
+        }
         if (queryGet(post_data, "source", value, sizeof(value)))
         {
             allowed = web_acl_tonie_allowed(connection, ruid, "tonie.assign") && web_acl_source_allowed(connection, value);
@@ -6417,8 +6460,9 @@ static void tap_api_file_title(const char *in, char *out, size_t out_len)
     memmove(out, &out[lead], j - lead + 1);
 }
 
-/* POST path=<TAF in the library>[&title=...]: writes every chapter as a TAF of its own into a
-   folder named like the TAF, and a playlist there that puts them together into the TAF again */
+/* POST path=<TAF in the library>[&title=...][&target=<folder in the library>]: writes every chapter
+   as a TAF of its own into a folder named like the TAF, and a playlist there that puts them together
+   into the TAF again; the folder goes into target, else next to the TAF, which then moves into it */
 error_t handleApiTafSplit(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
     char_t *post_data = osAllocMem(POST_BUFFER_SIZE);
@@ -6434,26 +6478,49 @@ error_t handleApiTafSplit(HttpConnection *connection, const char_t *uri, const c
         return tap_api_error(connection, 400, "path to a .taf in the library missing");
     }
 
+    const char *lib = get_settings()->internal.librarydirfull;
+    size_t lib_len = osStrlen(lib);
+    char targetDir[PATH_LEN];
+    bool_t keepOriginal = queryGet(post_data, "target", targetDir, sizeof(targetDir));
+    char *parent;
+    if (keepOriginal)
     {
-        /* reads the TAF, writes next to it */
-        const char *relative = &tafPath[osStrlen(get_settings()->internal.librarydirfull) + 1];
-        char *dir = strdup(relative);
-        char *slash = strrchr(dir, PATH_SEPARATOR);
-        *(slash ? slash : dir) = '\0';
-        bool_t allowed = web_acl_folder_allowed(connection, relative, "folder.read") && web_acl_folder_allowed(connection, dir, "folder.write");
-        osFreeMem(dir);
-        if (!allowed)
+        sanitizePath(targetDir, false);
+        parent = custom_asprintf("%s%c%s", lib, PATH_SEPARATOR, targetDir);
+        sanitizePath(parent, false);
+    }
+    else
+    {
+        parent = strdup(tafPath);
+        *strrchr(parent, PATH_SEPARATOR) = '\0';
+    }
+
+    {
+        /* reads the TAF, writes into the parent folder */
+        const char *relative = &tafPath[lib_len + 1];
+        const char *parentRelative = osStrlen(parent) > lib_len ? &parent[lib_len + 1] : "";
+        if (!web_acl_folder_allowed(connection, relative, "folder.read") || !web_acl_folder_allowed(connection, parentRelative, "folder.write"))
         {
+            osFreeMem(parent);
             osFreeMem(post_data);
             osFreeMem(tafPath);
             return web_acl_forbidden(connection);
         }
     }
 
+    if (!fsDirExists(parent))
+    {
+        osFreeMem(parent);
+        osFreeMem(post_data);
+        osFreeMem(tafPath);
+        return tap_api_error(connection, 400, "target folder in the library missing");
+    }
+
     tonie_info_t *tafInfo = getTonieInfo(tafPath, false, get_settings());
     if (!tafInfo->valid || tafInfo->tafHeader == NULL || tafInfo->tafHeader->n_track_page_nums == 0 || !taf_remux_possible(tafPath))
     {
         freeTonieInfo(tafInfo);
+        osFreeMem(parent);
         osFreeMem(post_data);
         osFreeMem(tafPath);
         return tap_api_error(connection, 400, "not a TAF that can be split");
@@ -6464,20 +6531,20 @@ error_t handleApiTafSplit(HttpConnection *connection, const char_t *uri, const c
     freeTonieInfo(tafInfo);
     if (chapters > TAF_REMUX_MAX_CHAPTERS)
     {
+        osFreeMem(parent);
         osFreeMem(post_data);
         osFreeMem(tafPath);
         return tap_api_error(connection, 400, "too many chapters");
     }
 
-    /* the folder: next to the TAF and named like it, with a number if that is taken */
-    const char *lib = get_settings()->internal.librarydirfull;
-    size_t lib_len = osStrlen(lib);
+    /* the folder: in the parent folder and named like the TAF, with a number if that is taken */
     char *base = strdup(tafPath);
     base[osStrlen(base) - 4] = '\0';
+    const char *name = strrchr(base, PATH_SEPARATOR) ? strrchr(base, PATH_SEPARATOR) + 1 : base;
     char *folder = NULL;
     for (int n = 1; n < 100 && folder == NULL; n++)
     {
-        char *candidate = (n == 1) ? strdup(base) : custom_asprintf("%s (%d)", base, n);
+        char *candidate = (n == 1) ? custom_asprintf("%s%c%s", parent, PATH_SEPARATOR, name) : custom_asprintf("%s%c%s (%d)", parent, PATH_SEPARATOR, name, n);
         if (fsDirExists(candidate) || fsFileExists(candidate))
         {
             osFreeMem(candidate);
@@ -6487,11 +6554,11 @@ error_t handleApiTafSplit(HttpConnection *connection, const char_t *uri, const c
             folder = candidate;
         }
     }
-    const char *name = strrchr(base, PATH_SEPARATOR) ? strrchr(base, PATH_SEPARATOR) + 1 : base;
     if (folder == NULL || fsCreateDir(folder) != NO_ERROR)
     {
         osFreeMem(folder);
         osFreeMem(base);
+        osFreeMem(parent);
         osFreeMem(post_data);
         osFreeMem(tafPath);
         return tap_api_error(connection, 500, "cannot create the folder");
@@ -6540,10 +6607,10 @@ error_t handleApiTafSplit(HttpConnection *connection, const char_t *uri, const c
         osFreeMem(file);
     }
 
-    /* the original goes into the folder too, so that the album stays together; tonies with it as
-       their source follow it and keep playing it */
+    /* without a target the original goes into the folder too, so that the album stays together;
+       tonies with it as their source follow it and keep playing it */
     char *moved = NULL;
-    if (error == NO_ERROR)
+    if (error == NO_ERROR && !keepOriginal)
     {
         char *target = custom_asprintf("%s%c%s.taf", folder, PATH_SEPARATOR, name);
         if (target != NULL && fsMoveFile(tafPath, target, false) == NO_ERROR)
@@ -6615,6 +6682,7 @@ error_t handleApiTafSplit(HttpConnection *connection, const char_t *uri, const c
     osFreeMem(tapPath);
     osFreeMem(folder);
     osFreeMem(base);
+    osFreeMem(parent);
     osFreeMem(post_data);
     osFreeMem(tafPath);
     return tap_api_reply(connection, statusCode, json);

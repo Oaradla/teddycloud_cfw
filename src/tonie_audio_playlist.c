@@ -9,6 +9,7 @@
 #include "handler.h"
 #include "taf_remux.h"
 #include "date_time.h"
+#include "error_text.h"
 #include "path_ext.h"
 
 static OsMutex tap_build_mutex;

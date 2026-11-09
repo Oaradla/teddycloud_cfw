@@ -7,6 +7,7 @@
 #include "fs_port.h"
 #include "handler.h"
 #include "handler_api.h"
+#include "mutex_manager.h"
 #include "os_port.h"
 #include "server_helpers.h"
 #include "settings.h"
@@ -343,6 +344,132 @@ bool web_acl_image_allowed(HttpConnection *connection, const char *name)
     cJSON_Delete(others);
     cJSON_Delete(root);
     return ok;
+}
+
+/* per custom tonie of root: how often it is used, whether somewhere else than in the private folders of others */
+typedef struct
+{
+    cJSON *root;
+    char own[LIB_PATH_MAX]; /* the private folder of the user */
+    int *uses;
+    bool *seen;
+} sight_t;
+
+static bool sight_use(void *ctx, tonie_info_t *info, const char *lib, const char *ruid)
+{
+    sight_t *s = ctx;
+    bool seen = lib == NULL || !acl_path_within(lib, "private") || acl_path_within(lib, s->own);
+    int i = 0;
+    const cJSON *entry = NULL;
+    cJSON_ArrayForEach(entry, s->root)
+    {
+        if (model_used(entry, info))
+        {
+            s->uses[i]++;
+            s->seen[i] |= seen;
+        }
+        i++;
+    }
+    return true;
+}
+
+/* the pictures of root whose custom tonies are all used, and only in the private folders of others */
+static cJSON *pictures_hidden(HttpConnection *connection, cJSON *root)
+{
+    int n = cJSON_GetArraySize(root) + 1;
+    sight_t s = {root, "", osAllocMem(sizeof(int) * n), osAllocMem(sizeof(bool) * n)};
+    osSnprintf(s.own, sizeof(s.own), "private/%s", connection->private.web_user);
+    osMemset(s.uses, 0, sizeof(int) * n);
+    osMemset(s.seen, 0, sizeof(bool) * n);
+    walk_uses(sight_use, &s);
+    cJSON *shown = cJSON_CreateObject();
+    int i = 0;
+    const cJSON *entry = NULL;
+    cJSON_ArrayForEach(entry, root)
+    {
+        const char *pic = picture_of(entry);
+        if (pic != NULL && (s.uses[i] == 0 || s.seen[i]) && !cJSON_HasObjectItem(shown, pic))
+        {
+            cJSON_AddTrueToObject(shown, pic);
+        }
+        i++;
+    }
+    cJSON *hidden = cJSON_CreateObject();
+    cJSON_ArrayForEach(entry, root)
+    {
+        const char *pic = picture_of(entry);
+        if (pic != NULL && !cJSON_HasObjectItem(shown, pic) && !cJSON_HasObjectItem(hidden, pic) &&
+            !web_acl_owns(connection, "images", pic))
+        {
+            cJSON_AddTrueToObject(hidden, pic);
+        }
+    }
+    cJSON_Delete(shown);
+    osFreeMem(s.uses);
+    osFreeMem(s.seen);
+    return hidden;
+}
+
+/* a tonies page asks for many pictures at once: the hidden ones of the last users are kept a few seconds */
+#define HIDDEN_KEEP_MS 5000
+#define HIDDEN_USERS 8
+
+typedef struct
+{
+    char user[sizeof(((http_connection_private_t *)NULL)->web_user)];
+    systime_t time;
+    cJSON *hidden;
+} hidden_cache_t;
+
+static hidden_cache_t hidden_cache[HIDDEN_USERS];
+
+cJSON *web_acl_images_hidden(HttpConnection *connection)
+{
+    if (web_acl_is_admin(connection))
+    {
+        return cJSON_CreateObject();
+    }
+    const char *user = connection->private.web_user;
+    systime_t now = osGetSystemTime();
+    mutex_lock(MUTEX_WEB_ACL_IMAGES);
+    hidden_cache_t *slot = &hidden_cache[0];
+    for (size_t i = 0; i < HIDDEN_USERS; i++)
+    {
+        if (!osStrcmp(hidden_cache[i].user, user))
+        {
+            slot = &hidden_cache[i];
+            break;
+        }
+        if (hidden_cache[i].time < slot->time)
+        {
+            slot = &hidden_cache[i];
+        }
+    }
+    if (slot->hidden == NULL || osStrcmp(slot->user, user) || now - slot->time > HIDDEN_KEEP_MS)
+    {
+        cJSON_Delete(slot->hidden);
+        cJSON *root = load_models();
+        slot->hidden = pictures_hidden(connection, root);
+        cJSON_Delete(root);
+        osSnprintf(slot->user, sizeof(slot->user), "%s", user);
+        slot->time = now;
+    }
+    cJSON *hidden = cJSON_Duplicate(slot->hidden, true);
+    mutex_unlock(MUTEX_WEB_ACL_IMAGES);
+    return hidden;
+}
+
+bool web_acl_image_visible(HttpConnection *connection, const char *name)
+{
+    char norm[LIB_PATH_MAX];
+    if (!acl_path_normalize(name, norm, sizeof(norm)))
+    {
+        return false;
+    }
+    cJSON *hidden = web_acl_images_hidden(connection);
+    bool visible = !cJSON_HasObjectItem(hidden, norm);
+    cJSON_Delete(hidden);
+    return visible;
 }
 
 cJSON *web_acl_model_orphans(HttpConnection *connection, const char *const *paths, size_t count)

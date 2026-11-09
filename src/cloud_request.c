@@ -1,5 +1,6 @@
 
 
+#include "error_text.h"
 #include <errno.h>  // for error_t
 #include <stdint.h> // for uint8_t
 #include <stdio.h>  // for snprintf
@@ -58,7 +59,7 @@ error_t httpClientTlsInitCallbackBase(HttpClientContext *context,
     if (client_crt != NULL && client_key != NULL)
     {
         // Import the client's certificate
-        error = tlsAddCertificate(tlsContext, client_crt, strlen(client_crt), client_key, strlen(client_key));
+        error = tlsLoadCertificate(tlsContext, 0, client_crt, strlen(client_crt), client_key, strlen(client_key), NULL);
         // Any error to report?
         if (error)
             return error;
@@ -74,19 +75,19 @@ error_t httpClientTlsInitCallbackBase(HttpClientContext *context,
     return NO_ERROR;
 }
 error_t httpClientTlsInitCallbackNoCA(HttpClientContext *context,
-                                      TlsContext *tlsContext)
+                                      TlsContext *tlsContext, void *param)
 {
     return httpClientTlsInitCallbackBase(context, tlsContext, NULL, NULL, NULL);
 }
 /* the server certificate checked against the CA list of the request (cbr_ctx_t.trusted_ca) */
 static error_t httpClientTlsInitCallbackTrustedCa(HttpClientContext *context,
-                                                  TlsContext *tlsContext)
+                                                  TlsContext *tlsContext, void *param)
 {
     req_cbr_t *cbr = context->sourceCtx;
     return httpClientTlsInitCallbackBase(context, tlsContext, ((cbr_ctx_t *)cbr->ctx)->trusted_ca, NULL, NULL);
 }
 error_t httpClientTlsInitCallbackClientAuthTonies(HttpClientContext *context,
-                                                  TlsContext *tlsContext)
+                                                  TlsContext *tlsContext, void *param)
 {
     req_cbr_t *cbr_ctx = context->sourceCtx;
     client_ctx_t *client_ctx = ((cbr_ctx_t *)cbr_ctx->ctx)->client_ctx;
@@ -219,7 +220,7 @@ error_t web_request(const char *server, int port, bool https, const char *uri, c
             callback = httpClientTlsInitCallbackClientAuthTonies;
         else if (cbr_ctx->trusted_ca != NULL)
             callback = httpClientTlsInitCallbackTrustedCa;
-        error = httpClientRegisterTlsInitCallback(&httpClientContext, callback);
+        error = httpClientRegisterTlsInitCallback(&httpClientContext, callback, NULL);
         if (error)
         {
             return error;

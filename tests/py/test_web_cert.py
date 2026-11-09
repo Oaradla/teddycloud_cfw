@@ -90,3 +90,13 @@ def test_missing_files_fall_back_to_server_certificate(certs):
     assert api("POST", "/api/settings/set/core.server_cert.file.web_crt", os.path.join(certs, "missing.pem"))[0] == 200
     time.sleep(0.5)
     assert peer_cn(WEB_PORT) == before
+
+
+def test_missing_files_are_reported_once(certs):
+    missing = os.path.join(certs, "missing.pem")
+    assert api("POST", "/api/settings/set/core.server_cert.file.web_key", os.path.join(certs, "missing-key.pem"))[0] == 200
+    assert api("POST", "/api/settings/set/core.server_cert.file.web_crt", missing)[0] == 200
+    for _ in range(5):
+        peer_cn(WEB_PORT)
+    with open(os.environ["TC_SERVER_LOG"], errors="replace") as log:
+        assert log.read().count("Web certificate '%s'" % missing) == 1

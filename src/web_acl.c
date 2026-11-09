@@ -26,7 +26,7 @@ static cJSON *acl = NULL;
 static OsMutex acl_mutex;
 static bool acl_mutex_ready = false;
 
-/* guests: everything a share can give them, but no sharing on and no users */
+/* guests: no sharing, no further owners and no users */
 static const char *const default_guest_max = "box.view, box.settings, box.cfw, tonie.view, tonie.assign, tonie.edit, folder.read, folder.write";
 static const char *const default_unassigned_tonie = "tonie.view, tonie.assign, tonie.edit";
 
@@ -126,8 +126,16 @@ static void apply_defaults_unlocked(void)
     {
         cJSON_AddStringToObject(unassigned, "box", "");
     }
-    obj(acl, "boxes");
-    obj(acl, "tonies");
+    /* boxes and tonies have owners only; the shares of an earlier build go */
+    cJSON *entry = NULL;
+    cJSON_ArrayForEach(entry, obj(acl, "boxes"))
+    {
+        cJSON_DeleteItemFromObjectCaseSensitive(entry, "shares");
+    }
+    cJSON_ArrayForEach(entry, obj(acl, "tonies"))
+    {
+        cJSON_DeleteItemFromObjectCaseSensitive(entry, "shares");
+    }
     cJSON *folders = obj(acl, "folders");
     /* new top-level folders: read and write for everyone; by/: read for everyone; private/: nobody */
     if (!cJSON_GetObjectItemCaseSensitive(folders, ""))
@@ -276,11 +284,10 @@ static acl_user_t current_user(HttpConnection *connection)
     return u;
 }
 
-static bool in_owners(cJSON *entry, const char *user)
+static bool in_list(cJSON *entry, const char *key, const char *user)
 {
-    cJSON *owners = cJSON_GetObjectItemCaseSensitive(entry, "owners");
     cJSON *o = NULL;
-    cJSON_ArrayForEach(o, owners)
+    cJSON_ArrayForEach(o, cJSON_GetObjectItemCaseSensitive(entry, key))
     {
         if (cJSON_IsString(o) && !osStrcasecmp(o->valuestring, user))
         {
@@ -290,12 +297,33 @@ static bool in_owners(cJSON *entry, const char *user)
     return false;
 }
 
+static bool in_owners(cJSON *entry, const char *user)
+{
+    return in_list(entry, "owners", user);
+}
+
+static bool remove_from_list(cJSON *entry, const char *key, const char *user)
+{
+    cJSON *list = cJSON_GetObjectItemCaseSensitive(entry, key);
+    bool removed = false;
+    for (int i = cJSON_GetArraySize(list) - 1; i >= 0; i--)
+    {
+        cJSON *o = cJSON_GetArrayItem(list, i);
+        if (cJSON_IsString(o) && !osStrcasecmp(o->valuestring, user))
+        {
+            cJSON_DeleteItemFromArray(list, i);
+            removed = true;
+        }
+    }
+    return removed;
+}
+
 static bool has_owners(cJSON *entry)
 {
     return cJSON_GetArraySize(cJSON_GetObjectItemCaseSensitive(entry, "owners")) > 0;
 }
 
-/* granted rights of the user in the entry (the own share and the one for everyone) */
+/* granted rights of the user in the entry (the own share, the one for everyone, a borrowed tonie) */
 static bool shared_rights(cJSON *entry, const char *user, char *out, size_t out_size)
 {
     cJSON *shares = cJSON_GetObjectItemCaseSensitive(entry, "shares");
@@ -314,6 +342,13 @@ static bool shared_rights(cJSON *entry, const char *user, char *out, size_t out_
             osSnprintf(out + len, out_size - len, "%s%s", len ? ", " : "", s->valuestring);
             found = true;
         }
+    }
+    /* a tonie of others placed on a box of the user: seen until the user hides it */
+    if (in_list(entry, "borrowers", user))
+    {
+        size_t len = osStrlen(out);
+        osSnprintf(out + len, out_size - len, "%stonie.view", len ? ", " : "");
+        found = true;
     }
     return found;
 }
@@ -508,7 +543,20 @@ static cJSON *folder_lookup_unlocked(const char *path, char *found, size_t found
     }
 }
 
-bool web_acl_folder_allowed(HttpConnection *connection, const char *path, const char *right)
+/* own_write: the guest's own folder may be written as well (the TAF a playlist builds, the listened mark) */
+static bool folder_decide_unlocked(const acl_user_t *u, cJSON *entry, const char *right, bool own_write)
+{
+    bool ok = decide_unlocked(u, entry, NULL, right);
+    /* guests own no folders: their private folder they read, anything more needs a share */
+    if (ok && u->level == ACL_LEVEL_GUEST && !own_write && osStrcmp(right, "folder.read") && in_owners(entry, u->user))
+    {
+        char granted[RIGHTS_MAX];
+        ok = shared_rights(entry, u->user, granted, sizeof(granted)) && acl_list_allows(granted, right);
+    }
+    return ok;
+}
+
+static bool folder_allowed(HttpConnection *connection, const char *path, const char *right, bool own_write)
 {
     char norm[PATH_MAX_LEN];
     acl_user_t u = current_user(connection);
@@ -522,9 +570,14 @@ bool web_acl_folder_allowed(HttpConnection *connection, const char *path, const 
     }
     lock_acl();
     cJSON *entry = folder_lookup_unlocked(norm, NULL, 0);
-    bool ok = entry != NULL && decide_unlocked(&u, entry, NULL, right);
+    bool ok = entry != NULL && folder_decide_unlocked(&u, entry, right, own_write);
     unlock_acl();
     return ok;
+}
+
+bool web_acl_folder_allowed(HttpConnection *connection, const char *path, const char *right)
+{
+    return folder_allowed(connection, path, right, false);
 }
 
 bool web_acl_folder_visible(HttpConnection *connection, const char *parent, const char *name)
@@ -848,7 +901,7 @@ bool web_acl_source_allowed(HttpConnection *connection, const char *source)
     {
         return false;
     }
-    /* a playlist: also every file in it, and its TAF is written */
+    /* a playlist: also every file in it; its TAF is written, which next to the playlist needs no more than reading it */
     size_t len = osStrlen(source);
     if (len < 4 || osStrcasecmp(&source[len - 4], ".tap"))
     {
@@ -858,8 +911,11 @@ bool web_acl_source_allowed(HttpConnection *connection, const char *source)
     resolveSpecialPathPrefix(&path, get_settings());
     tonie_audio_playlist_t tap;
     osMemset(&tap, 0, sizeof(tap));
-    bool ok = fsFileExists(path) && tap_load(path, &tap) == NO_ERROR && tap._valid &&
-              web_acl_folder_allowed(connection, tap.filepath + 6, "folder.write");
+    bool ok = fsFileExists(path) && tap_load(path, &tap) == NO_ERROR && tap._valid;
+    if (ok && (osStrncmp(tap.filepath, source, len) || osStrcmp(tap.filepath + len, TAP_BUILT_SUFFIX)))
+    {
+        ok = folder_allowed(connection, tap.filepath + 6, "folder.write", true);
+    }
     for (size_t i = 0; ok && i < tap.filesCount; i++)
     {
         const char *file = tap.files[i].filepath;
@@ -1070,7 +1126,9 @@ bool web_acl_request_allowed(HttpConnection *connection, const char_t *uri, cons
                 return false;
             }
             query_value(query, "path", value, sizeof(value));
-            return library_root(query) && overlay_ok(connection, query) && web_acl_folder_allowed(connection, value, r->right);
+            /* the listened mark is no real change: guests set it in their own folder too */
+            bool own_write = !osStrcmp(r->prefix, "/api/fileSetListened");
+            return library_root(query) && overlay_ok(connection, query) && folder_allowed(connection, value, r->right, own_write);
         }
         case P_LIB_BODY:
             /* pictures of custom tonies (r->right): the handler asks web_acl_image_allowed */
@@ -1082,6 +1140,13 @@ bool web_acl_request_allowed(HttpConnection *connection, const char_t *uri, cons
         case P_LIB_LIST:
         {
             char norm[PATH_MAX_LEN];
+            /* pictures of custom tonies: the handler leaves out those the user does not see */
+            if (!osStrcmp(r->prefix, "/api/fileIndexV2") && query_value(query, "special", value, sizeof(value)) &&
+                !osStrcmp(value, "custom_img"))
+            {
+                query_value(query, "path", value, sizeof(value));
+                return overlay_ok(connection, query) && acl_path_normalize(value, norm, sizeof(norm));
+            }
             query_value(query, "path", value, sizeof(value));
             if (!library_root(query) || !overlay_ok(connection, query) || !acl_path_normalize(value, norm, sizeof(norm)))
             {
@@ -1152,6 +1217,10 @@ bool web_acl_request_allowed(HttpConnection *connection, const char_t *uri, cons
         }
         }
     }
+    if (!osStrncmp(uri, "/custom_img/", 12))
+    {
+        return web_acl_image_visible(connection, uri + 12);
+    }
     /* static files of the web UI and the plugins */
     return osStrncmp(uri, "/api/", 5) != 0;
 }
@@ -1216,15 +1285,8 @@ static void remove_user_from(cJSON *map, const char *username)
     cJSON *entry = NULL;
     cJSON_ArrayForEach(entry, map)
     {
-        cJSON *owners = cJSON_GetObjectItemCaseSensitive(entry, "owners");
-        for (int i = cJSON_GetArraySize(owners) - 1; i >= 0; i--)
-        {
-            cJSON *o = cJSON_GetArrayItem(owners, i);
-            if (cJSON_IsString(o) && !osStrcasecmp(o->valuestring, username))
-            {
-                cJSON_DeleteItemFromArray(owners, i);
-            }
-        }
+        remove_from_list(entry, "owners", username);
+        remove_from_list(entry, "borrowers", username);
         cJSON *shares = cJSON_GetObjectItemCaseSensitive(entry, "shares");
         cJSON *s = shares ? shares->child : NULL;
         while (s != NULL)
@@ -1273,15 +1335,54 @@ void web_acl_tag_placed(const char *ruid, const char *box_id)
         }
         cJSON_DeleteItemFromObjectCaseSensitive(entry, "owners");
         cJSON_AddItemToObject(entry, "owners", cJSON_Duplicate(cJSON_GetObjectItemCaseSensitive(box, "owners"), true));
-        if (!cJSON_GetObjectItemCaseSensitive(entry, "shares"))
-        {
-            cJSON_AddObjectToObject(entry, "shares");
-        }
         cJSON_AddStringToObject(entry, "assignedFrom", box_id);
         TRACE_INFO("Permissions: tag %s placed on box %s, it now belongs to the owners of the box\r\n", id, box_id);
         save_unlocked();
     }
+    else if (entry != NULL && box != NULL)
+    {
+        /* a tag of others: the owners of the box see it without owning it */
+        bool added = false;
+        cJSON *o = NULL;
+        cJSON_ArrayForEach(o, cJSON_GetObjectItemCaseSensitive(box, "owners"))
+        {
+            if (cJSON_IsString(o) && !in_owners(entry, o->valuestring) && !in_list(entry, "borrowers", o->valuestring))
+            {
+                cJSON *borrowers = cJSON_GetObjectItemCaseSensitive(entry, "borrowers");
+                if (borrowers == NULL)
+                {
+                    borrowers = cJSON_AddArrayToObject(entry, "borrowers");
+                }
+                cJSON_AddItemToArray(borrowers, cJSON_CreateString(o->valuestring));
+                added = true;
+            }
+        }
+        if (added)
+        {
+            TRACE_INFO("Permissions: tag %s placed on box %s, its owners see it as borrowed\r\n", id, box_id);
+            save_unlocked();
+        }
+    }
     unlock_acl();
+}
+
+bool web_acl_tonie_unborrow(HttpConnection *connection, const char *ruid)
+{
+    char id[RUID_LEN + 1];
+    acl_user_t u = current_user(connection);
+    if (!u.known || u.level == ACL_LEVEL_ADMIN || !normalize_ruid(ruid, id))
+    {
+        return false;
+    }
+    lock_acl();
+    cJSON *entry = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(acl, "tonies"), id);
+    bool removed = entry != NULL && !in_owners(entry, u.user) && remove_from_list(entry, "borrowers", u.user);
+    if (removed)
+    {
+        save_unlocked();
+    }
+    unlock_acl();
+    return removed;
 }
 
 /* ---------- API ---------- */
@@ -1361,9 +1462,14 @@ static void add_decided_unlocked(cJSON *array, const acl_user_t *u, cJSON *entry
 {
     for (size_t i = 0; i < acl_rights_count; i++)
     {
-        if (!osStrcmp(acl_rights[i].scope, scope) && decide_unlocked(u, entry, unassigned, acl_rights[i].name))
+        const char *right = acl_rights[i].name;
+        if (osStrcmp(acl_rights[i].scope, scope))
         {
-            cJSON_AddItemToArray(array, cJSON_CreateString(acl_rights[i].name));
+            continue;
+        }
+        if (!osStrcmp(scope, "folder") ? folder_decide_unlocked(u, entry, right, false) : decide_unlocked(u, entry, unassigned, right))
+        {
+            cJSON_AddItemToArray(array, cJSON_CreateString(right));
         }
     }
 }
@@ -1377,6 +1483,10 @@ static cJSON *entry_for_user(cJSON *entry, const acl_user_t *u, bool *owner)
     if (!*owner && shared_rights(entry, u->user, granted, sizeof(granted)))
     {
         cJSON_AddStringToObject(j, "granted", granted);
+    }
+    if (!*owner && in_list(entry, "borrowers", u->user))
+    {
+        cJSON_AddBoolToObject(j, "borrowed", true);
     }
     return j;
 }
@@ -1801,9 +1911,17 @@ error_t handleApiAclSet(HttpConnection *connection, const char_t *uri, const cha
         return err;
     }
     bool admin = web_acl_is_admin(connection);
-    if ((owners != NULL && !admin) || !may_share(connection, scope, key))
+    bool folder = !osStrcmp(scope, "folder");
+    /* boxes and tonies have owners only, who may name further owners */
+    if (shares != NULL && !folder)
     {
-        err = send_error(connection, 403, "forbidden", owners != NULL ? "Only admins assign owners" : "Only owners and admins share");
+        err = send_error(connection, 400, "invalid_share", "Boxes and tonies are not shared, they get owners");
+        cJSON_Delete(body);
+        return err;
+    }
+    if ((owners != NULL && folder && !admin) || !may_share(connection, scope, key))
+    {
+        err = send_error(connection, 403, "forbidden", owners != NULL ? "Only owners and admins assign owners" : "Only owners and admins share");
         cJSON_Delete(body);
         return err;
     }
@@ -1812,12 +1930,18 @@ error_t handleApiAclSet(HttpConnection *connection, const char_t *uri, const cha
     cJSON_ArrayForEach(o, owners)
     {
         int level;
-        if (!cJSON_IsString(o) || !user_exists_level(o->valuestring, &level) || level == ACL_LEVEL_GUEST)
+        if (!cJSON_IsString(o) || !user_exists_level(o->valuestring, &level) || (folder && level == ACL_LEVEL_GUEST))
         {
-            err = send_error(connection, 400, "invalid_owner", "Owners must be existing users that are no guests");
+            err = send_error(connection, 400, "invalid_owner", "Owners must be existing users, of folders no guests");
             cJSON_Delete(body);
             return err;
         }
+    }
+    if (owners != NULL && !admin && cJSON_GetArraySize(owners) == 0)
+    {
+        err = send_error(connection, 400, "owner_required", "A box or tonie keeps at least one owner");
+        cJSON_Delete(body);
+        return err;
     }
     cJSON *s = NULL;
     cJSON_ArrayForEach(s, shares)
@@ -1836,19 +1960,15 @@ error_t handleApiAclSet(HttpConnection *connection, const char_t *uri, const cha
     cJSON *entry = cJSON_GetObjectItemCaseSensitive(map, key);
     if (entry == NULL)
     {
+        /* a new folder entry keeps the owners of the parent; looked up before the entry exists */
+        cJSON *parent = folder ? folder_lookup_unlocked(key, NULL, 0) : NULL;
+        cJSON *po = parent ? cJSON_GetObjectItemCaseSensitive(parent, "owners") : NULL;
         entry = cJSON_AddObjectToObject(map, key);
-        if (!osStrcmp(scope, "folder"))
+        cJSON_AddItemToObject(entry, "owners", po ? cJSON_Duplicate(po, true) : cJSON_CreateArray());
+        if (folder)
         {
-            /* a new folder entry keeps the owners of the parent */
-            cJSON *parent = folder_lookup_unlocked(key, NULL, 0);
-            cJSON *po = parent ? cJSON_GetObjectItemCaseSensitive(parent, "owners") : NULL;
-            cJSON_AddItemToObject(entry, "owners", po ? cJSON_Duplicate(po, true) : cJSON_CreateArray());
+            cJSON_AddObjectToObject(entry, "shares");
         }
-        else
-        {
-            cJSON_AddArrayToObject(entry, "owners");
-        }
-        cJSON_AddObjectToObject(entry, "shares");
     }
     if (owners != NULL)
     {

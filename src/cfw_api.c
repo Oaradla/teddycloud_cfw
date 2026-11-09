@@ -28,7 +28,7 @@ static const cfw_profile_record_t profile_records[] = {
     {0x03, "sleepMinutes", 2, 65535, false},
     {0x04, "speakerLimit", 1, 15, false},
     {0x05, "headphoneLimit", 1, 15, false},
-    {0x06, "ledLevel", 1, 2, false},
+    {0x06, "ledLevel", 1, 6, false},
     {0x08, "slapLock", 1, 1, true},
     {0x09, "tiltLock", 1, 1, true},
     {0x0A, "volumeLock", 1, 1, true},
@@ -173,6 +173,11 @@ static bool json_to_profile(const cJSON *json, uint8_t *body, size_t *bodyLength
             osSnprintf(message, messageSize, "%s must be 0 to %" PRIu32, record->name, record->max);
             return false;
         }
+        if (record->key == 0x06 && (value == 3 || value == 4))
+        {
+            osSnprintf(message, messageSize, "ledLevel must be 0, 1, 2, 5 or 6");
+            return false;
+        }
         body[n++] = record->key;
         body[n++] = record->length;
         body[n++] = value & 0xFF;
@@ -188,6 +193,7 @@ static bool json_to_profile(const cJSON *json, uint8_t *body, size_t *bodyLength
 static void event_to_json(const uint8_t *file, cJSON *json)
 {
     bool tones = true;
+    bool temporary = false;
     cJSON *actions = cJSON_AddArrayToObject(json, "actions");
     size_t pos = 0;
     cfw_record_t record;
@@ -207,11 +213,16 @@ static void event_to_json(const uint8_t *file, cJSON *json)
         {
             tones = record.value[0] != 0;
         }
+        else if (record.key == 0x12 && record.length == 1)
+        {
+            temporary = record.value[0] != 0;
+        }
     }
     cJSON_AddBoolToObject(json, "tones", tones);
+    cJSON_AddBoolToObject(json, "temporary", temporary);
 }
 
-/* an event tag: 1 to 16 actions and the feedback tones */
+/* an event tag: 1 to 16 actions, the feedback tones and whether its box settings hold only until switch-off */
 static bool json_to_event(const cJSON *json, uint8_t *body, size_t *bodyLength, char *message, size_t messageSize)
 {
     const cJSON *actions = cJSON_GetObjectItemCaseSensitive(json, "actions");
@@ -227,9 +238,9 @@ static bool json_to_event(const cJSON *json, uint8_t *body, size_t *bodyLength, 
         uint32_t number;
         uint32_t mode;
         uint32_t value;
-        if (!json_uint(cJSON_GetObjectItemCaseSensitive(action, "action"), 18, &number) || number == 0 || !json_uint(cJSON_GetObjectItemCaseSensitive(action, "mode"), 3, &mode))
+        if (!json_uint(cJSON_GetObjectItemCaseSensitive(action, "action"), 19, &number) || number == 0 || !json_uint(cJSON_GetObjectItemCaseSensitive(action, "mode"), 3, &mode))
         {
-            osSnprintf(message, messageSize, "an action needs action 1 to 18 and mode 0 to 3");
+            osSnprintf(message, messageSize, "an action needs action 1 to 19 and mode 0 to 3");
             return false;
         }
         bool minutes = number == 17 || number == 18; /* idle power-off times: the whole parameter, no mode */
@@ -248,6 +259,12 @@ static bool json_to_event(const cJSON *json, uint8_t *body, size_t *bodyLength, 
     body[n++] = 0x11;
     body[n++] = 1;
     body[n++] = !cJSON_IsFalse(cJSON_GetObjectItemCaseSensitive(json, "tones"));
+    if (cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(json, "temporary")))
+    {
+        body[n++] = 0x12;
+        body[n++] = 1;
+        body[n++] = 1;
+    }
     *bodyLength = n;
     return true;
 }
@@ -269,7 +286,7 @@ static void push_file(uint64_t ruid, const uint8_t *file, size_t fileLength)
     {
         settings_t *settings = get_settings_id(i);
         cfw_box_t *box = settings->internal.config_used ? cfw_box_get(settings) : NULL;
-        bool takesIt = box != NULL && box->helloValid && (box->capabilities & CFW_CAP_REMOTE) && (file[4] != CFW_TBS_KIND_EVENT || (box->capabilities & CFW_CAP_EVENT_TAG_EXT));
+        bool takesIt = box != NULL && box->helloValid && (box->capabilities & CFW_CAP_REMOTE) && (file[4] != CFW_TBS_KIND_EVENT || ((box->capabilities & CFW_CAP_EVENT_TAG_EXT) && ((box->capabilities & CFW_CAP_TEMPORARY) || !cfw_event_temporary(file))));
         if (!takesIt || !cfw_enabled(settings) || !settings->cfw.settings_sync || !settings->cfw.remote_control)
         {
             continue;
@@ -1020,6 +1037,29 @@ error_t handleApiCfwFirmwareGithubDownload(HttpConnection *connection, const cha
     return send_message(connection, err == NO_ERROR ? 200 : (tag ? 502 : 400), message);
 }
 
+/* why an assigned image is not offered to the box; NULL: it is */
+static const char *deliver_blocker(settings_t *settings, uint32_t build)
+{
+    if (!settings->cfw.update.enabled)
+    {
+        return "assigned, but \"Firmware update\" is off for this box, so it is not offered";
+    }
+    cfw_lock();
+    cfw_box_t *box = cfw_box_get(settings);
+    bool running = box != NULL && box->isCfw && box->version == build;
+    bool rolledBack = box != NULL && !settings->cfw.update.allow_rolled_back && cfw_box_is_rolled_back(box, build);
+    cfw_unlock();
+    if (running)
+    {
+        return "assigned; the box already runs this image";
+    }
+    if (rolledBack)
+    {
+        return "assigned, but the box has rolled this image back, so it is offered only with \"Offer rolled-back image again\"";
+    }
+    return NULL;
+}
+
 /* assigns an image to the box (manual delivery, build 0: none); with "now", the box checks at once;
    "now" without "build" keeps the assignment and only starts the check (automatic delivery) */
 error_t handleApiCfwDeliver(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
@@ -1073,6 +1113,11 @@ error_t handleApiCfwDeliver(HttpConnection *connection, const char_t *uri, const
     if (build == 0)
     {
         return send_message(connection, 200, "assignment removed");
+    }
+    const char *blocker = deliver_blocker(settings, build);
+    if (blocker != NULL)
+    {
+        return send_message(connection, 200, blocker);
     }
 
     char message[128];

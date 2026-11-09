@@ -70,7 +70,9 @@
         "ledLevel": {
             "0": "Włączona",
             "1": "Wyłączona (po fazie jasnej)",
-            "2": "Przyciemniona"
+            "2": "Przyciemniona",
+            "5": "Stale wyłączona",
+            "6": "Stale przyciemniona"
         },
         "slapLock": "Blokada uderzeń",
         "tiltLock": "Blokada przechylania",
@@ -109,6 +111,9 @@
             "actions": "Akcje",
             "tones": "Dźwięki potwierdzenia",
             "tonesHint": "Rosnące dźwięki dla \"włączono\", opadające dla \"wyłączono\". Potwierdzenie diodą LED pozostaje zawsze.",
+            "temporary": "Tylko do wyłączenia",
+            "temporaryHint": "Ustawienia obowiązują tylko do wyłączenia pudełka i nie są zapisywane; potem znów obowiązują zapisane ustawienia. Trwała zmiana tego samego ustawienia kończy wartość tymczasową.",
+            "temporaryOld": "Te boxy mają starszy niestandardowy firmware: nie przyjmują tego tagu i zachowują jego wcześniejszą wersję, której ustawienia pozostają: {{boxes}}",
             "noSource": "Tag zdarzenia nie odtwarza zawartości, dlatego źródło jest ukryte. Przypisane źródło pozostaje zapisane, aby można było szybko wrócić, ale nie jest dostarczane do żadnego boxa. Boxy bez niestandardowego firmware słyszą zamiast tego komunikat."
         },
         "action": {
@@ -129,7 +134,8 @@
             "volumeLockGlobal": "Blokada głośności boxa",
             "bothEarsOff": "Wyłączanie obydwoma uszami",
             "idleOffBattery": "Czas wyłączenia na baterii",
-            "idleOffStation": "Czas wyłączenia na stacji ładującej"
+            "idleOffStation": "Czas wyłączenia na stacji ładującej",
+            "sleepTimerOnceGlobal": "Wyłącznik czasowy (jednorazowo, dla następnej figurki)"
         },
         "mode": {
             "0": "Przełącz",
@@ -189,7 +195,6 @@
             "selectTonie": "Wybierz Tonie",
             "play": "Odtwórz",
             "playHint": "Tylko gdy na boxie nie ma figurki, a box jest gotowy.",
-            "updateCheck": "Sprawdź teraz aktualizację firmware",
             "commandFailed": "Polecenie nie zostało wysłane",
             "lastResult": "Ostatnie polecenie: {{command}} – {{result}} ({{time}})",
             "results": {
@@ -413,7 +418,10 @@
             "oldEsp32Build": "Obraz zawiera blok kompilacji: kompilacja ESP32 sprzed 14.10.2026",
             "packageNotKept": "Nie można zachować pakietu do instalacji w przeglądarce",
             "patchedNoApp": "Poprawiony obraz nie jest obrazem aplikacji",
-            "portNotPatchable": "Portu nie można poprawić w tej wersji oryginalnego firmware"
+            "portNotPatchable": "Portu nie można poprawić w tej wersji oryginalnego firmware",
+            "assignedUpdateOff": "Przypisano, ale „Aktualizacja firmware” jest wyłączona dla tego boxa, więc nie jest oferowany",
+            "assignedRunning": "Przypisano; box już działa na tym obrazie",
+            "assignedRolledBack": "Przypisano, ale box wycofał ten obraz; jest oferowany tylko z „Oferuj ponownie wycofany obraz”"
         },
         "controls": {
             "title": "Obsługa z Custom Firmware",
@@ -756,6 +764,9 @@
             "action": "Przypisz do Tonie",
             "failedDetails": "Nie udało się przypisać „{{series}}” jako zawartości: ",
             "failedMessage": "Przypisanie do Tonie nie powiodło się!",
+            "replace": "Zastąp",
+            "replaceText": "{{tonie}} odtwarza \"{{current}}\". Odtwarzać zamiast tego nową zawartość?",
+            "replaceTitle": "Zastąpić zawartość?",
             "searchPlaceholder": "Szukaj Tonies...",
             "successDetails": "Plik został pomyślnie przypisany do „{{series}}”!",
             "successMessage": "Tonie przypisany!",
@@ -994,9 +1005,12 @@
             "descriptionCount": "Każdy z {{count}} rozdziałów staje się osobnym TAF w nowym folderze „{{folder}}”. Tam playlista łączy utwory z powrotem; można w niej przestawiać, usuwać lub wstawiać utwory.",
             "failed": "Podział nie powiódł się",
             "failedDetails": "Nie udało się podzielić „{{file}}”:",
+            "originalKept": "„{{file}}” pozostaje bez zmian tam, gdzie jest; powiązane tonies nadal go odtwarzają. Playlista składa z utworów własny plik TAF „{{playlist}}” (ukryty w bibliotece), z okładką i tytułami oryginału; dane audio są tylko kopiowane, a nie ponownie kodowane. Aby tonie odtwarzał playlistę, powiąż go z playlistą.",
             "originalStays": "„{{file}}” trafia bez zmian do folderu; powiązane tonies nadal go odtwarzają. Playlista składa z utworów własny plik TAF „{{playlist}}” (ukryty w bibliotece), z okładką i tytułami oryginału; dane audio są tylko kopiowane, a nie ponownie kodowane. Aby tonie odtwarzał playlistę, powiąż go z playlistą.",
             "success": "Podzielono TAF",
             "successDetails": "„{{file}}” podzielono na {{count}} utworów w „{{folder}}”.",
+            "target": "Utwórz nowy folder w:",
+            "targetPlaceholder": "Wybierz folder, do którego możesz zapisywać",
             "title": "Podziel „{{file}}” na utwory"
         },
         "tap": {
@@ -1027,6 +1041,9 @@
             "cancel": "Anuluj",
             "hideUploadFilesDragNDrop": "Ukryj przesyłanie plików",
             "modalTitle": "Prześlij plik(i)",
+            "replace": "Zastąp",
+            "replaceText": "Już w tym folderze: {{names}}. Zastąpić? Tonie, które odtwarzają te pliki, dostaną nową zawartość.",
+            "replaceTitle": "Zastąpić pliki?",
             "showUploadFilesDragNDrop": "Przesyłanie plików",
             "upload": "Prześlij",
             "uploadFailed": "Nie udało się przesłać niektórych plików. Spróbuj ponownie.",
@@ -1042,6 +1059,7 @@
             "uploadedFileFailed": "Przesyłanie pliku nie powiodło się!",
             "uploading": "Przesyłanie..."
         },
+        "deleteUsedBy": "Te tonie to odtwarzają i stracą swoją zawartość: {{names}}.",
         "deleteOrphanModels": "Usuń też własne tonies, które nie są używane nigdzie indziej ({{n}}), wraz z ich obrazami"
     },
     "footer": {
@@ -1546,7 +1564,8 @@
             "tonie_json": "Tonie JSON",
             "debug": "Debugowanie",
             "debug_web": "Interfejs webowy",
-            "mqtt_server_cert": "Certyfikat"
+            "mqtt_server_cert": "Certyfikat",
+            "web_auth": "Bezpieczeństwo logowania WWW"
         },
         "guiSettings": {
             "exportSettings": "Eksportuj",
@@ -1996,7 +2015,7 @@
             },
             "toniebox_led": {
                 "label": "Jasność LED",
-                "description": "LED, gdy box jest gotowy"
+                "description": "LED, gdy box jest gotowy; stale wyłączona i stale przyciemniona tylko z niestandardowym firmware (inne boxy: wyłączona lub przyciemniona)"
             },
             "toniebox_overrideFields": {
                 "label": "Nadpisz nieznane pola",
@@ -2096,7 +2115,7 @@
             },
             "cfw_update_channel": {
                 "label": "Kanał aktualizacji",
-                "description": "Które obrazy firmware box przyjmuje: tylko release lub także beta / alpha"
+                "description": "Tylko dla automatycznego dostarczania: które obrazy firmware box pobiera, tylko release czy też beta/alpha (Brak: żaden obraz). Przypisany obraz jest dostarczany niezależnie od kanału"
             },
             "cfw_update_mode": {
                 "label": "Dostarczanie aktualizacji",
@@ -2245,6 +2264,66 @@
             "debug_web_pcm_encode_console_url": {
                 "label": "URL PCM w konsoli",
                 "description": "Buforuje PCM kodowania po stronie przeglądarki i wypisuje link do pobrania w konsoli przeglądarki."
+            },
+            "core_server_cert_file_web_crt": {
+                "label": "Certyfikat WWW",
+                "description": "Łańcuch certyfikatów (PEM, np. fullchain.pem z Let's Encrypt) dla portu HTTPS interfejsu WWW. Puste używa certyfikatu serwera. Przeładowywany po zmianie pliku."
+            },
+            "core_server_cert_file_web_key": {
+                "label": "Klucz certyfikatu WWW",
+                "description": "Klucz prywatny (PEM) certyfikatu WWW."
+            },
+            "frontend_default_ui": {
+                "label": "Domyślny interfejs WWW",
+                "description": "Co otwiera adres teddyCloud: klasyczny interfejs WWW lub web2 (nowy, pod /web/v2/), jeśli jest zainstalowany"
+            },
+            "web_auth_require_2fa": {
+                "label": "Wymagaj 2FA",
+                "description": "Każdy użytkownik WWW musi przy następnym logowaniu skonfigurować uwierzytelnianie dwuskładnikowe (TOTP)."
+            },
+            "web_auth_password_min_length": {
+                "label": "Minimalna długość hasła",
+                "description": "Minimalna długość nowych haseł użytkowników WWW. Istniejące hasła nadal działają."
+            },
+            "web_auth_session_days": {
+                "label": "Czas trwania sesji (dni)",
+                "description": "Logowanie wygasa najpóźniej po tylu dniach."
+            },
+            "web_auth_session_idle_hours": {
+                "label": "Limit bezczynności sesji (godziny)",
+                "description": "Logowanie wygasa po tylu godzinach bez użycia. 0 wyłącza limit bezczynności."
+            },
+            "web_auth_lockout_attempts": {
+                "label": "Nieudane logowania przed blokadą",
+                "description": "Nieudane logowania z jednego adresu, zanim zostanie zablokowany. Każda kolejna blokada podwaja czas (maks. 24 godziny)."
+            },
+            "web_auth_lockout_minutes": {
+                "label": "Czas blokady (minuty)",
+                "description": "Czas trwania pierwszej blokady po nieudanych logowaniach."
+            },
+            "web_auth_trusted_proxies": {
+                "label": "Zaufane serwery reverse proxy",
+                "description": "Adresy lub sieci (np. 172.18.0.0/16) serwerów reverse proxy, których nagłówkom X-Forwarded-For i X-Forwarded-Proto się ufa. Bez proxy pozostaw puste."
+            },
+            "web_auth_lan_networks": {
+                "label": "Sieci lokalne",
+                "description": "Sieci traktowane jako lokalne (LAN). Użytkownicy oznaczeni jako tylko LAN mogą logować się tylko z tych sieci."
+            },
+            "web_auth_remote_access": {
+                "label": "Interfejs WWW z zewnątrz",
+                "description": "Zezwala na interfejs WWW z adresów spoza sieci lokalnych. Po wyłączeniu dostęp mają tylko sieci lokalne i dozwolone sieci."
+            },
+            "web_auth_remote_https_only": {
+                "label": "Z zewnątrz tylko HTTPS",
+                "description": "Odrzuca zwykły HTTP do interfejsu WWW z adresów spoza sieci lokalnych (bezpośredni TLS lub zaufany proxy z X-Forwarded-Proto: https)."
+            },
+            "web_auth_allow_networks": {
+                "label": "Dozwolone sieci",
+                "description": "Dodatkowe sieci (np. VPN), które mogą łączyć się z interfejsem WWW, gdy dostęp z zewnątrz jest wyłączony."
+            },
+            "web_auth_deny_networks": {
+                "label": "Zablokowane sieci",
+                "description": "Adresy lub sieci, które nigdy nie mogą łączyć się z interfejsem WWW."
             }
         },
         "overlayDisabled": "Nadpisanie wyłączone!",
@@ -2292,7 +2371,9 @@
             "toniebox_led": {
                 "0": "Włączona",
                 "1": "Wyłączona",
-                "2": "Przyciemniona"
+                "2": "Przyciemniona",
+                "5": "Stale wyłączona",
+                "6": "Stale przyciemniona"
             },
             "cfw_box_speaker_limit": {
                 "0": "Poziom 0",
@@ -2350,6 +2431,10 @@
                 "0": "Niemiecki",
                 "1": "Angielski",
                 "2": "Francuski"
+            },
+            "frontend_default_ui": {
+                "0": "Klasyczny",
+                "1": "web2"
             }
         },
         "warning": "Uwaga! Settings level",
@@ -2452,7 +2537,7 @@
                 },
                 "unlock": "Odblokuj"
             },
-            "intro": "Administratorzy mogą wszystko. Użytkownicy posiadają boxy, tonie i foldery i je udostępniają; dzieci dostają tylko to, co im udostępniono. Własne grupy są jednego z tych dwóch rodzajów. API boxów nie są objęte.",
+            "intro": "Administratorzy mogą wszystko. Użytkownicy posiadają pudełka, tonies i foldery, wyznaczają kolejnych właścicieli i udostępniają foldery; dzieci dostają tylko to, co do nich należy lub zostało im udostępnione. Własne grupy są jednego z tych dwóch rodzajów. Nie dotyczy to API pudełek.",
             "lanOnly": "Tylko LAN",
             "lanOnlyHint": "Może logować się tylko z sieci lokalnej",
             "lastLogin": "Ostatnie logowanie",
@@ -2473,8 +2558,8 @@
                 "name": "Nazwa",
                 "kind": "Rodzaj",
                 "kindHints": {
-                    "user": "Jak użytkownik: posiada boxy, tonie i foldery i je udostępnia.",
-                    "guest": "Jak dziecko: dostaje tylko to, co mu udostępniono."
+                    "user": "Jak użytkownik: posiada pudełka, tonies i foldery, wyznacza kolejnych właścicieli i udostępnia foldery.",
+                    "guest": "Jak dziecko: dostaje tylko to, co do niego należy lub zostało mu udostępnione."
                 },
                 "delete": "Usuń",
                 "deleteTitle": "Usuń grupę",
@@ -2573,6 +2658,7 @@
     },
     "sharing": {
         "add": "Udostępnij użytkownikowi",
+        "allOwners": "Wszyscy właściciele",
         "button": "Udostępnij",
         "everyone": "Wszyscy",
         "inherited": "Te udostępnienia pochodzą z folderu {{folder}}. Zapisanie tworzy własne udostępnienia dla tego folderu.",
@@ -2583,8 +2669,11 @@
         },
         "noOwners": "nikt (tylko administratorzy)",
         "noShares": "Nie udostępniono.",
+        "ownerFilterHint": "Pokaż tylko to, co należy do jednego z wybranych użytkowników",
+        "ownerFilterFailed": "Nie udało się wczytać, co należy do wybranych użytkowników; wyświetlane jest wszystko.",
         "owners": "Właściciele",
         "ownersAdminOnly": "Właścicieli wyznaczają tylko administratorzy.",
+        "ownerRequired": "Potrzebny jest co najmniej jeden właściciel; tylko administrator może usunąć ostatniego.",
         "ownersHint": "Właściciele mają wszystkie prawa i udostępniają innym. Właścicieli wyznaczają tylko administratorzy.",
         "pickUser": "Użytkownik",
         "remove": "Usuń",
@@ -2598,21 +2687,24 @@
             "tonie.assign": "Przypisać audio",
             "tonie.edit": "Edytować (live, chmura, model)",
             "tonie.view": "Widzieć i odtwarzać",
-            "box.share": "Udostępniać",
-            "tonie.share": "Udostępniać",
+            "box.share": "Wyznacz właścicieli",
+            "tonie.share": "Wyznacz właścicieli",
             "folder.share": "Udostępniać",
             "users.manage": "Tworzyć użytkowników i nimi zarządzać",
             "model.create": "Dodawanie własnych tonies"
         },
         "save": "Zapisz",
         "shares": "Udostępnione dla",
-        "singleSettings": "Pojedyncze ustawienia (jeśli nie wszystkie)",
-        "title": "Udostępnij: {{name}}"
+        "title": "Udostępnij: {{name}}",
+        "ownersButton": "Właściciele",
+        "ownersTitle": "Właściciele: {{name}}",
+        "ownersOnlyHint": "Właściciele mają wszystkie prawa i wyznaczają kolejnych właścicieli. Tonie postawiony na pudełku innego użytkownika pojawia się u niego, nie należąc do niego; może go ukryć tylko dla siebie."
     },
     "teddycloud": {
         "newVersionAvailable": "Dostępna jest nowa wersja!",
         "newVersionDetailsAvailable": "Nie korzystasz z najnowszej wersji TeddyCloud. Zaktualizuj, aby uzyskać wszystkie korzyści najnowszego wydania!",
         "newVersionDetailsAvailableDevelop": "Nie korzystasz z najnowszej wersji rozwojowej TeddyCloud. Zaktualizuj, aby uzyskać wszystkie korzyści najnowszej wersji rozwojowej!",
+        "newVersionDetailsAvailableReleaseCandidate": "Nie korzystasz z najnowszej wersji kandydującej do wydania TeddyCloud. Zaktualizuj ją, aby móc korzystać ze wszystkich zalet najnowszej wersji kandydującej!",
         "newVersionShort": "Dostępna aktualizacja",
         "openNewVersionInGithub": "Otwórz najnowszą wersję na GitHubie"
     },
@@ -3279,7 +3371,8 @@
                 "confirmFlashDialog": "Czy na pewno chcesz zflashować swojego Tonieboxa? Upewnij się, że masz stabilne połączenie i nie przerywaj procesu!",
                 "confirmFlashDialogHint": "Aby Twój Toniebox działał prawidłowo, podana instancja TeddyCloud jest absolutnie niezbędna. Jeśli Twój TeddyCloud jest offline, Twój Toniebox nie będzie mógł uzyskać dostępu do nowej zawartości!",
                 "confirmResetDialog": "Cała pamięć flash Tonieboxa zostanie nadpisana wybranym plikiem. Używaj tylko kopii zapasowej dokładnie tego boxa. Nie przerywaj i nie odłączaj.",
-                "resetOtherBox": "Plik jest kopią zapasową boxa {{file}}, a podłączony jest box {{box}}. Nic nie zapisano.",
+                "resetOtherBox": "Plik jest kopią zapasową boxa {{file}}, a podłączony jest box {{box}}. Zapisanie go nada temu boxowi tożsamość boxa {{file}}. Zapisać mimo to?",
+                "resetNotWritten": "Nic nie zapisano.",
                 "confirmFlashModal": "Zflashuj Tonieboxa spatchowanym firmware",
                 "connectESPCollapseTitle": "Pomoc: podłącz UART do Tonieboxa",
                 "connected": "Połączono",
@@ -3585,7 +3678,8 @@
                 "deleted": "Model \"{{model}}\" został usunięty.",
                 "description": "Czy na pewno usunąć \"{{model}}\"? Tej operacji nie można cofnąć.",
                 "title": "Usuń model",
-                "alsoPicture": "Usuń też obraz, żadna inna figurka go nie pokazuje"
+                "alsoPicture": "Usuń też obraz, żadna inna figurka go nie pokazuje",
+                "failed": "Usunięcie modelu nie powiodło się!"
             },
             "duplicateTitleSuffix": "Kopia",
             "editModalTitle": "Edytuj model {{current}} z {{total}}",
@@ -3673,7 +3767,8 @@
                 "text": "Obrazy w custom_img powyżej {{kb}} KB dostają małą kopię (najwyżej 512 pikseli, WebP, jeśli przeglądarka potrafi go zapisać); modele używają potem kopii. Oryginały zostają w folderze.",
                 "title": "Optymalizuj obrazy własnych modeli"
             },
-            "readOnly": "Tę figurkę dodał ktoś inny. Możesz ją oglądać, ale nie możesz jej zmieniać."
+            "readOnly": "Tę figurkę dodał ktoś inny. Możesz ją oglądać, ale nie możesz jej zmieniać.",
+            "saveFailed": "Zapisanie modelu nie powiodło się!"
         },
         "customImages": {
             "navigationTitle": "Obrazy",
@@ -3705,6 +3800,7 @@
             "modelInfoSeries": "Seria",
             "modelInfoTitle": "Tytuł",
             "modelReadOnlyHint": "Oryginalny tonie: model nie może być zmieniony. Możesz przypisać tylko niestandardowe audio.",
+            "modelNoEditRightHint": "Nie możesz zmienić modelu tego tonie.",
             "placeholderSearchForAModel": "Szukaj modelu",
             "placeholderSearchForARadioStream": "Szukaj strumienia radiowego",
             "save": "Zapisz",
@@ -4088,6 +4184,7 @@
             },
             "cancel": "Anuluj",
             "clear": "Wyczyść arkusz",
+            "clearConfirm": "Usunąć wszystkie tonie, teksty i obrazy z arkusza?",
             "clearSettings": "Przywróć domyślne",
             "close": "Zamknij",
             "contentPadding": "Wewnętrzny margines etykiety",
@@ -4171,7 +4268,19 @@
                 "text": "Każdy TAF i playlista z tytułem w tym folderze i podfolderach trafia na arkusz; ukryte i już obecne są pomijane.",
                 "title": "Dodaj folder biblioteki"
             },
-            "downloadPdf": "Pobierz PDF"
+            "downloadPdf": "Pobierz PDF",
+            "errors": {
+                "noPrintableArea": "Marginesy papieru nie zostawiają obszaru do druku.",
+                "labelTooBig": "Ustawiona etykieta nie mieści się na wybranym formacie papieru.",
+                "labelPairTooBig": "Ustawiona para etykiet obraz/tekst nie mieści się na wybranym formacie papieru.",
+                "noLabels": "Brak etykiet do wydruku.",
+                "noCanvas": "Canvas nie jest dostępny w tej przeglądarce.",
+                "pageEncodeFailed": "Nie udało się utworzyć strony wydruku.",
+                "imageLoadFailed": "Nie udało się wczytać obrazu {{url}}: {{reason}}",
+                "fontLoadFailed": "Nie udało się wczytać jednej lub kilku czcionek wydruku: {{reason}}",
+                "resourcesSkipped": "Nie udało się wczytać {{count}} zasobów podczas tworzenia PDF. Pominięto dotkniętą zawartość.",
+                "printFallback": "Przeglądarka nie mogła wydrukować ani otworzyć gotowego PDF. Zamiast tego PDF został pobrany."
+            }
         },
         "title": "Tonies",
         "tonies": {

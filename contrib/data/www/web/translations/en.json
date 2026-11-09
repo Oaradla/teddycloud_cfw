@@ -70,7 +70,9 @@
         "ledLevel": {
             "0": "On",
             "1": "Off (after the bright phase)",
-            "2": "Dimmed"
+            "2": "Dimmed",
+            "5": "Off permanently",
+            "6": "Dimmed permanently"
         },
         "slapLock": "Slap lock",
         "tiltLock": "Tilt lock",
@@ -109,6 +111,9 @@
             "actions": "Actions",
             "tones": "Feedback tones",
             "tonesHint": "Rising tones for \"switched on\", falling ones for \"switched off\". The LED confirmation always stays.",
+            "temporary": "Only until switch-off",
+            "temporaryHint": "The settings hold only until the box switches off and are not stored; afterwards the stored settings apply again. A lasting change of the same setting ends the temporary value.",
+            "temporaryOld": "These boxes have an older custom firmware: they do not take this tag and keep its earlier version, whose settings stay: {{boxes}}",
             "noSource": "An event tag plays no content, so the source is hidden. An assigned source stays stored so you can switch back quickly, but no box gets it. Boxes without the custom firmware hear a notice instead."
         },
         "action": {
@@ -129,7 +134,8 @@
             "volumeLockGlobal": "Volume lock of the box",
             "bothEarsOff": "Switch off with both ears",
             "idleOffBattery": "Switch-off time on battery",
-            "idleOffStation": "Switch-off time on the charging station"
+            "idleOffStation": "Switch-off time on the charging station",
+            "sleepTimerOnceGlobal": "Sleep timer (once, for the next figure)"
         },
         "mode": {
             "0": "Toggle",
@@ -189,7 +195,6 @@
             "selectTonie": "Select a tonie",
             "play": "Play",
             "playHint": "Only while no figure is on the box and the box is ready.",
-            "updateCheck": "Check for a firmware update now",
             "commandFailed": "Command not sent",
             "lastResult": "Last command: {{command}} – {{result}} ({{time}})",
             "results": {
@@ -413,7 +418,10 @@
             "oldEsp32Build": "The image carries a build block: an ESP32 build from before 2026-10-14",
             "packageNotKept": "The package could not be kept for the installation in the browser",
             "patchedNoApp": "The patched image is no app image",
-            "portNotPatchable": "The port cannot be patched in this version of the original firmware"
+            "portNotPatchable": "The port cannot be patched in this version of the original firmware",
+            "assignedUpdateOff": "Assigned, but \"Firmware update\" is off for this box, so it is not offered",
+            "assignedRunning": "Assigned; the box already runs this image",
+            "assignedRolledBack": "Assigned, but the box has rolled this image back, so it is offered only with \"Offer rolled-back image again\""
         },
         "controls": {
             "title": "Using a box with the custom firmware",
@@ -756,6 +764,9 @@
             "action": "Assign to Tonie",
             "failedDetails": "Could not assign \"{{series}}\" as content: ",
             "failedMessage": "Assigning to Tonie failed!",
+            "replace": "Replace",
+            "replaceText": "{{tonie}} plays \"{{current}}\". Play the new content instead?",
+            "replaceTitle": "Replace content?",
             "searchPlaceholder": "Search Tonies...",
             "successDetails": "File assigned to \"{{series}}\" successfully!",
             "successMessage": "Tonie assigned!",
@@ -994,9 +1005,12 @@
             "descriptionCount": "The {{count}} chapters each become a TAF of their own in the new folder \"{{folder}}\". A playlist there puts the tracks together again; in it tracks can be reordered, removed or new ones inserted.",
             "failed": "Splitting failed",
             "failedDetails": "\"{{file}}\" could not be split:",
+            "originalKept": "\"{{file}}\" stays where it is, unchanged; tonies linked to it keep playing it. The playlist builds its own TAF \"{{playlist}}\" from the tracks (hidden in the library), with the cover and titles of the original; the audio data is only copied, not re-encoded. To have a tonie play the playlist, link it to the playlist.",
             "originalStays": "\"{{file}}\" moves into the folder unchanged; tonies linked to it keep playing it. The playlist builds its own TAF \"{{playlist}}\" from the tracks (hidden in the library), with the cover and titles of the original; the audio data is only copied, not re-encoded. To have a tonie play the playlist, link it to the playlist.",
             "success": "TAF split",
             "successDetails": "\"{{file}}\" was split into {{count}} tracks in \"{{folder}}\".",
+            "target": "Create the new folder in:",
+            "targetPlaceholder": "Choose a folder you may write to",
             "title": "Split \"{{file}}\" into tracks"
         },
         "tap": {
@@ -1027,6 +1041,9 @@
             "cancel": "Cancel",
             "hideUploadFilesDragNDrop": "Hide file upload",
             "modalTitle": "Upload file(s)",
+            "replace": "Replace",
+            "replaceText": "Already in this folder: {{names}}. Replace? Tonies that play these files get the new content.",
+            "replaceTitle": "Replace files?",
             "showUploadFilesDragNDrop": "File upload",
             "upload": "Upload",
             "uploadFailed": "Some files could not be uploaded. Please try again.",
@@ -1042,6 +1059,7 @@
             "uploadedFileFailed": "File upload failed!",
             "uploading": "Uploading..."
         },
+        "deleteUsedBy": "These tonies play it and lose their content: {{names}}.",
         "deleteOrphanModels": "Also delete the custom tonies used nowhere else ({{n}}), with their pictures"
     },
     "footer": {
@@ -1546,7 +1564,8 @@
             "tonie_json": "Tonie JSON",
             "debug": "Debug",
             "debug_web": "Web interface",
-            "mqtt_server_cert": "Certificate"
+            "mqtt_server_cert": "Certificate",
+            "web_auth": "Web login security"
         },
         "guiSettings": {
             "exportSettings": "Export",
@@ -1996,7 +2015,7 @@
             },
             "toniebox_led": {
                 "label": "LED brightness",
-                "description": "0=on, 1=off, 2=dimmed"
+                "description": "LED while the box is ready; off and dimmed permanently only with the custom firmware (other boxes: off or dimmed)"
             },
             "toniebox_overrideFields": {
                 "label": "Override unknown fields",
@@ -2096,7 +2115,7 @@
             },
             "cfw_update_channel": {
                 "label": "Update channel",
-                "description": "Which firmware images the box takes: release only, or beta / alpha as well"
+                "description": "Automatic delivery only: which firmware images the box takes, release only or beta / alpha as well (None: no image). An assigned image is delivered whatever its channel"
             },
             "cfw_update_mode": {
                 "label": "Update delivery",
@@ -2245,6 +2264,66 @@
             "debug_web_pcm_encode_console_url": {
                 "label": "PCM Console URL",
                 "description": "Caches the PCM of the browser-side encoding and prints a download link to the browser console."
+            },
+            "core_server_cert_file_web_crt": {
+                "label": "Web certificate",
+                "description": "Certificate chain (PEM, e.g. fullchain.pem of Let's Encrypt) for the HTTPS web port. Empty uses the server certificate. Reloaded when the file changes."
+            },
+            "core_server_cert_file_web_key": {
+                "label": "Web certificate key",
+                "description": "Private key (PEM) of the web certificate."
+            },
+            "frontend_default_ui": {
+                "label": "Default web interface",
+                "description": "What the address of teddyCloud opens: the classic web interface, or web2 (the new one, under /web/v2/) when it is installed"
+            },
+            "web_auth_require_2fa": {
+                "label": "Require 2FA",
+                "description": "Every web user must set up two-factor authentication (TOTP) at the next login."
+            },
+            "web_auth_password_min_length": {
+                "label": "Minimum password length",
+                "description": "Minimum length of new web user passwords. Existing passwords keep working."
+            },
+            "web_auth_session_days": {
+                "label": "Session lifetime (days)",
+                "description": "A login expires after this many days at the latest."
+            },
+            "web_auth_session_idle_hours": {
+                "label": "Session idle timeout (hours)",
+                "description": "A login expires after this many hours without use. 0 disables the idle timeout."
+            },
+            "web_auth_lockout_attempts": {
+                "label": "Failed logins before lockout",
+                "description": "Failed logins from one address before it is locked. Each further lockout doubles the time (max. 24 hours)."
+            },
+            "web_auth_lockout_minutes": {
+                "label": "Lockout time (minutes)",
+                "description": "Duration of the first lockout after failed logins."
+            },
+            "web_auth_trusted_proxies": {
+                "label": "Trusted reverse proxies",
+                "description": "Addresses or networks (e.g. 172.18.0.0/16) of reverse proxies whose X-Forwarded-For and X-Forwarded-Proto headers are trusted. Leave empty without a proxy."
+            },
+            "web_auth_lan_networks": {
+                "label": "Local networks",
+                "description": "Networks treated as local (LAN). Users marked as LAN only can log in from these networks only."
+            },
+            "web_auth_remote_access": {
+                "label": "Web UI from outside",
+                "description": "Allow the web UI from addresses outside the local networks. If disabled, only local networks and the allowed networks can reach it."
+            },
+            "web_auth_remote_https_only": {
+                "label": "HTTPS only from outside",
+                "description": "Reject plain HTTP to the web UI from addresses outside the local networks (direct TLS or a trusted proxy with X-Forwarded-Proto: https)."
+            },
+            "web_auth_allow_networks": {
+                "label": "Allowed networks",
+                "description": "Additional networks (e.g. a VPN) that may reach the web UI when access from outside is disabled."
+            },
+            "web_auth_deny_networks": {
+                "label": "Blocked networks",
+                "description": "Addresses or networks that may never reach the web UI."
             }
         },
         "overlayDisabled": "Overlayed disabled!",
@@ -2327,7 +2406,9 @@
             "toniebox_led": {
                 "0": "On",
                 "1": "Off",
-                "2": "Dimmed"
+                "2": "Dimmed",
+                "5": "Off permanently",
+                "6": "Dimmed permanently"
             },
             "toniebox_max_vol_hdp": {
                 "0": "25%",
@@ -2350,6 +2431,10 @@
                 "0": "German",
                 "1": "English",
                 "2": "French"
+            },
+            "frontend_default_ui": {
+                "0": "Classic",
+                "1": "web2"
             }
         },
         "warning": "Attention! Settings level",
@@ -2452,7 +2537,7 @@
                 },
                 "unlock": "Unlock"
             },
-            "intro": "Admins may do everything. Users own boxes, tonies and folders and share them; children only get what is shared with them. Own groups are of one of these two kinds. Box APIs are not affected.",
+            "intro": "Admins may do everything. Users own boxes, tonies and folders, assign further owners and share folders; children only get what they own or what is shared with them. Own groups are of one of these two kinds. The box APIs are not affected.",
             "lanOnly": "LAN only",
             "lanOnlyHint": "May log in from the local network only",
             "lastLogin": "Last login",
@@ -2473,8 +2558,8 @@
                 "name": "Name",
                 "kind": "Kind",
                 "kindHints": {
-                    "user": "Like users: owns boxes, tonies and folders and shares them.",
-                    "guest": "Like a child: only gets what is shared with them."
+                    "user": "Like user: owns boxes, tonies and folders, assigns further owners and shares folders.",
+                    "guest": "Like child: only gets what they own or what is shared with them."
                 },
                 "delete": "Delete",
                 "deleteTitle": "Delete group",
@@ -2573,6 +2658,7 @@
     },
     "sharing": {
         "add": "Share with a user",
+        "allOwners": "All owners",
         "button": "Share",
         "everyone": "Everyone",
         "inherited": "These shares come from the folder {{folder}}. Saving creates own shares for this folder.",
@@ -2583,8 +2669,11 @@
         },
         "noOwners": "nobody (admins only)",
         "noShares": "Not shared.",
+        "ownerFilterHint": "Show only what belongs to one of the chosen users",
+        "ownerFilterFailed": "Could not load what the chosen users own; everything is shown.",
         "owners": "Owners",
         "ownersAdminOnly": "Only admins assign owners.",
+        "ownerRequired": "At least one owner is needed; only an admin can remove the last one.",
         "ownersHint": "Owners have all rights and share with others. Only admins assign owners.",
         "pickUser": "User",
         "remove": "Remove",
@@ -2598,21 +2687,24 @@
             "tonie.assign": "Assign audio",
             "tonie.edit": "Edit (live, cloud, model)",
             "tonie.view": "See and play",
-            "box.share": "Share",
-            "tonie.share": "Share",
+            "box.share": "Assign owners",
+            "tonie.share": "Assign owners",
             "folder.share": "Share",
             "users.manage": "Create and manage users",
             "model.create": "Add custom tonies"
         },
         "save": "Save",
         "shares": "Shared with",
-        "singleSettings": "Single settings (if not all settings)",
-        "title": "Share: {{name}}"
+        "title": "Share: {{name}}",
+        "ownersButton": "Owners",
+        "ownersTitle": "Owners: {{name}}",
+        "ownersOnlyHint": "Owners have all rights and assign further owners. A tonie placed on another user's box shows up for that user without belonging to them; they can hide it for themselves."
     },
     "teddycloud": {
         "newVersionAvailable": "There is a new version available!",
         "newVersionDetailsAvailable": "You are not using the latest TeddyCloud version. Please update to get all benefits of the latest release!",
         "newVersionDetailsAvailableDevelop": "You are not using the latest TeddyCloud develop version. Please update to get all benefits of the latest develop version!",
+        "newVersionDetailsAvailableReleaseCandidate": "You are not using the latest TeddyCloud release candidate version. Please update to take full advantage of the latest release candidate!",
         "newVersionShort": "Update available",
         "openNewVersionInGithub": "Open the latest version on GitHub"
     },
@@ -3279,7 +3371,8 @@
                 "confirmFlashDialog": "Do you really want to flash your Toniebox? Please ensure a stable connection and do not interrupt the process!",
                 "confirmFlashDialogHint": "To ensure your Toniebox works correctly, the specified TeddyCloud instance is absolutely necessary. If your TeddyCloud is offline, your Toniebox won't be able to access new content!",
                 "confirmResetDialog": "The whole flash of the Toniebox is overwritten with the chosen file. Use only the backup of exactly this box. Do not interrupt and do not disconnect.",
-                "resetOtherBox": "The file is the backup of box {{file}}, but box {{box}} is connected. Nothing was written.",
+                "resetOtherBox": "The file is the backup of box {{file}}, but box {{box}} is connected. Writing it gives this box the identity of box {{file}}. Write anyway?",
+                "resetNotWritten": "Nothing was written.",
                 "confirmFlashModal": "Flash Toniebox with patched firmware",
                 "connectESPCollapseTitle": "Help: Connect UART with Toniebox",
                 "connected": "Connected",
@@ -3585,7 +3678,8 @@
                 "deleted": "Model \"{{model}}\" has been deleted.",
                 "description": "Really delete \"{{model}}\"? This cannot be undone.",
                 "title": "Delete model",
-                "alsoPicture": "Also delete the picture, no other figure shows it"
+                "alsoPicture": "Also delete the picture, no other figure shows it",
+                "failed": "Deleting the model failed!"
             },
             "duplicateTitleSuffix": "Copy",
             "editModalTitle": "Edit model {{current}} of {{total}}",
@@ -3673,7 +3767,8 @@
                 "text": "Pictures in custom_img above {{kb}} KB get a small copy (at most 512 pixels, WebP where the browser can write it); the models then use the copy. The originals stay in the folder.",
                 "title": "Optimize the images of the custom models"
             },
-            "readOnly": "Someone else added this figure. You can view it but not change it."
+            "readOnly": "Someone else added this figure. You can view it but not change it.",
+            "saveFailed": "Saving the model failed!"
         },
         "customImages": {
             "navigationTitle": "Images",
@@ -3705,6 +3800,7 @@
             "modelInfoSeries": "Series",
             "modelInfoTitle": "Title",
             "modelReadOnlyHint": "Original tonie: Model cannot be changed. You can only assign custom audio.",
+            "modelNoEditRightHint": "You may not change the model of this tonie.",
             "placeholderSearchForAModel": "Search for a model",
             "placeholderSearchForARadioStream": "Search for a radio stream",
             "save": "Save",
@@ -4088,6 +4184,7 @@
             },
             "cancel": "Cancel",
             "clear": "Clear sheet",
+            "clearConfirm": "Remove all tonies, texts and pictures from the sheet?",
             "clearSettings": "Restore defaults",
             "close": "Close",
             "contentPadding": "Padding inside label",
@@ -4171,7 +4268,19 @@
                 "text": "Every TAF and playlist with a title in this folder and the folders below goes onto the sheet; hidden ones and those on the sheet already are left out.",
                 "title": "Add a library folder"
             },
-            "downloadPdf": "Download PDF"
+            "downloadPdf": "Download PDF",
+            "errors": {
+                "noPrintableArea": "Paper margins leave no printable area.",
+                "labelTooBig": "The configured label does not fit on the selected paper size.",
+                "labelPairTooBig": "The configured image/text label pair does not fit on the selected paper size.",
+                "noLabels": "There are no labels to print.",
+                "noCanvas": "Canvas is not available in this browser.",
+                "pageEncodeFailed": "Could not encode the print page.",
+                "imageLoadFailed": "Could not load image {{url}}: {{reason}}",
+                "fontLoadFailed": "Could not load one or more print fonts: {{reason}}",
+                "resourcesSkipped": "{{count}} resources could not be loaded while creating the PDF. The affected content was skipped.",
+                "printFallback": "The browser could not print or open the finished PDF. The PDF was downloaded instead."
+            }
         },
         "title": "Tonies",
         "tonies": {

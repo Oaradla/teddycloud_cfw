@@ -1,3 +1,4 @@
+#include "error_text.h"
 #include <time.h>
 #include <stdbool.h>
 #include <string.h>
@@ -258,7 +259,7 @@ error_t handleCloudOTA(HttpConnection *connection, const char_t *uri, const char
     if (new_ota)
     {
         // TODO add Content-Disposition: attachment;filename=
-        ret = httpSendResponseStreamUnsafe(connection, uri, local_file, false);
+        ret = httpExtSendResponseStreamUnsafe(connection, uri, local_file, false);
     }
     else
     {
@@ -710,7 +711,7 @@ error_t handleCloudContentExt(HttpConnection *connection, const char_t *uri, con
             ffmpeg_ctx.sweep = false;
 
             osDelayTask(delay);
-            error_t response_error = httpSendResponseStream(connection, streamFileRel, true);
+            error_t response_error = httpExtSendResponseStream(connection, streamFileRel, true);
             if (response_error)
             {
                 TRACE_ERROR(" >> file %s not available or not send, error=%s...\r\n", tonieInfo->contentPath, error2text(response_error));
@@ -752,7 +753,7 @@ error_t handleCloudContentExt(HttpConnection *connection, const char_t *uri, con
 
         if (stream_ctx->error == NO_ERROR)
         {
-            error_t response_error = httpSendResponseStream(connection, streamFileRel, true);
+            error_t response_error = httpExtSendResponseStream(connection, streamFileRel, true);
             if (response_error)
             {
                 TRACE_ERROR(" >> file %s not available or not send, error=%s...\r\n", tonieInfo->contentPath, error2text(response_error));
@@ -850,8 +851,19 @@ error_t handleCloudContentExt(HttpConnection *connection, const char_t *uri, con
         size_t dataPathLen = osStrlen(client_ctx->settings->internal.datadirfull);
         if (osStrncmp(tonieInfo->contentPath, client_ctx->settings->internal.datadirfull, dataPathLen) == 0)
         {
-            error_t error = httpSendResponseStream(connection, &tonieInfo->contentPath[dataPathLen], (tonieInfo->json._source_type == CT_SOURCE_TAF_INCOMPLETE));
-            if (error)
+            /* If-Range holds the audio id of the part the box has: other content now, the box gets all of it */
+            if (connection->request.ifRange[0] != '\0' && tonieInfo->tafHeader != NULL &&
+                strtoul(connection->request.ifRange, NULL, 10) != tonieInfo->tafHeader->audio_id)
+            {
+                connection->request.Range.valid = FALSE;
+            }
+            error_t error = httpExtSendResponseStream(connection, &tonieInfo->contentPath[dataPathLen], (tonieInfo->json._source_type == CT_SOURCE_TAF_INCOMPLETE));
+            if (error == ERROR_WRITE_FAILED || error == ERROR_CONNECTION_RESET || error == ERROR_CONNECTION_CLOSING)
+            {
+                // client aborted the transfer (e.g. browser player replacing a range request)
+                TRACE_WARNING(" >> transfer of %s aborted by client, error=%s\r\n", tonieInfo->contentPath, error2text(error));
+            }
+            else if (error)
             {
                 TRACE_ERROR(" >> file %s not available or not send, error=%s...\r\n", tonieInfo->contentPath, error2text(error));
             }
@@ -1734,7 +1746,7 @@ error_t handleCloudOtaV3(HttpConnection *connection, const char_t *uri, const ch
     
     if (new_ota)
     {
-        ret = httpSendResponseStreamUnsafe(connection, uri, local_file, false);
+        ret = httpExtSendResponseStreamUnsafe(connection, uri, local_file, false);
     }
     else
     {

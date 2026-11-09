@@ -1292,10 +1292,6 @@ static const char *password_problem(const char *username, const char *password)
     {
         return "password_too_short";
     }
-    if (len > PASSWORD_MAX)
-    {
-        return "password_too_long";
-    }
     if (username != NULL && osStrcasecmp(username, password) == 0)
     {
         return "password_is_username";
@@ -1436,6 +1432,13 @@ static bool json_string(cJSON *obj, const char *key, char *out, size_t out_size)
     }
     osStrcpy(out, value);
     return true;
+}
+
+/* json_string refuses values that do not fit, tell those apart from missing ones */
+static bool json_too_long(cJSON *obj, const char *key, size_t max)
+{
+    const char *value = json_str(obj, key);
+    return value != NULL && osStrlen(value) > max;
 }
 
 /* cJSON keeps the parsed passwords in memory that is freed later, wipe them first */
@@ -2595,6 +2598,9 @@ error_t handleApiAuth2faEnable(HttpConnection *connection, const char_t *uri, co
         s->created = time(NULL);
         s->confirmed = s->created;
         save_sessions_unlocked();
+        /* the login that had to set up 2FA counts from now on */
+        user->last_login = s->created;
+        save_users_unlocked();
     }
     add_event_unlocked("2fa_enabled", user->username, ip, NULL);
     unlock_auth();
@@ -2839,6 +2845,8 @@ error_t handleApiAuthUsersCreate(HttpConnection *connection, const char_t *uri, 
     char username[USERNAME_MAX + 1];
     char password[PASSWORD_MAX + 1];
     bool have = json_string(body, "username", username, sizeof(username)) && json_string(body, "password", password, sizeof(password));
+    bool username_too_long = json_too_long(body, "username", USERNAME_MAX);
+    bool password_too_long = json_too_long(body, "password", PASSWORD_MAX);
     bool lan_only = json_bool(body, "lanOnly", false);
     bool require_2fa = json_bool(body, "require2fa", false);
     bool must_change_pw = json_bool(body, "mustChangePassword", false);
@@ -2864,6 +2872,15 @@ error_t handleApiAuthUsersCreate(HttpConnection *connection, const char_t *uri, 
     {
         wipe(password, sizeof(password));
         return err;
+    }
+    if (username_too_long)
+    {
+        wipe(password, sizeof(password));
+        return send_message(connection, 400, "invalid_user", "Username is too long (at most 32 characters)");
+    }
+    if (password_too_long)
+    {
+        return send_message(connection, 400, "password_too_long", password_message("password_too_long"));
     }
     if (!have)
     {
@@ -3239,6 +3256,12 @@ error_t handleApiAuthUsersPassword(HttpConnection *connection, const char_t *uri
     bool have = json_string(body, "username", username, sizeof(username)) && json_string(body, "password", password, sizeof(password));
     bool have_current = json_string(body, "currentPassword", current, sizeof(current));
     bool must_change_pw = json_bool(body, "mustChangePassword", false);
+    if (json_too_long(body, "password", PASSWORD_MAX))
+    {
+        delete_body(body);
+        wipe(current, sizeof(current));
+        return send_message(connection, 400, "password_too_long", password_message("password_too_long"));
+    }
     if (!have)
     {
         delete_body(body);

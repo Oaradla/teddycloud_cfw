@@ -6,6 +6,7 @@
 #include "cfw_internal.h"
 #include "cloud_request.h"
 #include "debug.h"
+#include "error_text.h"
 #include "esp32_port.h"
 #include "fs_ext.h"
 #include "hash/sha256.h"
@@ -1018,7 +1019,7 @@ static bool page_request(HttpConnection *connection, const char_t *uri, settings
     }
     if (offer)
     {
-        *result = httpSendResponseStreamUnsafe(connection, uri, path, false);
+        *result = httpExtSendResponseStreamUnsafe(connection, uri, path, false);
         if (*result == NO_ERROR)
         {
             /* the box installs it without a restart: it has that page from now on, and reports the
@@ -1210,7 +1211,7 @@ static bool esp32_install_request(HttpConnection *connection, const char_t *uri,
     }
     cfw_unlock();
     TRACE_INFO("CFW: installing build %" PRIu32 " on the ESP32 box %s, server %s port %u\r\n", build, box ? box->id : "?", host[0] ? host : "(none)", port);
-    *result = httpSendResponseStreamUnsafe(connection, uri, path, false);
+    *result = httpExtSendResponseStreamUnsafe(connection, uri, path, false);
     fsDeleteFile(path);
     osFreeMem(path);
     return true;
@@ -1307,7 +1308,7 @@ bool cfw_ota_request(HttpConnection *connection, const char_t *uri, client_ctx_t
     }
     char *path = firmware_path(platform, build, "bin");
     TRACE_INFO("CFW: offering build %" PRIu32 " to box %s (running %" PRIu32 ")\r\n", build, state.id, currentVersion);
-    *result = path ? httpSendResponseStreamUnsafe(connection, uri, path, false) : ERROR_OUT_OF_MEMORY;
+    *result = path ? httpExtSendResponseStreamUnsafe(connection, uri, path, false) : ERROR_OUT_OF_MEMORY;
     osFreeMem(path);
     return true;
 }
@@ -1415,7 +1416,19 @@ static error_t github_get(const char *host, const char *uri, void (*body)(void *
     return err;
 }
 
-/* release: release; prerelease with "alpha" in tag or name: alpha; other prereleases: beta */
+static bool contains_alpha(const char *text)
+{
+    for (; text != NULL && *text != '\0'; text++)
+    {
+        if (osStrncasecmp(text, "alpha", 5) == 0)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* release: release; prerelease with "alpha" (any case) in tag or name: alpha; other prereleases: beta */
 static uint32_t release_channel(cJSON *release)
 {
     if (!cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(release, "prerelease")))
@@ -1424,8 +1437,7 @@ static uint32_t release_channel(cJSON *release)
     }
     const char *tag = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(release, "tag_name"));
     const char *name = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(release, "name"));
-    bool alpha = (tag && osStrstr(tag, "alpha")) || (name && osStrstr(name, "alpha"));
-    return alpha ? CFW_CHANNEL_ALPHA : CFW_CHANNEL_BETA;
+    return (contains_alpha(tag) || contains_alpha(name)) ? CFW_CHANNEL_ALPHA : CFW_CHANNEL_BETA;
 }
 
 /* the release package (a .zip with "cfw" in its name), else a single image (.bin, one with "cfw" in
@@ -1696,9 +1708,13 @@ cJSON *cfw_github_releases_json(void)
 static void github_task(void *param)
 {
     char message[256];
-    github_update(true, message, sizeof(message));
+    bool failed = github_update(true, message, sizeof(message)) != NO_ERROR;
     TRACE_INFO("CFW: GitHub: %s\r\n", message);
     cfw_lock();
+    if (failed)
+    {
+        osSnprintf(github_message, sizeof(github_message), "%s", message);
+    }
     github_running = false;
     cfw_unlock();
     osDeleteTask(OS_SELF_TASK_ID);

@@ -1,4 +1,5 @@
 #include "toniebox_state.h"
+#include "cfw.h"
 #include "settings.h"
 #include "server_helpers.h"
 
@@ -169,7 +170,15 @@ bool tbs_cmd_set_vol_limit_spk(uint8_t overlay_id, uint32_t level)
         return false;
     }
     TRACE_INFO("Setting speaker volume limit to %" PRIu32 " on overlay %" PRIu8 "\r\n", level, overlay_id);
-    settings_set_unsigned_id("toniebox.max_vol_spk", level, overlay_id);
+    /* with the CFW box settings, the limit is set there (25/50/75/100 % -> step 6/9/12/15) */
+    if (cfw_is_derived_setting(settings, "toniebox.max_vol_spk"))
+    {
+        settings_set_unsigned_id("cfw.box.speaker_limit", level * 3 + 6, overlay_id);
+    }
+    else
+    {
+        settings_set_unsigned_id("toniebox.max_vol_spk", level, overlay_id);
+    }
     sse_sendEvent("cmd", "vol_limit_spk", true);
     return true;
 }
@@ -186,24 +195,31 @@ bool tbs_cmd_set_vol_limit_hdp(uint8_t overlay_id, uint32_t level)
         return false;
     }
     TRACE_INFO("Setting headphone volume limit to %" PRIu32 " on overlay %" PRIu8 "\r\n", level, overlay_id);
-    settings_set_unsigned_id("toniebox.max_vol_hdp", level, overlay_id);
+    if (cfw_is_derived_setting(settings, "toniebox.max_vol_hdp"))
+    {
+        settings_set_unsigned_id("cfw.box.headphone_limit", level * 3 + 6, overlay_id);
+    }
+    else
+    {
+        settings_set_unsigned_id("toniebox.max_vol_hdp", level, overlay_id);
+    }
     sse_sendEvent("cmd", "vol_limit_hdp", true);
     return true;
 }
 
 bool tbs_cmd_set_led(uint8_t overlay_id, uint32_t mode)
 {
-    if (overlay_id == 0 || overlay_id >= MAX_OVERLAYS || mode > 2)
+    if (overlay_id == 0 || overlay_id >= MAX_OVERLAYS)
     {
         return false;
     }
     settings_t *settings = get_settings_id(overlay_id);
-    if (!settings->internal.config_used)
+    /* the setting takes its listed levels only (0, 1, 2, 5, 6) */
+    if (!settings->internal.config_used || !settings_set_unsigned_id("toniebox.led", mode, overlay_id))
     {
         return false;
     }
     TRACE_INFO("Setting LED mode to %" PRIu32 " on overlay %" PRIu8 "\r\n", mode, overlay_id);
-    settings_set_unsigned_id("toniebox.led", mode, overlay_id);
     sse_sendEvent("cmd", "led", true);
     return true;
 }
@@ -220,7 +236,14 @@ bool tbs_cmd_set_slap_enabled(uint8_t overlay_id, bool enabled)
         return false;
     }
     TRACE_INFO("Setting slap enabled to %s on overlay %" PRIu8 "\r\n", enabled ? "true" : "false", overlay_id);
-    settings_set_bool_id("toniebox.slap_enabled", enabled, overlay_id);
+    if (cfw_is_derived_setting(settings, "toniebox.slap_enabled"))
+    {
+        settings_set_bool_id("cfw.box.slap_lock", !enabled, overlay_id);
+    }
+    else
+    {
+        settings_set_bool_id("toniebox.slap_enabled", enabled, overlay_id);
+    }
     sse_sendEvent("cmd", "slap_enabled", true);
     return true;
 }

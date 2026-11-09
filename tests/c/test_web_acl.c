@@ -74,10 +74,11 @@ void test_web_acl_decisions(void)
     acl_subject_t guest = {ACL_LEVEL_GUEST, ACL_REL_SHARED, "*", "box.view, tonie.view, tonie.assign, folder.read", NULL, NULL};
     assert(acl_allowed(&guest, "tonie.assign"));
     assert(!acl_allowed(&guest, "box.settings"));
-    /* guests can not own */
+    /* guests own within the guest level */
     guest.relation = ACL_REL_OWNER;
     guest.granted = NULL;
-    assert(!acl_allowed(&guest, "box.view"));
+    assert(acl_allowed(&guest, "box.view"));
+    assert(!acl_allowed(&guest, "box.settings"));
 
     acl_subject_t nobody = {ACL_LEVEL_USER, ACL_REL_NONE, "*", "*", NULL, "*"};
     assert(!acl_allowed(&nobody, "box.view"));

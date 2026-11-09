@@ -302,6 +302,11 @@ def test_resume_like_the_box(captured):
         status, h, body = c.request("GET", f"/v2/content/{ruid}", headers=headers)
     assert (status, h.get("Content-Range")) == (206, f"bytes 5000-{len(content) - 1}/{len(content)}")
     assert body == content[5000:]
+    # the content changed meanwhile: the rest of other audio would not fit, the box gets all of it
+    headers["If-Range"] = str(0x1A8DECAF)
+    with captured.keep_alive() as c:
+        status, h, body = c.request("GET", f"/v2/content/{ruid}", headers=headers)
+    assert (status, "Content-Range" in h, body) == (200, False, content)
 
 
 def test_missing_content_is_404(captured):

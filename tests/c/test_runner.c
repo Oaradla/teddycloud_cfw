@@ -33,6 +33,7 @@ static const test_case_t tests[] = {
     {"cfw_version_older", test_cfw_version_older},
     {"cfw_ruid", test_cfw_ruid},
     {"cfw_event_for_basic_box", test_cfw_event_for_basic_box},
+    {"cfw_event_temporary", test_cfw_event_temporary},
     {"cfw_report_body", test_cfw_report_body},
     {"cfw_strip_volume_fields", test_cfw_strip_volume_fields},
     {"cfw_esp32_image", test_cfw_esp32_image},
@@ -53,6 +54,9 @@ static const test_case_t tests[] = {
     {"web_acl_decisions", test_web_acl_decisions},
     {"web_acl_paths", test_web_acl_paths},
     {"zip_write_stored", test_zip_write_stored},
+    {"error_text", test_error_text},
+    {"log_lock", test_log_lock},
+    {"range_ext", test_range_ext},
 };
 
 int main(void)

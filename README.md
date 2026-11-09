@@ -81,17 +81,18 @@ Login protection is **off by default**. When enabled, the web interface requires
 With the login on, every user has a level:
 
 - **admin**: everything. Users from older releases and the first user are admins; at least one admin always remains.
-- **user**: owns boxes, tonies and library folders and shares them with other users, with chosen rights. Creates and manages users of the same or a lower level.
-- **guest** (shown as "child" in the web UI): only what is shared with them.
+- **user**: owns boxes, tonies and library folders, names further owners of own boxes and tonies and shares library folders with other users, with chosen rights. Creates and manages users of the same or a lower level.
+- **guest** (shown as "child" in the web UI): the boxes and tonies they own, within the guest level, and the folders shared with them. Their own `private/<guest>` folder they only read: they use its files and playlists, but do not upload, delete, move or create there.
 
 Admins can add own groups (up to 32), each of the kind user or guest with its own limit of rights; a user in a group has the level of its kind.
 
-Rights are `box.view`, `box.settings` (or single settings as `box.setting:<name>`, e.g. `box.setting:toniebox.max_vol_spk`), `box.cfw`, `tonie.view`, `tonie.assign`, `tonie.edit`, `folder.read`, `folder.write`, the `*.share` rights of owners, `users.manage` and `model.create` (add custom tonies and their pictures; users change and delete the custom tonies they added, and those used only in folders and on tonies they may change, and pictures shown only by such tonies; never with the audio id of an official tonie). Admins assign the owners of boxes, set the most a level or group may have (this also counts on the user's own boxes) and can take further rights from single users.
+Rights are `box.view`, `box.settings` (or single settings as `box.setting:<name>`, e.g. `box.setting:toniebox.max_vol_spk`), `box.cfw`, `tonie.view`, `tonie.assign`, `tonie.edit`, `folder.read`, `folder.write`, `box.share` and `tonie.share` (name further owners), `folder.share`, `users.manage` and `model.create` (add custom tonies and their pictures; users change and delete the custom tonies they added, and those used only in folders and on tonies they may change, and pictures shown only by such tonies; never with the audio id of an official tonie). Owners and admins assign the owners of boxes and tonies; an owner leaves at least one owner, only admins may leave a box or tonie without owners. Admins assign the owners of folders, set the most a level or group may have (this also counts on the user's own boxes) and can take further rights from single users.
 
 - A new tag belongs to the owners of the box it is first placed on; tags from before belong to nobody (usable by all users) until they are placed on a box. Admins assign tags by hand.
+- A tag of others placed on a box is borrowed by the box's owners: they see and play it, but do not own it. Hiding it takes it only from their own list (until it is placed there again); the owners notice nothing.
 - Library: `by/` is readable for all, new top-level folders are readable and writable for all, `private/<user>` belongs to the user, who can share sub folders. A tonie can only point at library files the user may read.
 - Global settings, files outside the library, certificates, plugins, firmware, tonies.json and settings that touch the server or the files (directories, certificates, cloud and network options) stay with the admins, also per box.
-- The live event stream carries no box, so only admins get it.
+- The live event stream carries no box: users who are no admin get the event names without content (no raw box log).
 
 Stored in `web_acl.json` in the config directory; without the login everyone may do everything, as before.
 

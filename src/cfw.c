@@ -7,6 +7,7 @@
 #include "cfw_mqtt.h"
 #include "date_time.h"
 #include "debug.h"
+#include "error_text.h"
 #include "fs_ext.h"
 #include "handler_sse.h"
 #include "mutex_manager.h"
@@ -16,8 +17,9 @@
 #define CFW_ANSWER_LIMIT 1024
 #define CFW_SYNC_INTERVAL 30
 #define CFW_SYNC_UNANSWERED_MAX 3
-#define CFW_ONLINE_TIMEOUT 120
-/* a box with the battery report logs a measurement every two minutes; one silent for longer is gone */
+/* a box with the battery report logs a measurement a little more than every two minutes: it is online
+   until it misses one, and one silent for longer than CFW_SILENT_MAX is gone */
+#define CFW_ONLINE_TIMEOUT 180
 #define CFW_SILENT_MAX 600
 /* a remote command the box did not get within this many seconds is dropped */
 #define CFW_REMOTE_MAX_AGE 60
@@ -271,7 +273,7 @@ bool cfw_event_content(HttpConnection *connection, const char_t *uri, client_ctx
     if (path != NULL && fsFileExists(path))
     {
         TRACE_INFO("CFW: tag %s is an event tag, serving the notice %s\r\n", ruid, path);
-        *result = httpSendResponseStreamUnsafe(connection, uri, path, false);
+        *result = httpExtSendResponseStreamUnsafe(connection, uri, path, false);
     }
     else
     {
@@ -877,6 +879,10 @@ static bool due_file(cfw_box_t *box, settings_t *settings, uint64_t ruid, uint8_
     {
         return false;
     }
+    if (stored[4] == CFW_TBS_KIND_EVENT && !(box->capabilities & CFW_CAP_TEMPORARY) && cfw_event_temporary(stored))
+    {
+        return false;
+    }
     if (stored[4] == CFW_TBS_KIND_EVENT && !(box->capabilities & CFW_CAP_EVENT_TAG_EXT))
     {
         *length = (box->capabilities & CFW_CAP_EVENT_TAGS) ? cfw_event_for_basic_box(stored, file) : 0;
@@ -1168,6 +1174,46 @@ static void show_settings_once(void)
     TRACE_INFO("CFW: first box with the custom firmware, its settings are shown now\r\n");
 }
 
+/* the box's own old value becomes its own CFW box setting, and the old one is derived from that again */
+static bool take_over_box_setting(const char *overlay, const char *name, const char *cfwName)
+{
+    setting_item_t *option = settings_get_by_name_ovl(name, overlay);
+    setting_item_t *cfwOption = settings_get_by_name_ovl(cfwName, overlay);
+    if (option == NULL || cfwOption == NULL || !option->overlayed || cfwOption->overlayed)
+    {
+        return false;
+    }
+    if (option->type == TYPE_BOOL)
+    {
+        settings_set_bool_ovl(cfwName, !settings_get_bool_ovl(name, overlay), overlay);
+    }
+    else
+    {
+        settings_set_unsigned_ovl(cfwName, settings_get_unsigned_ovl(name, overlay) * 3 + 6, overlay);
+    }
+    overlay_settings_init_opt(option, settings_get_by_name(name));
+    return true;
+}
+
+/* like show_settings_once for the global values: a box's own volume limits and "slap to skip" are
+   taken over when it runs the CFW */
+static void take_over_box_settings(settings_t *settings)
+{
+    if (settings->internal.overlayNumber == 0 || (!get_settings()->cfw.show_box_settings && !settings->cfw.force_box_settings))
+    {
+        return;
+    }
+    const char *overlay = settings->internal.overlayUniqueId;
+    bool changed = take_over_box_setting(overlay, "toniebox.max_vol_spk", "cfw.box.speaker_limit");
+    changed |= take_over_box_setting(overlay, "toniebox.max_vol_hdp", "cfw.box.headphone_limit");
+    changed |= take_over_box_setting(overlay, "toniebox.slap_enabled", "cfw.box.slap_lock");
+    if (changed)
+    {
+        settings_save();
+        TRACE_INFO("CFW: box %s keeps its own volume limits and slap setting as CFW box settings\r\n", overlay);
+    }
+}
+
 /* a new start of the box ends the hello of the last one; the sequence numbers start at 1 at
    every start (the uptime does not tell: it wraps after 49.7 days). After a server restart,
    records continuing the start of the hello revive it. */
@@ -1449,6 +1495,7 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
     if (hello)
     {
         show_settings_once();
+        take_over_box_settings(settings);
     }
 }
 

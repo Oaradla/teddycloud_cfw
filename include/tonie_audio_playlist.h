@@ -1,6 +1,7 @@
 #pragma once
 
 #include "debug.h"
+#include "error.h"
 
 #define TAP_TYPE_TAP "tap"
 /* the TAF a playlist builds next to itself is named after it: "<name>.tap" -> "<name>.tap.taf" */

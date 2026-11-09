@@ -183,9 +183,11 @@ def test_wrong_password_and_unknown_user_look_the_same():
 def test_password_policy():
     a = admin()
     for pw, err in (("short", "password_too_short"), ("password1", "password_too_short"), ("teddycloud", "password_too_common"),
-                    ("aaaaaaaaaaaa", "password_too_common"), ("policyuser", "password_is_username")):
+                    ("aaaaaaaaaaaa", "password_too_common"), ("policyuser", "password_is_username"), ("x" * 129, "password_too_long")):
         status, data, _ = a.post("/api/auth/users/create", {"username": "policyuser", "password": pw})
         assert status == 400 and data["error"] == err, (pw, data)
+    status, data, _ = a.post("/api/auth/users/create", {"username": "u" * 33, "password": "a good long password"})
+    assert status == 400 and data["error"] == "invalid_user", data
 
 
 def test_lockout_per_address():

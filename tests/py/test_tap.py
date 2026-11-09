@@ -246,8 +246,10 @@ class Tap(Base, TafCheck):
         status, text = request("POST", endpoint, form, {"Content-Type": "application/x-www-form-urlencoded"}, timeout=60)
         return status, json.loads(text) if text.startswith("{") else text
 
-    def split(self, titles=()):
+    def split(self, titles=(), target=None):
         form = "&".join([f"path={quote(DIR + '/album.taf')}"] + [f"title={quote(t)}" for t in titles])
+        if target is not None:
+            form += f"&target={quote(target)}"
         return self.post("/api/tafSplit?special=library", form)
 
     def build(self, tap):
@@ -336,6 +338,15 @@ class Tap(Base, TafCheck):
         self.assertEqual(result["folder"], f"{DIR}/album (2)")
         self.assertEqual(result["original"], f"{DIR}/album (2)/album.taf")
 
+    def test_split_into_a_target_keeps_the_original(self):
+        self.assertEqual(self.split(target=f"{DIR}/missing")[0], 400)
+        (LIBRARY / DIR / "shelf").mkdir()
+        status, result = self.split(target=f"{DIR}/shelf")
+        self.assertEqual(status, 200, result)
+        self.assertEqual(result, {"folder": f"{DIR}/shelf/album", "tap": f"{DIR}/shelf/album/album.tap", "chapters": 3})
+        self.assertTrue((LIBRARY / DIR / "album.taf").exists())
+        self.assertFalse((LIBRARY / DIR / "shelf" / "album" / "album.taf").exists())
+
     def test_tonie_with_playlist_gets_the_rebuilt_taf(self):
         if request("GET", f"/content/json/get/{self.RUID}")[0] == 200:
             self.skipTest(f"content JSON for {self.RUID} already exists, not touching it")
@@ -396,6 +407,30 @@ class Tap(Base, TafCheck):
             self.assertEqual(status, 200, text)
             self.assertEqual(json.loads(text)["source"], f"lib://{DIR}/album/album.taf")
         finally:
+            request("POST", "/api/fileDelete", f"{self.RUID[:8]}/{self.RUID[8:]}.json")
+            request("POST", "/api/dirDelete", self.RUID[:8])
+
+    def test_tonie_with_playlist_shows_the_playlist(self):
+        if request("GET", f"/content/json/get/{self.RUID}")[0] == 200:
+            self.skipTest(f"content JSON for {self.RUID} already exists, not touching it")
+        self.assertEqual(self.split()[0], 200)
+        tap = json.loads((LIBRARY / DIR / "album" / "album.tap").read_text())
+        model = {"model": "__tap-tonie", "audio_id": [str(tap["audio_id"])], "hash": ["00" * 20], "title": "Album", "series": "Album"}
+        status, text = request("POST", "/api/toniesCustomJsonUpsert", json.dumps(model), {"Content-Type": "application/json"})
+        self.assertEqual(status, 200, text)
+        try:
+            status, text = request(
+                "POST",
+                f"/content/json/set/{self.RUID}",
+                "source=" + quote(f"lib://{DIR}/album/album.tap"),
+                {"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            self.assertEqual(status, 200, text)
+            status, text = request("GET", "/api/getTagIndex")
+            tag = {t["ruid"]: t for t in json.loads(text)["tags"]}[self.RUID]
+            self.assertEqual(tag.get("sourceInfo", {}).get("model"), model["model"])
+        finally:
+            request("POST", "/api/toniesCustomJsonDelete", json.dumps({"models": [model["model"]]}), {"Content-Type": "application/json"})
             request("POST", "/api/fileDelete", f"{self.RUID[:8]}/{self.RUID[8:]}.json")
             request("POST", "/api/dirDelete", self.RUID[:8])
 

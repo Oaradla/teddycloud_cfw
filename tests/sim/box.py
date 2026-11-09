@@ -181,10 +181,10 @@ class BoxConnection:
 class SseListener:
     """Collects the server-sent events of /api/sse (plain HTTP port) in the background."""
 
-    def __init__(self, host, http_port):
+    def __init__(self, host, http_port, headers=None):
         self.events = []  # (event name, data)
         self._conn = http.client.HTTPConnection(host, http_port, timeout=30)
-        self._conn.request("GET", "/api/sse")
+        self._conn.request("GET", "/api/sse", headers=headers or {})
         self._resp = self._conn.getresponse()
         self._stop = False
         self._thread = threading.Thread(target=self._read, daemon=True)

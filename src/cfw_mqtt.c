@@ -223,15 +223,18 @@ void cfw_mqtt_battery(client_ctx_t *client_ctx, uint32_t mv, const cfw_battery_r
     }
     osSnprintf(text, sizeof(text), "%" PRIu32 ".%03" PRIu32, mv / 1000, mv % 1000);
     ha_transmit_topic(ha_info, "%s/CfwBatteryVoltage", text);
-    /* on the charger the voltage is the charger's: no charge then */
+    /* on the charger the voltage is the charger's: no charge then, "None" makes the value unknown in
+       Home Assistant instead of keeping the last one */
+    osStrcpy(text, "None");
     if (result->percent >= 0)
     {
         osSnprintf(text, sizeof(text), "%d", result->percent);
-        ha_transmit_topic(ha_info, "%s/CfwBattery", text);
     }
+    ha_transmit_topic(ha_info, "%s/CfwBattery", text);
+    osStrcpy(text, "None");
     if (result->remainingSec)
     {
         osSnprintf(text, sizeof(text), "%" PRIu32, result->remainingSec / 60);
-        ha_transmit_topic(ha_info, "%s/CfwBatteryRemaining", text);
     }
+    ha_transmit_topic(ha_info, "%s/CfwBatteryRemaining", text);
 }

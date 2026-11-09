@@ -1,3 +1,4 @@
+#include "error_text.h"
 #include "handler.h"
 
 #include "mutex_manager.h"
@@ -6,6 +7,8 @@
 
 static SseSubscriptionContext sseSubs[SSE_MAX_CHANNELS];
 static uint8_t sseSubscriptionCount = 0;
+/* the name of the event being written, for the subscribers who are no admin; empty: none for them */
+static char sseRestrictedEvent[64];
 
 error_t handleApiSse(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *ctx)
 {
@@ -135,6 +138,9 @@ error_t sse_startEventRaw(const char *eventname)
 {
     mutex_lock(MUTEX_SSE_EVENT);
 
+    bool forRestricted = osStrcmp(eventname, "keep-alive") != 0 && osStrncmp(eventname, "rtnl-raw", 8) != 0;
+    osSnprintf(sseRestrictedEvent, sizeof(sseRestrictedEvent), "%s", forRestricted ? eventname : "");
+
     error_t error = NO_ERROR;
 
     error = sse_rawData("event: ");
@@ -180,10 +186,38 @@ error_t sse_rawData(const char *content)
     return error;
 }
 
+/* subscribers who are no admin get the event without its content, which may be about boxes they may
+   not see: enough to know that something changed */
+static void sse_restrictedEvent(void)
+{
+    if (sseRestrictedEvent[0] == '\0')
+    {
+        return;
+    }
+    char event[2 * sizeof(sseRestrictedEvent) + 48];
+    osSnprintf(event, sizeof(event), "event: %s\ndata: { \"type\":\"%s\", \"data\":null }\n\n", sseRestrictedEvent, sseRestrictedEvent);
+    mutex_lock(MUTEX_SSE_CTX);
+    for (uint8_t channel = 0; channel < SSE_MAX_CHANNELS; channel++)
+    {
+        SseSubscriptionContext *sseCtx = &sseSubs[channel];
+        if (!sseCtx->active || !sseCtx->restricted)
+        {
+            continue;
+        }
+        sseCtx->error = httpWriteString(sseCtx->connection, event);
+        if (sseCtx->error == NO_ERROR)
+        {
+            sseCtx->lastConnection = time(NULL);
+        }
+    }
+    mutex_unlock(MUTEX_SSE_CTX);
+}
+
 error_t sse_endEventRaw(void)
 {
     error_t error = NO_ERROR;
     error = sse_rawData(" }\n\n");
+    sse_restrictedEvent();
     mutex_unlock(MUTEX_SSE_EVENT);
     return error;
 }

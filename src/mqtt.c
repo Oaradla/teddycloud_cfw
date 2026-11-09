@@ -1,3 +1,4 @@
+#include "error_text.h"
 #include <sys/types.h>
 #include <errno.h>
 #include <string.h>
@@ -22,7 +23,7 @@ typedef struct
 
 } mqtt_ctx_t;
 
-#define MQTT_CLIENT_PRIVATE_CONTEXT mqtt_ctx_t *mqtt_ctx;
+#define MQTT_CLIENT_CONTEXT_PRIVATE mqtt_ctx_t *mqtt_ctx;
 
 #include "mqtt/mqtt_client.h"
 #include "tls.h"
@@ -34,6 +35,7 @@ typedef struct
 #include "mqtt.h"
 #include "toniebox_state.h"
 #include "cfw_mqtt.h"
+#include "cfw.h"
 
 #define MQTT_BOX_INSTANCES 32
 t_ha_info *mqtt_get_box(client_ctx_t *client_ctx);
@@ -54,7 +56,7 @@ typedef struct
     char *payload;
 } mqtt_tx_buffer;
 
-#define MQTT_TX_BUFFERS 512
+#define MQTT_TX_BUFFERS 1024
 mqtt_tx_buffer mqtt_tx_buffers[MQTT_TX_BUFFERS];
 
 char *mqtt_settingname_clean(const char *str)
@@ -856,7 +858,7 @@ void mqtt_box_cmd_vol_spk_tx(t_ha_info *ha_info, const t_ha_entity *entity, void
     }
     settings_t *settings = get_settings_id(cmd_ctx->overlay_id);
     char buf[12];
-    osSnprintf(buf, sizeof(buf), "%" PRIu32, settings->toniebox.max_vol_spk);
+    osSnprintf(buf, sizeof(buf), "%" PRIu32, cfw_derived_setting(settings, "toniebox.max_vol_spk", settings->toniebox.max_vol_spk));
     ha_transmit(ha_info, entity, buf);
 }
 
@@ -881,7 +883,7 @@ void mqtt_box_cmd_vol_hdp_tx(t_ha_info *ha_info, const t_ha_entity *entity, void
     }
     settings_t *settings = get_settings_id(cmd_ctx->overlay_id);
     char buf[12];
-    osSnprintf(buf, sizeof(buf), "%" PRIu32, settings->toniebox.max_vol_hdp);
+    osSnprintf(buf, sizeof(buf), "%" PRIu32, cfw_derived_setting(settings, "toniebox.max_vol_hdp", settings->toniebox.max_vol_hdp));
     ha_transmit(ha_info, entity, buf);
 }
 
@@ -930,7 +932,7 @@ void mqtt_box_cmd_slap_en_tx(t_ha_info *ha_info, const t_ha_entity *entity, void
         return;
     }
     settings_t *settings = get_settings_id(cmd_ctx->overlay_id);
-    ha_transmit(ha_info, entity, settings->toniebox.slap_enabled ? "TRUE" : "FALSE");
+    ha_transmit(ha_info, entity, cfw_derived_setting(settings, "toniebox.slap_enabled", settings->toniebox.slap_enabled) ? "TRUE" : "FALSE");
 }
 
 void mqtt_box_cmd_slap_dir_rx(t_ha_info *ha_info, const t_ha_entity *entity, void *ctx, const char *payload)
@@ -1226,7 +1228,7 @@ error_t mqtt_init_box(t_ha_info *ha_box_instance, client_ctx_t *client_ctx)
         entity.cmd_t = "%s/CmdLed/set";
         entity.stat_t = "%s/CmdLed";
         entity.min = 0;
-        entity.max = 2;
+        entity.max = 6;
         entity.mode = "slider";
         entity.ic = "mdi:led-on";
         entity.received = mqtt_box_cmd_led_rx;
@@ -1324,14 +1326,13 @@ void mqtt_init()
         setting_item_t *s = settings_get(index);
         if (s->internal)
         {
-            index++;
             continue;
         }
         memset(&entity, 0x00, sizeof(entity));
 
         char *name = mqtt_settingname_clean(s->option_name);
         entity.id = name;
-        entity.name = custom_asprintf("%s - %s", s->option_name, s->description);
+        entity.name = custom_asprintf("%s - %s", s->option_name, s->label ? s->label : s->option_name);
         entity.stat_t = mqtt_topic_str("%s/%s/status", name);
         entity.cmd_t = mqtt_topic_str("%s/%s/command", name);
         entity.transmit = &mqtt_settings_tx;

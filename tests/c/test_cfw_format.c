@@ -74,6 +74,16 @@ void test_cfw_event_for_basic_box(void)
     assert(cfw_event_for_basic_box(file, out) == 0);
 }
 
+void test_cfw_event_temporary(void)
+{
+    const uint8_t temporary[] = {0x10, 3, 15, 0, 0x40, 0x11, 1, 1, 0x12, 1, 1};
+    uint8_t file[CFW_TBS_MAX];
+    cfw_tbs_build(CFW_TBS_KIND_EVENT, 1, 5, temporary, sizeof(temporary), file);
+    assert(cfw_event_temporary(file));
+    cfw_tbs_build(CFW_TBS_KIND_EVENT, 1, 5, temporary, sizeof(temporary) - 3, file);
+    assert(!cfw_event_temporary(file));
+}
+
 void test_cfw_report_body(void)
 {
     uint8_t body[64];
@@ -91,6 +101,10 @@ void test_cfw_report_body(void)
     const uint8_t idle[] = {0x0B, 2, 2, 0, 0x0C, 2, 0xA0, 0x05};
     assert(cfw_report_body(3 | (1 << 17) | (1 << 18), 0, 2 | (1440 << 16), body) == sizeof(idle) && memcmp(body, idle, sizeof(idle)) == 0);
     assert(cfw_report_body(1 | (1 << 17), 0, 2, body) == 0);
+
+    /* LED dimmed permanently: bit 2 of the level in bit 19 */
+    const uint8_t led[] = {0x06, 1, 6};
+    assert(cfw_report_body(1 | (1 << 9) | (2 << 14) | (1 << 19), 0, 0, body) == sizeof(led) && memcmp(body, led, sizeof(led)) == 0);
 }
 
 void test_cfw_strip_volume_fields(void)

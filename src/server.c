@@ -201,6 +201,8 @@ request_type_t request_paths[] = {
     {REQ_GET, "/api/cfw/status", SERTY_WEB, &handleApiCfwStatus},
     {REQ_GET, "/api/cfw/boxHost", SERTY_WEB, &handleApiCfwBoxHost},
     {REQ_GET, "/api/cfw/battery", SERTY_WEB, &handleApiCfwBattery},
+    {REQ_GET, "/api/cfw/resume", SERTY_WEB, &handleApiCfwResume},
+    {REQ_POST, "/api/cfw/resume/choose", SERTY_WEB, &handleApiCfwResumeChoose},
     {REQ_POST, "/api/cfw/firmware/upload", SERTY_WEB, &handleApiCfwFirmwareUpload},
     {REQ_POST, "/api/cfw/firmware/edit", SERTY_WEB, &handleApiCfwFirmwareEdit},
     {REQ_POST, "/api/cfw/firmware/delete", SERTY_WEB, &handleApiCfwFirmwareDelete},

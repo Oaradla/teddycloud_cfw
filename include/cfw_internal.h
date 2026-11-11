@@ -14,6 +14,7 @@
 #define CFW_CAP_EVENT_TAG_EXT (1 << 9)
 #define CFW_CAP_REMOTE (1 << 10)
 #define CFW_CAP_BATTERY (1 << 11)
+#define CFW_CAP_GLOBAL_RESUME (1 << 14)
 #define CFW_CAP_IDLE_TIMES (1 << 12)
 #define CFW_CAP_TEMPORARY (1 << 13)
 
@@ -28,6 +29,7 @@
 #define CFW_CMD_VOLUME 70
 #define CFW_CMD_PLAY 71
 #define CFW_CMD_UPDATE_CHECK 73
+#define CFW_CMD_POSITION 74
 
 #define CFW_REMOTE_QUEUE 8
 #define CFW_REMOTE_ARGS_MAX 300
@@ -119,6 +121,13 @@ typedef struct
     bool checkRequested; /* command 73 queued: the next update check is no start of the box */
     cfw_remote_t queue[CFW_REMOTE_QUEUE];
     size_t queueCount;
+    /* global resume: the answer to the box's position query, due at resumeDue */
+    bool resumePending;
+    uint64_t resumeRuid;
+    uint16_t resumeBase;
+    time_t resumeDue;
+    uint32_t resumeReports; /* the reports of the figure when the query came */
+    char resumeOther[64]; /* the box the figure played on when the query came */
     bool statusValid;
     uint32_t status[9];
     time_t statusTime;

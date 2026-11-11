@@ -1268,15 +1268,10 @@ error_t mqtt_init_box(t_ha_info *ha_box_instance, client_ctx_t *client_ctx)
     return NO_ERROR;
 }
 
-t_ha_info *mqtt_get_box(client_ctx_t *client_ctx)
+static t_ha_info *mqtt_find_box_locked(const char *box_id)
 {
-    t_ha_info *ret = NULL;
-
-    const char *box_id = client_ctx->state->box.id;
-
     char *name = custom_asprintf("%s_Box_%s", settings_get_string("mqtt.topic"), box_id);
-
-    mutex_lock(MUTEX_MQTT_BOX);
+    t_ha_info *ret = NULL;
     for (int pos = 0; pos < MQTT_BOX_INSTANCES; pos++)
     {
         if (ha_box_instances[pos].initialized && !osStrcasecmp(name, ha_box_instances[pos].id))
@@ -1285,6 +1280,22 @@ t_ha_info *mqtt_get_box(client_ctx_t *client_ctx)
             break;
         }
     }
+    osFreeMem(name);
+    return ret;
+}
+
+t_ha_info *mqtt_find_box(const char *box_id)
+{
+    mutex_lock(MUTEX_MQTT_BOX);
+    t_ha_info *ret = mqtt_find_box_locked(box_id);
+    mutex_unlock(MUTEX_MQTT_BOX);
+    return ret;
+}
+
+t_ha_info *mqtt_get_box(client_ctx_t *client_ctx)
+{
+    mutex_lock(MUTEX_MQTT_BOX);
+    t_ha_info *ret = mqtt_find_box_locked(client_ctx->state->box.id);
     if (!ret)
     {
         for (int pos = 0; pos < MQTT_BOX_INSTANCES; pos++)
@@ -1301,7 +1312,6 @@ t_ha_info *mqtt_get_box(client_ctx_t *client_ctx)
         }
     }
     mutex_unlock(MUTEX_MQTT_BOX);
-    osFreeMem(name);
     return ret;
 }
 

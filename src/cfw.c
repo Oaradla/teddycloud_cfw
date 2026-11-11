@@ -5,6 +5,7 @@
 
 #include "cfw_internal.h"
 #include "cfw_mqtt.h"
+#include "cfw_resume.h"
 #include "date_time.h"
 #include "debug.h"
 #include "error_text.h"
@@ -31,6 +32,10 @@
 #define CFW_FUNC_REMOTE_RESULT 32260
 #define CFW_FUNC_STATUS 32261
 #define CFW_FUNC_BATTERY 32262
+#define CFW_FUNC_POSITION 32263
+#define CFW_FUNC_POSITION_QUERY 32264
+/* a position query waits this long for the report of the box the figure still plays on */
+#define CFW_RESUME_WAIT 2
 
 static cfw_box_t cfw_boxes[MAX_OVERLAYS];
 
@@ -95,6 +100,7 @@ void cfw_deinit(void)
         cfw_battery_free(&cfw_boxes[i]);
     }
     osMemset(cfw_boxes, 0, sizeof(cfw_boxes));
+    cfw_resume_free();
     cfw_unlock();
     cfw_firmware_deinit();
 }
@@ -606,6 +612,18 @@ void cfw_box_save(cfw_box_t *box)
     }
     osFreeMem(path);
     osFreeMem(text);
+}
+
+static cfw_box_t *box_by_id(const char *id)
+{
+    for (size_t i = 0; i < MAX_OVERLAYS; i++)
+    {
+        if (cfw_boxes[i].loaded && osStrcmp(cfw_boxes[i].id, id) == 0)
+        {
+            return &cfw_boxes[i];
+        }
+    }
+    return NULL;
 }
 
 cfw_box_t *cfw_box_get(settings_t *settings)
@@ -1313,6 +1331,9 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
     char boxId[sizeof(((cfw_box_t *)0)->id)];
     uint32_t build = 0;
     cfw_battery_model_t *loadedModel = NULL;
+    uint64_t resumeConflict = 0;
+    char conflictBoxes[CFW_RESUME_BRANCHES][CFW_RESUME_BOX_ID];
+    size_t conflictBoxCount = 0;
 
     if (log2->function_group == CFW_LOG_GROUP && log2->function == CFW_FUNC_BATTERY)
     {
@@ -1443,6 +1464,35 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
             osSnprintf(event, sizeof(event), "{\"box\":\"%s\",\"state\":%" PRIu32 "}", box->id, box->status[0]);
         }
         break;
+    case CFW_FUNC_POSITION:
+    case CFW_FUNC_POSITION_QUERY:
+    {
+        uint64_t ruid = length >= 8 ? cfw_ruid_from_bytes(payload) : 0;
+        uint16_t base = 0;
+        bool query = log2->function == CFW_FUNC_POSITION_QUERY;
+        /* the box the figure still plays on, before this query moves it here */
+        const char *other = query ? cfw_resume_elsewhere(ruid, box->id) : NULL;
+        cfw_box_t *otherBox = other != NULL ? box_by_id(other) : NULL;
+        bool wait = otherBox != NULL && cfw_box_online(otherBox);
+        osStrcpy(box->resumeOther, wait ? otherBox->id : "");
+        if (cfw_resume_record(box->id, payload, length, query, &ruid, &base))
+        {
+            resumeConflict = ruid;
+            conflictBoxCount = cfw_resume_conflict_boxes(ruid, conflictBoxes);
+        }
+        if (query && ruid != 0)
+        {
+            box->resumePending = true;
+            box->resumeRuid = ruid;
+            box->resumeBase = base;
+            box->resumeReports = cfw_resume_reports(ruid);
+            box->resumeDue = time(NULL) + (wait ? CFW_RESUME_WAIT : 0);
+        }
+        eventName = "cfw-resume";
+        eventIsText = true;
+        cfw_format_ruid(ruid, event);
+        break;
+    }
     case CFW_FUNC_BATTERY:
         if (length >= sizeof(box->battery))
         {
@@ -1474,6 +1524,17 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
     if (statusReport)
     {
         cfw_mqtt_status(client_ctx, status);
+    }
+    if (resumeConflict != 0)
+    {
+        char text[17];
+        cfw_format_ruid(resumeConflict, text);
+        TRACE_WARNING("CFW: positions of %s in conflict, a user decides\r\n", text);
+        for (size_t i = 0; i < conflictBoxCount; i++)
+        {
+            cfw_mqtt_resume_conflict(conflictBoxes[i], text);
+        }
+        sse_sendEvent("cfw-resume-conflict", text, true);
     }
     if (batteryReport)
     {
@@ -1590,6 +1651,16 @@ static size_t next_frame(cfw_box_t *box, settings_t *settings, bool received, ui
     if (!box->helloValid)
     {
         return 0;
+    }
+    /* the position answer, once the box the figure played on had its time to report */
+    if (box->resumePending && (box->capabilities & CFW_CAP_REMOTE) &&
+        (now >= box->resumeDue || cfw_resume_reported_since(box->resumeRuid, box->resumeOther, box->resumeReports)))
+    {
+        box->resumePending = false;
+        sent->command = CFW_CMD_POSITION;
+        sent->argsLength = cfw_resume_answer_args(box->resumeRuid, box->id, box->resumeBase, sent->args);
+        sent->queued = now;
+        return build_frame(frame, sent->command, sent->args, sent->argsLength);
     }
 
     /* command 6 only in reply to log data, only with files due, and the files checked at most every 30 s */

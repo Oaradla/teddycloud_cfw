@@ -529,6 +529,30 @@ def test_review_secret_and_system_settings_are_not_readable(world):
     assert alice.get("/api/getTagIndex")[0] == 200
 
 
+def test_resume_positions_of_viewable_tonies(world):
+    """global resume: each user gets the positions of the tonies he may view"""
+    admin = Client("admin")
+    if admin.get("/api/settings/get/cfw.enabled")[0] != 200:
+        pytest.skip("server without custom firmware support")
+    mine, other = "1111111111111111", "2222222222222222"
+    store = Path(SANDBOX) / "config" / "cfw"
+    store.mkdir(parents=True, exist_ok=True)
+    (store / "resume.json").write_text(json.dumps([{"ruid": mine, "revision": 1}, {"ruid": other, "revision": 1}]))
+    assert admin.post("/api/acl/set", {"type": "tonie", "id": mine, "owners": ["alice"]})[0] == 200
+    assert admin.post("/api/acl/set", {"type": "tonie", "id": other, "owners": ["bob"]})[0] == 200
+    assert admin.post("/api/settings/set/cfw.enabled", "true", raw=True)[0] == 200
+    try:
+        def ruids(client):
+            status, data = client.get("/api/cfw/resume")
+            assert status == 200, data
+            return {e["ruid"].lower() for e in data}
+
+        assert ruids(admin) == {mine, other}
+        assert ruids(Client("alice")) == {mine}
+    finally:
+        assert admin.post("/api/settings/set/cfw.enabled", "false", raw=True)[0] == 200
+
+
 def test_firmware_update_with_box_update(world):
     """the firmware update of a box goes with box.update; the builds themselves stay the admin's"""
     b1, b2 = world["box1"], world["box2"]

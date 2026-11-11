@@ -236,6 +236,10 @@ size_t cfw_report_body(uint32_t packed, uint32_t values, uint32_t idle, uint8_t 
             n += put_record(&body[n], 0x0B + i, (idle >> (16 * i)) & 0xFFFF, 2);
         }
     }
+    if (kind == CFW_TBS_KIND_PROFILE && (packed & (1u << 20)))
+    {
+        n += put_record(&body[n], 0x0D, (packed >> 21) & 1, 1);
+    }
     return n;
 }
 

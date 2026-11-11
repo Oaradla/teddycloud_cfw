@@ -1006,6 +1006,8 @@ static const route_policy_t policies[] = {
     {"/api/cfw/remote", P_BOX, "box.cfw", 0, NULL},
     {"/api/cfw/status", P_BOX, "box.view", 0, NULL},
     {"/api/cfw/battery", P_BOX, "box.view", 0, NULL},
+    {"/api/cfw/resume/choose", P_TONIE_Q, "tonie.edit", 0, "POST"},
+    {"/api/cfw/resume", P_HANDLER, NULL, 0, NULL},
     {"/api/cfw/deliver", P_BOX, "box.update", 0, NULL},
     /* the builds a box can get; changing them and the setup in the browser are the admin's */
     {"/api/cfw/firmware/package", P_ADMIN, NULL, 0, NULL},

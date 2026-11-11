@@ -57,11 +57,8 @@
         "saveError": "Zapisywanie nie powiodło się",
         "saved": "Ustawienia CFW zapisane",
         "savedDetails": "Boxy z Custom Firmware przejmą je od razu (zdalne sterowanie) lub przy następnym sprawdzeniu.",
-        "notSet": "Nie ustawiono",
         "on": "Wł.",
         "off": "Wył.",
-        "locked": "Zablokowane",
-        "unlocked": "Odblokowane",
         "minutes": "min",
         "idleMinutesHint": "0 = 10 min jak w oryginale, do 65535 min (ok. 45 dni)",
         "speakerLimit": "Limit głośności głośnika",
@@ -93,6 +90,7 @@
         "profile": {
             "resume": "Wznawianie",
             "resumeHint": "Figurka kontynuuje od miejsca, w którym ostatnio przerwała, nawet jeśli w międzyczasie grały inne figurki.",
+            "resumeByGlobal": "Włączone przez „Globalne wznawianie”.",
             "shuffle": "Losowa kolejność",
             "shuffleHint": "Rozdziały są odtwarzane w losowej kolejności, każdy dokładnie raz. Uderzenie odwróconego boxa zaczyna nową kolejność.",
             "sleepTimer": "Wyłącznik czasowy",
@@ -100,7 +98,13 @@
             "sleepAfter": "Wyłącz po",
             "ledLevelHint": "Obowiązuje, gdy figurka stoi na boxie.",
             "limitHint": "Najwyższa głośność, gdy figurka stoi na boxie; może przekraczać limit boxa.",
-            "lockHint": "\"Nie ustawiono\": obowiązuje ustawienie boxa. Figurka ma pierwszeństwo w obu kierunkach."
+            "lockHint": "Figurka wygrywa w obu kierunkach.",
+            "fromBox": "Jak box",
+            "ownValue": "Własna wartość tej figurki",
+            "useBox": "Użyj wartości boxa",
+            "globalResume": "Globalne wznawianie",
+            "globalResumeHint": "Tonie gra dalej na każdym boxie od miejsca, w którym zatrzymał się na innym (obejmuje wznawianie). Box pyta teddyCloud o pozycję przy położeniu.",
+            "globalResumeOld": "Te boxy mają starszy niestandardowy firmware bez globalnego wznawiania; tam tonie nie gra dalej od miejsca, w którym zatrzymał się na innym boxie: {{boxes}}"
         },
         "event": {
             "intro": "Tag zdarzenia niczego nie odtwarza. Po jego położeniu box wykonuje jego akcje: dla następnej figurki położonej w ciągu 60 s lub dla całego boxa.",
@@ -419,6 +423,8 @@
             "packageNotKept": "Nie można zachować pakietu do instalacji w przeglądarce",
             "patchedNoApp": "Poprawiony obraz nie jest obrazem aplikacji",
             "portNotPatchable": "Portu nie można poprawić w tej wersji oryginalnego firmware",
+            "noSuchConflict": "Ten konflikt został już rozstrzygnięty",
+            "ruidOrBranchMissing": "Brak ID tagu lub pozycji",
             "assignedUpdateOff": "Przypisano, ale „Aktualizacja firmware” jest wyłączona dla tego boxa, więc nie jest oferowany",
             "assignedRunning": "Przypisano; box już działa na tym obrazie",
             "assignedRolledBack": "Przypisano, ale box wycofał ten obraz; jest oferowany tylko z „Oferuj ponownie wycofany obraz”"
@@ -446,6 +452,19 @@
                 "title": "Blokady",
                 "text": "Dla boxa lub figurki: blokada uderzeń (zmiana rozdziału, także uderzenie do góry nogami), blokada przechylania (przewijanie) i blokada głośności (krótkie naciśnięcie ucha). Zablokowany gest nic nie robi: bez dźwięku i bez mignięcia."
             }
+        },
+        "resume": {
+            "title": "Globalne wznawianie",
+            "last": "Ostatnio słuchane na {{box}}, {{time}}",
+            "current": "Pozycja z {{box}}, {{listened}} wysłuchane",
+            "conflictBadge": "Konflikt pozycji",
+            "titleLast": "Ostatnio odtwarzane",
+            "conflict": "Dwie pozycje się rozeszły. Do czasu wyboru każdy box gra własną pozycję.",
+            "choose": "Użyj tej pozycji",
+            "branch": "{{box}}: {{listened}} wysłuchane, zgłoszone {{time}}",
+            "chosen": "Pozycja przejęta",
+            "changed": "Pozycje zmieniły się w międzyczasie. Sprawdź je ponownie.",
+            "playing": "Gra teraz na {{box}}"
         }
     },
     "common": {

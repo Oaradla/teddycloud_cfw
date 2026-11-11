@@ -57,11 +57,8 @@
         "saveError": "Error al guardar",
         "saved": "Configuración CFW guardada",
         "savedDetails": "Las cajas con el firmware personalizado la aplican de inmediato (control remoto) o en su próxima comprobación.",
-        "notSet": "Sin definir",
         "on": "Activado",
         "off": "Desactivado",
-        "locked": "Bloqueado",
-        "unlocked": "Desbloqueado",
         "minutes": "min",
         "idleMinutesHint": "0 = 10 min como en el original, hasta 65535 min (unos 45 días)",
         "speakerLimit": "Límite de volumen del altavoz",
@@ -93,6 +90,7 @@
         "profile": {
             "resume": "Continuar",
             "resumeHint": "La figura continúa donde se detuvo por última vez, aunque entre medias se hayan reproducido otras figuras.",
+            "resumeByGlobal": "Activado por «Reanudación global».",
             "shuffle": "Aleatorio",
             "shuffleHint": "Los capítulos se reproducen en orden aleatorio, cada uno exactamente una vez. Un golpe con la caja boca abajo empieza un orden nuevo.",
             "sleepTimer": "Temporizador de apagado",
@@ -100,7 +98,13 @@
             "sleepAfter": "Apagar tras",
             "ledLevelHint": "Se aplica mientras la figura está en la caja.",
             "limitHint": "Volumen máximo mientras la figura está en la caja; puede superar el límite de la caja.",
-            "lockHint": "\"Sin definir\": se aplica el ajuste de la caja. La figura prevalece en ambos sentidos."
+            "lockHint": "La figura prevalece en ambos sentidos.",
+            "fromBox": "Como la caja",
+            "ownValue": "Valor propio de esta figura",
+            "useBox": "Usar el valor de la caja",
+            "globalResume": "Reanudación global",
+            "globalResumeHint": "El tonie continúa en cualquier caja donde se detuvo en otra (incluye reanudar). La caja pregunta a teddyCloud la posición al colocarlo.",
+            "globalResumeOld": "Estas cajas tienen un firmware personalizado más antiguo sin reanudación global; allí el tonie no continúa donde se detuvo en otra caja: {{boxes}}"
         },
         "event": {
             "intro": "Una etiqueta de evento no reproduce nada. Al colocarla, la caja ejecuta sus acciones: para la siguiente figura colocada en 60 s o para toda la caja.",
@@ -419,6 +423,8 @@
             "packageNotKept": "No se pudo conservar el paquete para la instalación en el navegador",
             "patchedNoApp": "La imagen parcheada no es una imagen de app",
             "portNotPatchable": "El puerto no se puede parchear en esta versión del firmware original",
+            "noSuchConflict": "Este conflicto ya se ha resuelto",
+            "ruidOrBranchMissing": "Falta el ID de etiqueta o la posición",
             "assignedUpdateOff": "Asignada, pero \"Actualización de firmware\" está desactivada para esta caja, así que no se ofrece",
             "assignedRunning": "Asignada; la caja ya ejecuta esta imagen",
             "assignedRolledBack": "Asignada, pero la caja revirtió esta imagen; solo se ofrece con \"Volver a ofrecer imagen revertida\""
@@ -446,6 +452,19 @@
                 "title": "Bloqueos",
                 "text": "Por caja o por figura: bloqueo de golpes (cambiar de capítulo, también el golpe boca abajo), bloqueo de inclinación (avanzar/retroceder) y bloqueo de volumen (pulsación corta de oreja). Un gesto bloqueado no hace nada: ni sonido ni parpadeo."
             }
+        },
+        "resume": {
+            "title": "Reanudación global",
+            "last": "Escuchado por última vez en {{box}}, {{time}}",
+            "current": "Posición de {{box}}, {{listened}} escuchado",
+            "conflictBadge": "Conflicto de posición",
+            "titleLast": "Última reproducción",
+            "conflict": "Dos posiciones se han separado. Hasta que elijas, cada caja reproduce su propia posición.",
+            "choose": "Usar esta posición",
+            "branch": "{{box}}: {{listened}} escuchado, notificado {{time}}",
+            "chosen": "Posición adoptada",
+            "changed": "Las posiciones han cambiado mientras tanto. Compruébalas de nuevo.",
+            "playing": "Se reproduce ahora en {{box}}"
         }
     },
     "common": {

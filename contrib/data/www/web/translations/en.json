@@ -57,11 +57,8 @@
         "saveError": "Saving failed",
         "saved": "CFW settings saved",
         "savedDetails": "Boxes with the custom firmware take them at once (remote control) or at their next check.",
-        "notSet": "Not set",
         "on": "On",
         "off": "Off",
-        "locked": "Locked",
-        "unlocked": "Unlocked",
         "minutes": "min",
         "idleMinutesHint": "0 = 10 min as in the original, up to 65535 min (about 45 days)",
         "speakerLimit": "Speaker volume limit",
@@ -93,6 +90,7 @@
         "profile": {
             "resume": "Resume",
             "resumeHint": "The figure continues where it stopped last, even when other figures played in between.",
+            "resumeByGlobal": "Switched on by “Global resume”.",
             "shuffle": "Shuffle",
             "shuffleHint": "The chapters play in random order, each exactly once. A slap on the upside-down box starts a new order.",
             "sleepTimer": "Sleep timer",
@@ -100,7 +98,13 @@
             "sleepAfter": "Switch off after",
             "ledLevelHint": "Applies while the figure is on the box.",
             "limitHint": "Highest volume while the figure is on the box; may be above the box's limit.",
-            "lockHint": "\"Not set\": the box's setting applies. The figure wins in both directions."
+            "lockHint": "The figure wins in both directions.",
+            "fromBox": "As the box",
+            "ownValue": "This figure's own value",
+            "useBox": "Use the box's value",
+            "globalResume": "Global resume",
+            "globalResumeHint": "The tonie continues on any box where it stopped on another one (includes resume). The box asks teddyCloud for the position when it is placed.",
+            "globalResumeOld": "These boxes have an older custom firmware without global resume; there the tonie does not continue where it stopped on another box: {{boxes}}"
         },
         "event": {
             "intro": "An event tag plays nothing. When it is placed, the box carries out its actions: for the next figure placed within 60 s, or for the whole box.",
@@ -419,6 +423,8 @@
             "packageNotKept": "The package could not be kept for the installation in the browser",
             "patchedNoApp": "The patched image is no app image",
             "portNotPatchable": "The port cannot be patched in this version of the original firmware",
+            "noSuchConflict": "This conflict has already been decided",
+            "ruidOrBranchMissing": "Tag ID or position missing",
             "assignedUpdateOff": "Assigned, but \"Firmware update\" is off for this box, so it is not offered",
             "assignedRunning": "Assigned; the box already runs this image",
             "assignedRolledBack": "Assigned, but the box has rolled this image back, so it is offered only with \"Offer rolled-back image again\""
@@ -446,6 +452,19 @@
                 "title": "Locks",
                 "text": "Per box or per figure: slap lock (changing chapters, the upside-down slap included), tilt lock (winding) and volume lock (short ear press). A locked gesture does nothing at all: no sound, no blink."
             }
+        },
+        "resume": {
+            "title": "Global resume",
+            "last": "Last heard on {{box}}, {{time}}",
+            "current": "Position from {{box}}, {{listened}} heard",
+            "conflictBadge": "Position conflict",
+            "titleLast": "Last played",
+            "conflict": "Two positions went apart. Until you choose, each box plays its own position.",
+            "choose": "Take this position",
+            "branch": "{{box}}: {{listened}} heard, reported {{time}}",
+            "chosen": "Position taken",
+            "changed": "The positions changed in the meantime. Please check them again.",
+            "playing": "Playing on {{box}} now"
         }
     },
     "common": {

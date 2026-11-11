@@ -57,11 +57,8 @@
         "saveError": "Speichern fehlgeschlagen",
         "saved": "CFW-Einstellungen gespeichert",
         "savedDetails": "Boxen mit Custom Firmware übernehmen sie sofort (Fernsteuerung) oder bei der nächsten Abfrage.",
-        "notSet": "Nicht gesetzt",
         "on": "An",
         "off": "Aus",
-        "locked": "Gesperrt",
-        "unlocked": "Entsperrt",
         "minutes": "Min.",
         "idleMinutesHint": "0 = 10 Min. wie im Original, bis 65535 Min. (ca. 45 Tage)",
         "speakerLimit": "Lautstärke-Limit Lautsprecher",
@@ -93,6 +90,7 @@
         "profile": {
             "resume": "Fortsetzen",
             "resumeHint": "Die Figur spielt dort weiter, wo sie zuletzt aufgehört hat, auch wenn dazwischen andere Figuren liefen.",
+            "resumeByGlobal": "Durch „Globales Fortsetzen“ eingeschaltet.",
             "shuffle": "Zufallswiedergabe",
             "shuffleHint": "Die Kapitel laufen in zufälliger Reihenfolge, jedes genau einmal. Kopfüber klopfen startet eine neue Reihenfolge.",
             "sleepTimer": "Sleep-Timer",
@@ -100,7 +98,13 @@
             "sleepAfter": "Ausschalten nach",
             "ledLevelHint": "Gilt, solange die Figur auf der Box steht.",
             "limitHint": "Höchste Lautstärke, solange die Figur auf der Box steht; darf über dem Limit der Box liegen.",
-            "lockHint": "„Nicht gesetzt“: Es gilt die Einstellung der Box. Die Figur gewinnt in beide Richtungen."
+            "lockHint": "Die Figur gewinnt in beide Richtungen.",
+            "fromBox": "Wie die Box",
+            "ownValue": "Eigener Wert dieser Figur",
+            "useBox": "Wert der Box verwenden",
+            "globalResume": "Globales Fortsetzen",
+            "globalResumeHint": "Der Tonie spielt auf jeder Box dort weiter, wo er auf einer anderen gestoppt wurde (schließt Fortsetzen ein). Die Box fragt teddyCloud beim Auflegen nach dem Stand.",
+            "globalResumeOld": "Diese Boxen haben eine ältere Custom Firmware ohne globales Fortsetzen; dort spielt der Tonie nicht weiter, wo er auf einer anderen Box gestoppt wurde: {{boxes}}"
         },
         "event": {
             "intro": "Ein Event-Tag spielt nichts ab. Wird er aufgelegt, führt die Box die Aktionen aus: für die nächste Figur, die innerhalb von 60 s aufgelegt wird, oder für die ganze Box.",
@@ -419,6 +423,8 @@
             "packageNotKept": "Das Paket konnte für die Installation im Browser nicht aufbewahrt werden",
             "patchedNoApp": "Das gepatchte Image ist kein App-Image",
             "portNotPatchable": "Der Port kann in dieser Version der Original-Firmware nicht gepatcht werden",
+            "noSuchConflict": "Dieser Konflikt ist schon entschieden",
+            "ruidOrBranchMissing": "Tag-ID oder Stand fehlt",
             "assignedUpdateOff": "Zugewiesen, aber „Firmware-Update“ ist für diese Box aus, daher wird es nicht angeboten",
             "assignedRunning": "Zugewiesen; die Box läuft bereits mit diesem Image",
             "assignedRolledBack": "Zugewiesen, aber die Box hat dieses Image zurückgerollt; es wird nur mit „Zurückgerolltes Image erneut anbieten“ angeboten"
@@ -446,6 +452,19 @@
                 "title": "Sperren",
                 "text": "Pro Box oder pro Figur: Klaps-Sperre (Kapitel wechseln, auch kopfüber klopfen), Kipp-Sperre (spulen) und Lautstärke-Sperre (kurzer Ohrdruck). Eine gesperrte Geste bewirkt gar nichts, kein Ton und kein Blinken."
             }
+        },
+        "resume": {
+            "title": "Globales Fortsetzen",
+            "last": "Zuletzt gehört auf {{box}}, {{time}}",
+            "current": "Stand von {{box}}, {{listened}} gehört",
+            "conflictBadge": "Positionskonflikt",
+            "titleLast": "Zuletzt gespielt",
+            "conflict": "Zwei Stände sind auseinandergelaufen. Bis zur Wahl spielt jede Box ihren eigenen Stand.",
+            "choose": "Diesen Stand nehmen",
+            "branch": "{{box}}: {{listened}} gehört, gemeldet {{time}}",
+            "chosen": "Stand übernommen",
+            "changed": "Die Stände haben sich inzwischen geändert. Bitte noch einmal prüfen.",
+            "playing": "Spielt gerade auf {{box}}"
         }
     },
     "common": {

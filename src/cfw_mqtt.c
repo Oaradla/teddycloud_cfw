@@ -188,6 +188,14 @@ void cfw_mqtt_add_entities(t_ha_info *ha_info, uint8_t overlay)
     entity.stat_t = "%s/CfwChapter";
     entity.ic = "mdi:book-open-page-variant";
     ha_add(ha_info, &entity);
+
+    osMemset(&entity, 0, sizeof(entity));
+    entity.id = "CfwResumeConflict";
+    entity.name = "Resume conflict";
+    entity.type = ha_sensor;
+    entity.stat_t = "%s/CfwResumeConflict";
+    entity.ic = "mdi:call-split";
+    ha_add(ha_info, &entity);
 }
 
 void cfw_mqtt_status(client_ctx_t *client_ctx, const uint32_t *status)
@@ -207,6 +215,19 @@ void cfw_mqtt_status(client_ctx_t *client_ctx, const uint32_t *status)
     ha_transmit_topic(ha_info, "%s/CfwChapter", text);
     osSnprintf(text, sizeof(text), "%" PRIu32, status[6] & 0xFF);
     ha_transmit_topic(ha_info, "%s/CfwVolume", text);
+}
+
+void cfw_mqtt_resume_conflict(const char *boxId, const char *ruid)
+{
+    if (!settings_get_bool("mqtt.enabled"))
+    {
+        return;
+    }
+    t_ha_info *ha_info = mqtt_find_box(boxId);
+    if (ha_info != NULL)
+    {
+        ha_transmit_topic(ha_info, "%s/CfwResumeConflict", ruid);
+    }
 }
 
 void cfw_mqtt_battery(client_ctx_t *client_ctx, uint32_t mv, const cfw_battery_result_t *result)

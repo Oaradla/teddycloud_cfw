@@ -15,6 +15,9 @@ FUNC_SETTINGS_CHANGED = 32258
 FUNC_REMOTE_RESULT = 32260
 FUNC_STATUS = 32261
 FUNC_BATTERY = 32262
+FUNC_POSITION = 32263
+FUNC_POSITION_QUERY = 32264
+CMD_POSITION = 74
 GROUP = 22
 
 
@@ -22,6 +25,19 @@ def battery(mv, station=False, low=False, critical=False, implausible=False, rea
     """payload of the battery report record"""
     flags = int(station) | int(low) << 1 | int(critical) << 2 | int(implausible) << 3
     return struct.pack("<5I", mv, flags, reason, state | step << 8, adc)
+
+
+def position(uid, position, base=0, listened=0, reason=0, global_resume=True, audio_id=0x6AB13B80):
+    """payload of the position report (reason 0 stopped, 1 playing, 2 ended, 3 late) and query (reason 4) records"""
+    return struct.pack("<Q6I", uid, audio_id, position, 0, int(global_resume) << 17, reason, base | listened << 16)
+
+
+def position_answer(args):
+    """(answer, revision, position) of the arguments of command 74"""
+    if args[8] != 0:
+        return args[8], None, None
+    revision, _audio_id, block = struct.unpack("<HII", args[9:19])
+    return 0, revision, block
 
 
 def record(function, payload, uptime, sequence, group=GROUP):

@@ -5,6 +5,9 @@
 #include <string.h>
 
 #include "cfw_internal.h"
+#include "cfw_mqtt.h"
+#include "cfw_resume.h"
+#include "handler_sse.h"
 #include "debug.h"
 #include "fs_ext.h"
 #include "os_port.h"
@@ -32,6 +35,7 @@ static const cfw_profile_record_t profile_records[] = {
     {0x08, "slapLock", 1, 1, true},
     {0x09, "tiltLock", 1, 1, true},
     {0x0A, "volumeLock", 1, 1, true},
+    {0x0D, "globalResume", 1, 1, true},
 };
 
 #define PROFILE_RECORDS (sizeof(profile_records) / sizeof(profile_records[0]))
@@ -394,6 +398,58 @@ error_t handleApiCfwBoxes(HttpConnection *connection, const char_t *uri, const c
     return send_json(connection, json, 200);
 }
 
+/* the positions of the figures the user may view (global resume) */
+error_t handleApiCfwResume(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
+{
+    if (!get_settings()->cfw.enabled)
+    {
+        return send_disabled(connection);
+    }
+    cfw_lock();
+    cJSON *json = cfw_resume_json();
+    cfw_unlock();
+    cJSON *entry = json->child;
+    while (entry != NULL)
+    {
+        cJSON *next = entry->next;
+        if (!web_acl_tonie_allowed(connection, cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(entry, "ruid")), "tonie.view"))
+        {
+            cJSON_Delete(cJSON_DetachItemViaPointer(json, entry));
+        }
+        entry = next;
+    }
+    return send_json(connection, json, 200);
+}
+
+/* a conflict of global resume decided: ?ruid=&branch= */
+error_t handleApiCfwResumeChoose(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
+{
+    if (!get_settings()->cfw.enabled)
+    {
+        return send_disabled(connection);
+    }
+    uint64_t ruid;
+    char branch[8];
+    if (!query_ruid(queryString, &ruid) || !queryGet(queryString, "branch", branch, sizeof(branch)))
+    {
+        return send_message(connection, 400, "ruid or branch missing");
+    }
+    char boxes[CFW_RESUME_BRANCHES][CFW_RESUME_BOX_ID];
+    cfw_lock();
+    size_t boxCount = cfw_resume_conflict_boxes(ruid, boxes);
+    bool chosen = cfw_resume_choose_branch(ruid, (size_t)strtoul(branch, NULL, 10));
+    cfw_unlock();
+    if (chosen)
+    {
+        for (size_t i = 0; i < boxCount; i++)
+        {
+            cfw_mqtt_resume_conflict(boxes[i], "");
+        }
+        sse_sendEvent("cfw-resume", branch, true);
+    }
+    return chosen ? send_message(connection, 200, "OK") : send_message(connection, 409, "no such conflict");
+}
+
 /* the battery log of a box as CSV */
 error_t handleApiCfwBattery(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
@@ -504,6 +560,13 @@ error_t handleApiCfwTagGet(HttpConnection *connection, const char_t *uri, const 
     cfw_format_ruid(ruid, text);
     cJSON *json = cJSON_CreateObject();
     cJSON_AddStringToObject(json, "ruid", text);
+    cfw_lock();
+    cJSON *resume = cfw_resume_entry(ruid);
+    cfw_unlock();
+    if (resume != NULL)
+    {
+        cJSON_AddItemToObject(json, "resume", resume);
+    }
     uint8_t file[CFW_TBS_MAX];
     size_t length;
     if (!cfw_store_read_tag(ruid, file, &length) || (file[4] == CFW_TBS_KIND_PROFILE && length == CFW_TBS_MIN))

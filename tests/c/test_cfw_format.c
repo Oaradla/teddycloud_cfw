@@ -91,6 +91,12 @@ void test_cfw_report_body(void)
     const uint8_t shuffle[] = {0x02, 1, 1};
     assert(cfw_report_body(1 | (1 << 5) | (1 << 13), 0, 0, body) == sizeof(shuffle) && memcmp(body, shuffle, sizeof(shuffle)) == 0);
 
+    /* global resume on, after the locks; not taken into a global file */
+    const uint8_t global_resume[] = {0x01, 1, 1, 0x0D, 1, 1};
+    assert(cfw_report_body(1 | (1 << 4) | (1 << 12) | (1 << 20) | (1 << 21), 0, 0, body) == sizeof(global_resume) &&
+           memcmp(body, global_resume, sizeof(global_resume)) == 0);
+    assert(cfw_report_body(3 | (1 << 20) | (1 << 21), 0, 0, body) == 0);
+
     /* global file: speaker limit 5, LED dimmed, both-ears switch-off off, volume lock on; profile keys skipped */
     uint32_t packed = 3 | (1 << 4) | (1 << 7) | (1 << 9) | (1 << 10) | (2 << 14);
     uint32_t values = (5 << 16) | (1 << 26) | (1 << 29);

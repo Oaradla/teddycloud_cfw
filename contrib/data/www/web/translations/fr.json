@@ -57,11 +57,8 @@
         "saveError": "Échec de l'enregistrement",
         "saved": "Paramètres CFW enregistrés",
         "savedDetails": "Les box avec la firmware personnalisée les appliquent immédiatement (télécommande) ou lors de leur prochaine vérification.",
-        "notSet": "Non défini",
         "on": "Activé",
         "off": "Désactivé",
-        "locked": "Verrouillé",
-        "unlocked": "Déverrouillé",
         "minutes": "min",
         "idleMinutesHint": "0 = 10 min comme l'original, jusqu'à 65535 min (env. 45 jours)",
         "speakerLimit": "Limite du volume du haut-parleur",
@@ -93,6 +90,7 @@
         "profile": {
             "resume": "Reprise",
             "resumeHint": "La figurine reprend là où elle s'est arrêtée, même si d'autres figurines ont été jouées entre-temps.",
+            "resumeByGlobal": "Activé par « Reprise globale ».",
             "shuffle": "Lecture aléatoire",
             "shuffleHint": "Les chapitres sont joués dans un ordre aléatoire, chacun exactement une fois. Une tape sur la box retournée lance un nouvel ordre.",
             "sleepTimer": "Minuterie de sommeil",
@@ -100,7 +98,13 @@
             "sleepAfter": "Éteindre après",
             "ledLevelHint": "S'applique tant que la figurine est sur la box.",
             "limitHint": "Volume maximal tant que la figurine est sur la box ; peut dépasser la limite de la box.",
-            "lockHint": "« Non défini » : le paramètre de la box s'applique. La figurine l'emporte dans les deux sens."
+            "lockHint": "La figurine l'emporte dans les deux sens.",
+            "fromBox": "Comme la boîte",
+            "ownValue": "Valeur propre de cette figurine",
+            "useBox": "Utiliser la valeur de la boîte",
+            "globalResume": "Reprise globale",
+            "globalResumeHint": "Le tonie reprend sur n'importe quelle box là où il s'est arrêté sur une autre (inclut la reprise). La box demande la position à teddyCloud lorsqu'il est posé.",
+            "globalResumeOld": "Ces box ont un firmware personnalisé plus ancien sans reprise globale ; le tonie n'y reprend pas là où il s'est arrêté sur une autre box : {{boxes}}"
         },
         "event": {
             "intro": "Une étiquette d'événement ne joue rien. Lorsqu'elle est posée, la box exécute ses actions : pour la prochaine figurine posée dans les 60 s, ou pour toute la box.",
@@ -419,6 +423,8 @@
             "packageNotKept": "Le paquet n'a pas pu être conservé pour l'installation dans le navigateur",
             "patchedNoApp": "L'image corrigée n'est pas une image d'app",
             "portNotPatchable": "Le port ne peut pas être corrigé dans cette version du firmware d'origine",
+            "noSuchConflict": "Ce conflit a déjà été tranché",
+            "ruidOrBranchMissing": "ID du tag ou position manquant",
             "assignedUpdateOff": "Attribuée, mais « Mise à jour de la firmware » est désactivée pour cette box, elle n'est donc pas proposée",
             "assignedRunning": "Attribuée ; la box exécute déjà cette image",
             "assignedRolledBack": "Attribuée, mais la box a annulé cette image ; elle n'est proposée qu'avec « Reproposer une image annulée »"
@@ -446,6 +452,19 @@
                 "title": "Verrouillages",
                 "text": "Par box ou par figurine : verrouillage de la tape (changer de chapitre, tape à l'envers comprise), verrouillage de l'inclinaison (avance/retour rapide) et verrouillage du volume (appui court sur une oreille). Un geste verrouillé ne fait rien : ni son ni clignotement."
             }
+        },
+        "resume": {
+            "title": "Reprise globale",
+            "last": "Écouté en dernier sur {{box}}, {{time}}",
+            "current": "Position de {{box}}, {{listened}} écouté",
+            "conflictBadge": "Conflit de position",
+            "titleLast": "Dernière écoute",
+            "conflict": "Deux positions ont divergé. Jusqu'à votre choix, chaque box joue sa propre position.",
+            "choose": "Prendre cette position",
+            "branch": "{{box}} : {{listened}} écouté, signalé {{time}}",
+            "chosen": "Position reprise",
+            "changed": "Les positions ont changé entre-temps. Veuillez les vérifier à nouveau.",
+            "playing": "Joue actuellement sur {{box}}"
         }
     },
     "common": {

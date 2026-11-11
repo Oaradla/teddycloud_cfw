@@ -57,11 +57,8 @@
         "saveError": "Salvataggio non riuscito",
         "saved": "Impostazioni CFW salvate",
         "savedDetails": "I box con il firmware personalizzato le applicano subito (controllo remoto) o al prossimo controllo.",
-        "notSet": "Non impostato",
         "on": "Acceso",
         "off": "Spento",
-        "locked": "Bloccato",
-        "unlocked": "Sbloccato",
         "minutes": "min",
         "idleMinutesHint": "0 = 10 min come l'originale, fino a 65535 min (circa 45 giorni)",
         "speakerLimit": "Limite volume altoparlante",
@@ -93,6 +90,7 @@
         "profile": {
             "resume": "Riprendi",
             "resumeHint": "La figura riprende da dove si era fermata l'ultima volta, anche se nel frattempo sono state riprodotte altre figure.",
+            "resumeByGlobal": "Attivato da «Ripresa globale».",
             "shuffle": "Riproduzione casuale",
             "shuffleHint": "I capitoli vengono riprodotti in ordine casuale, ciascuno esattamente una volta. Un colpetto al box capovolto avvia un nuovo ordine.",
             "sleepTimer": "Timer di spegnimento",
@@ -100,7 +98,13 @@
             "sleepAfter": "Spegni dopo",
             "ledLevelHint": "Vale finché la figura è sul box.",
             "limitHint": "Volume massimo finché la figura è sul box; può superare il limite del box.",
-            "lockHint": "\"Non impostato\": vale l'impostazione del box. La figura prevale in entrambe le direzioni."
+            "lockHint": "La figura prevale in entrambe le direzioni.",
+            "fromBox": "Come il box",
+            "ownValue": "Valore proprio di questa figura",
+            "useBox": "Usa il valore del box",
+            "globalResume": "Ripresa globale",
+            "globalResumeHint": "Il tonie riprende su qualsiasi box dal punto in cui si è fermato su un'altra (include la ripresa). La box chiede la posizione a teddyCloud quando viene appoggiato.",
+            "globalResumeOld": "Questi box hanno un firmware personalizzato più vecchio senza ripresa globale; lì il tonie non riprende dal punto in cui si è fermato su un altro box: {{boxes}}"
         },
         "event": {
             "intro": "Un tag evento non riproduce nulla. Quando viene posizionato, il box esegue le sue azioni: per la prossima figura posizionata entro 60 s oppure per l'intero box.",
@@ -419,6 +423,8 @@
             "packageNotKept": "Impossibile conservare il pacchetto per l'installazione nel browser",
             "patchedNoApp": "L'immagine modificata non è un'immagine app",
             "portNotPatchable": "La porta non può essere modificata in questa versione del firmware originale",
+            "noSuchConflict": "Questo conflitto è già stato risolto",
+            "ruidOrBranchMissing": "ID del tag o posizione mancante",
             "assignedUpdateOff": "Assegnata, ma \"Aggiornamento firmware\" è disattivato per questo box, quindi non viene offerta",
             "assignedRunning": "Assegnata; il box esegue già questa immagine",
             "assignedRolledBack": "Assegnata, ma il box ha annullato questa immagine; viene offerta solo con \"Offri di nuovo l'immagine annullata\""
@@ -446,6 +452,19 @@
                 "title": "Blocchi",
                 "text": "Per box o per figura: blocco colpetti (cambio capitolo, compreso il colpetto a testa in giù), blocco inclinazione (avanti/indietro veloce) e blocco volume (pressione breve di un orecchio). Un gesto bloccato non fa nulla: nessun suono, nessun lampeggio."
             }
+        },
+        "resume": {
+            "title": "Ripresa globale",
+            "last": "Ascoltato l'ultima volta su {{box}}, {{time}}",
+            "current": "Posizione da {{box}}, {{listened}} ascoltato",
+            "conflictBadge": "Conflitto di posizione",
+            "titleLast": "Ultima riproduzione",
+            "conflict": "Due posizioni si sono separate. Finché non scegli, ogni box riproduce la propria posizione.",
+            "choose": "Usa questa posizione",
+            "branch": "{{box}}: {{listened}} ascoltato, segnalato {{time}}",
+            "chosen": "Posizione adottata",
+            "changed": "Le posizioni sono cambiate nel frattempo. Controllale di nuovo.",
+            "playing": "In riproduzione ora su {{box}}"
         }
     },
     "common": {

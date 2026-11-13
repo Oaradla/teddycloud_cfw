@@ -464,6 +464,7 @@ typedef struct
     bool battery_log;
     bool force_box_settings;
     bool setup_page_update;
+    bool default_global_resume;
     char *event_image;
     uint32_t event_notice_language;
     settings_cfw_box_t box;

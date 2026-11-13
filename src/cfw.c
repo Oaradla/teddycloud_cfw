@@ -10,6 +10,7 @@
 #include "debug.h"
 #include "error_text.h"
 #include "fs_ext.h"
+#include "handler.h"
 #include "handler_sse.h"
 #include "mutex_manager.h"
 #include "os_port.h"
@@ -228,12 +229,211 @@ bool cfw_store_read_tag(uint64_t ruid, uint8_t *file, size_t *length)
     return valid;
 }
 
-bool cfw_store_write_tag(uint64_t ruid, const uint8_t *file, size_t length)
+/* a profile that "global resume by default" created is marked by <configdir>/cfw/tags/<RUID>.AUTO */
+static char *auto_path(uint64_t ruid)
+{
+    char text[17];
+    cfw_format_ruid(ruid, text);
+    char *dir = cfw_dir(get_settings()->internal.configdirfull, "tags");
+    char *path = dir ? custom_asprintf("%s%c%s.AUTO", dir, PATH_SEPARATOR, text) : NULL;
+    osFreeMem(dir);
+    return path;
+}
+
+static bool tag_is_auto(uint64_t ruid)
+{
+    char *path = auto_path(ruid);
+    bool marked = path != NULL && fsFileExists(path);
+    osFreeMem(path);
+    return marked;
+}
+
+static void tag_set_auto(uint64_t ruid, bool marked)
+{
+    char *path = auto_path(ruid);
+    if (path != NULL && marked && !fsFileExists(path))
+    {
+        cfw_write_file(path, "", 0);
+    }
+    else if (path != NULL && !marked && fsFileExists(path))
+    {
+        fsDeleteFile(path);
+    }
+    osFreeMem(path);
+}
+
+static bool write_tag(uint64_t ruid, const uint8_t *file, size_t length)
 {
     char *path = tag_path(ruid);
     bool written = path != NULL && cfw_write_file(path, file, length);
     osFreeMem(path);
     return written;
+}
+
+/* settings written in the edit dialog or by a box are the user's own: the default no longer touches them */
+bool cfw_store_write_tag(uint64_t ruid, const uint8_t *file, size_t length)
+{
+    bool written = write_tag(ruid, file, length);
+    if (written)
+    {
+        tag_set_auto(ruid, false);
+    }
+    return written;
+}
+
+/* live content plays from the start every time: global resume makes no sense for it */
+static bool tonie_is_live(char ruid[17])
+{
+    tonie_info_t *tonieInfo = getTonieInfoFromRuid(ruid, false, get_settings());
+    if (tonieInfo == NULL)
+    {
+        return true; /* unknown: leave it alone */
+    }
+    bool live = tonieInfo->json.live || tonieInfo->json._source_type == CT_SOURCE_STREAM ||
+                tonieInfo->json._source_type == CT_SOURCE_TAP_STREAM;
+    freeTonieInfo(tonieInfo);
+    return live;
+}
+
+/* writes the default profile (global resume) or, with on false, takes it back with an empty profile */
+static bool write_default_profile(uint64_t ruid, bool on, uint32_t previous)
+{
+    static const uint8_t body[] = {0x0D, 1, 1}; /* globalResume */
+    uint8_t file[CFW_TBS_MAX];
+    size_t length = cfw_tbs_build(CFW_TBS_KIND_PROFILE, CFW_TBS_ORIGIN_SERVER, cfw_next_timestamp(previous), body,
+                                  on ? sizeof(body) : 0, file);
+    if (length == 0 || !write_tag(ruid, file, length))
+    {
+        return false;
+    }
+    tag_set_auto(ruid, true);
+    char text[17];
+    cfw_format_ruid(ruid, text);
+    TRACE_INFO("CFW: %s default global resume for %s\r\n", on ? "set" : "took back", text);
+    return true;
+}
+
+/* brings one tonie in line with "global resume by default": only profiles it created itself are changed */
+static void default_profile_for(uint64_t ruid, bool enabled)
+{
+    uint8_t stored[CFW_TBS_MAX];
+    size_t storedLength = 0;
+    bool haveStored = cfw_store_read_tag(ruid, stored, &storedLength);
+    bool isAuto = haveStored && tag_is_auto(ruid);
+    if (haveStored && !isAuto)
+    {
+        return; /* settings of its own, an event tag or "no settings" chosen by the user */
+    }
+    char text[17];
+    cfw_format_ruid(ruid, text);
+    bool want = enabled && !tonie_is_live(text);
+    bool have = haveStored && storedLength > CFW_TBS_MIN;
+    if (want != have && (want || haveStored))
+    {
+        write_default_profile(ruid, want, haveStored ? cfw_tbs_timestamp(stored) : 0);
+    }
+}
+
+/* the tonies teddyCloud has content entries for: <contentdir>/<8 hex>/<8 hex>.json */
+static size_t list_content_ruids(uint64_t **ruids)
+{
+    size_t count = 0;
+    size_t size = 0;
+    *ruids = NULL;
+    const char *contentDir = get_settings()->internal.contentdirfull;
+    FsDir *top = contentDir ? fsOpenDir(contentDir) : NULL;
+    if (top == NULL)
+    {
+        return 0;
+    }
+    FsDirEntry dirEntry;
+    while (fsReadDir(top, &dirEntry) == NO_ERROR)
+    {
+        if (!(dirEntry.attributes & FS_FILE_ATTR_DIRECTORY) || osStrlen(dirEntry.name) != 8)
+        {
+            continue;
+        }
+        char *sub = custom_asprintf("%s%c%s", contentDir, PATH_SEPARATOR, dirEntry.name);
+        FsDir *dir = sub ? fsOpenDir(sub) : NULL;
+        osFreeMem(sub);
+        FsDirEntry entry;
+        while (dir != NULL && fsReadDir(dir, &entry) == NO_ERROR)
+        {
+            char text[17];
+            uint64_t ruid;
+            if ((entry.attributes & FS_FILE_ATTR_DIRECTORY) || osStrlen(entry.name) != 13 || osStrcasecmp(&entry.name[8], ".json"))
+            {
+                continue;
+            }
+            osMemcpy(text, dirEntry.name, 8);
+            osMemcpy(&text[8], entry.name, 8);
+            text[16] = '\0';
+            if (!cfw_parse_ruid(text, &ruid) || (ruid >> 32) == 0)
+            {
+                continue; /* not a tag (e.g. system sounds) */
+            }
+            if (count == size)
+            {
+                size = size ? size * 2 : 32;
+                uint64_t *grown = osAllocMem(size * sizeof(uint64_t));
+                if (grown == NULL)
+                {
+                    break;
+                }
+                if (count > 0)
+                {
+                    osMemcpy(grown, *ruids, count * sizeof(uint64_t));
+                }
+                osFreeMem(*ruids);
+                *ruids = grown;
+            }
+            (*ruids)[count++] = ruid;
+        }
+        if (dir != NULL)
+        {
+            fsCloseDir(dir);
+        }
+    }
+    fsCloseDir(top);
+    return count;
+}
+
+/* "global resume by default": at most once a minute, and at once when the setting changed; under cfw_lock */
+static void default_profiles_sync(void)
+{
+    static time_t last = 0;
+    static int lastEnabled = -1;
+    bool enabled = get_settings()->cfw.enabled && get_settings()->cfw.default_global_resume;
+    time_t now = time(NULL);
+    if ((int)enabled == lastEnabled && now - last < 60 && now >= last)
+    {
+        return;
+    }
+    if (!enabled && lastEnabled <= 0 && lastEnabled != -1)
+    {
+        last = now;
+        return; /* off and nothing to take back since the last pass */
+    }
+    lastEnabled = enabled;
+    last = now;
+
+    /* the tonies with content, then those whose default profile is still stored (taken back when off) */
+    uint64_t *ruids = NULL;
+    size_t count = enabled ? list_content_ruids(&ruids) : 0;
+    for (size_t i = 0; i < count; i++)
+    {
+        default_profile_for(ruids[i], true);
+    }
+    osFreeMem(ruids);
+    count = cfw_store_list_tags(&ruids);
+    for (size_t i = 0; i < count; i++)
+    {
+        if (tag_is_auto(ruids[i]))
+        {
+            default_profile_for(ruids[i], enabled);
+        }
+    }
+    osFreeMem(ruids);
 }
 
 bool cfw_enabled(const settings_t *settings)
@@ -913,6 +1113,7 @@ static bool due_file(cfw_box_t *box, settings_t *settings, uint64_t ruid, uint8_
 
 static bool box_has_pending(cfw_box_t *box, settings_t *settings)
 {
+    default_profiles_sync();
     uint8_t file[CFW_TBS_MAX];
     size_t length;
     bool pending = due_file(box, settings, 0, file, &length);
@@ -1001,6 +1202,7 @@ size_t cfw_freshness_finalize(client_ctx_t *client_ctx, uint8_t *buffer, size_t 
                 sent++;
             }
         }
+        default_profiles_sync();
         uint64_t *ruids = NULL;
         size_t count = cfw_store_list_tags(&ruids);
         for (size_t i = 0; i < count; i++)

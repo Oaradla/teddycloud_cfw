@@ -306,6 +306,20 @@ static bool_t fsIsLink(const char_t *path)
 #endif
 }
 
+bool_t fsPathHasParent(const char_t *path)
+{
+    for (const char_t *p = path; (p = osStrstr(p, "..")) != NULL; p += 2)
+    {
+        bool_t start = p == path || p[-1] == '/' || p[-1] == '\\';
+        bool_t end = p[2] == '\0' || p[2] == '/' || p[2] == '\\';
+        if (start && end)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 error_t fsRemoveTree(const char_t *path)
 {
     if (fsIsLink(path) || !fsDirExists(path))

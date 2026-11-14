@@ -510,6 +510,33 @@ error_t handleApiCfwFirmwarePackage(HttpConnection *connection, const char_t *ur
     return httpWriteResponse(connection, data, length, true);
 }
 
+/* an ESP32 image with the server block filled in, which the web UI writes into an app slot of a box
+   it sets up */
+error_t handleApiCfwFirmwareEsp32Image(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
+{
+    if (!get_settings()->cfw.enabled)
+    {
+        return send_disabled(connection);
+    }
+    char build[16] = "";
+    char host[96] = "";
+    size_t length = 0;
+    uint8_t *data = NULL;
+    if (queryGet(queryString, "build", build, sizeof(build)) && queryGet(queryString, "host", host, sizeof(host)))
+    {
+        data = cfw_firmware_esp32_image((uint32_t)strtoul(build, NULL, 10), host, &length);
+    }
+    if (data == NULL)
+    {
+        return send_message(connection, 404, "no ESP32 image of this build, or the host cannot go into its server block");
+    }
+    httpInitResponseHeader(connection);
+    connection->response.contentType = "application/octet-stream";
+    connection->response.contentLength = length;
+    connection->response.statusCode = 200;
+    return httpWriteResponse(connection, data, length, true);
+}
+
 error_t handleApiCfwTags(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
     if (!get_settings()->cfw.enabled)
@@ -571,8 +598,13 @@ error_t handleApiCfwTagGet(HttpConnection *connection, const char_t *uri, const 
     size_t length;
     if (!cfw_store_read_tag(ruid, file, &length) || (file[4] == CFW_TBS_KIND_PROFILE && length == CFW_TBS_MIN))
     {
-        cJSON_AddStringToObject(json, "kind", "none");
-        return send_json(connection, json, 200);
+        /* with global resume for all tonies, a tonie without settings is a figure whose profile follows it */
+        if (!get_settings()->cfw.global_resume)
+        {
+            cJSON_AddStringToObject(json, "kind", "none");
+            return send_json(connection, json, 200);
+        }
+        length = cfw_tbs_build(CFW_TBS_KIND_PROFILE, CFW_TBS_ORIGIN_SERVER, 0, NULL, 0, file);
     }
     bool event = file[4] == CFW_TBS_KIND_EVENT;
     cJSON_AddStringToObject(json, "kind", event ? "event" : "profile");
@@ -715,6 +747,15 @@ error_t handleApiCfwRemote(HttpConnection *connection, const char_t *uri, const 
     if (command < 0)
     {
         return send_message(connection, 400, message);
+    }
+    if (command == CFW_CMD_PLAY)
+    {
+        char ruid[17];
+        cfw_format_ruid(cfw_ruid_from_bytes(args), ruid);
+        if (!web_acl_tonie_allowed(connection, ruid, "tonie.view"))
+        {
+            return send_message(connection, 403, "no right on this tonie");
+        }
     }
 
     uint_t status = cfw_remote_send(settings, (uint8_t)command, args, argsLength, message, sizeof(message));

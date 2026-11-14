@@ -145,6 +145,12 @@ def test_api_needs_login():
     assert Client().get("/web/")[0] == 200
 
 
+def test_status_tells_visitors_nothing_about_the_users():
+    data = Client().get("/api/auth/status")[1]
+    assert data["enabled"] is True and "userCount" not in data
+    assert admin().get("/api/auth/status")[1]["userCount"] >= 1
+
+
 def test_session_cookie_attributes():
     c = Client()
     status, data, hdrs = c.login()
@@ -213,7 +219,8 @@ def test_forwarded_for_from_untrusted_peer_is_ignored():
     try:
         _, data, _ = Client(forwarded_for="198.51.100.77").get("/api/auth/status", headers={"Cookie": "tc_web_session=" + a.cookie})
         assert data["client"]["ip"] == "127.0.0.1"
-        assert data["client"]["lan"] is True
+        # the client behind it may be anywhere: not local, although the proxy is
+        assert data["client"]["lan"] is False
         assert data["client"]["forwardedForIgnored"] is True
     finally:
         set_setting(a, "web_auth.trusted_proxies", "127.0.0.1")

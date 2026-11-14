@@ -51,6 +51,16 @@ class ContentMime(Base):
             self.assertEqual(status, 200, name)
             self.assertEqual(content_type, "application/json", name)
 
+    def test_files_are_sandboxed(self):
+        conn = http.client.HTTPConnection(BASE.hostname, BASE.port, timeout=30)
+        try:
+            conn.request("GET", f"/content/{TAG_DIR}/{TAG_FILE}.json")
+            resp = conn.getresponse()
+            resp.read()
+            self.assertIn("sandbox", resp.getheader("Content-Security-Policy", ""))
+        finally:
+            conn.close()
+
     def test_extensionless_stays_audio(self):
         status, content_type = get_content_type(f"/content/{TAG_DIR}/{TAG_FILE}")
         self.assertEqual(status, 200)

@@ -331,6 +331,16 @@ class Tap(Base, TafCheck):
         first = Taf(LIBRARY / DIR / "album" / "01 - Chapter 1.taf").audio_packets()
         self.assertEqual(audio(rebuilt.audio_packets()), audio(third + first))
 
+    def test_chapters_of_two_splits_have_their_own_audio_ids(self):
+        shutil.copy(LIBRARY / DIR / "album.taf", LIBRARY / DIR / "other.taf")
+        self.assertEqual(self.split()[0], 200)
+        status, result = self.post("/api/tafSplit?special=library", f"path={quote(DIR + '/other.taf')}")
+        self.assertEqual(status, 200, result)
+        chapters = [p for p in (LIBRARY / DIR).rglob("* - *.taf")]
+        self.assertEqual(len(chapters), 2 * len(TRACK_SECONDS))
+        ids = [Taf(p).audio_id for p in chapters]
+        self.assertEqual(len(set(ids)), len(ids))
+
     def test_split_into_a_taken_name_uses_a_new_folder(self):
         (LIBRARY / DIR / "album").mkdir()
         status, result = self.split()

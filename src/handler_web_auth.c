@@ -91,8 +91,10 @@ typedef struct
     time_t last_login;
     /* runtime only */
     int remote_failures;
+    int remote_lock_count;
     time_t remote_locked_until;
     int tfa_failures;
+    int tfa_lock_count;
     time_t tfa_locked_until;
     uint8_t pending_totp[WEB_AUTH_TOTP_KEY_BYTES];
     time_t pending_until;
@@ -1015,8 +1017,19 @@ bool web_auth_request_secure(HttpConnection *connection)
     return osStrcasecmp(connection->request.forwardedProto, "https") == 0 && peer_is_trusted_proxy(connection);
 }
 
-static bool ip_is_lan(const char *ip)
+/* behind a proxy that is not trusted every client has the proxy's address, often a local one */
+static bool forwarding_ignored(HttpConnection *connection)
 {
+    return connection->request.forwardedFor[0] != '\0' && !peer_is_trusted_proxy(connection);
+}
+
+/* a client behind a proxy that is not trusted is never local: it may come from anywhere */
+static bool ip_is_lan(HttpConnection *connection, const char *ip)
+{
+    if (forwarding_ignored(connection))
+    {
+        return false;
+    }
     const char *lan = settings_get_string("web_auth.lan_networks");
     return web_auth_ip_in_list(lan != NULL ? lan : WEB_AUTH_DEFAULT_LAN_NETWORKS, ip);
 }
@@ -1188,7 +1201,7 @@ static void login_register_failure_unlocked(const char *ip, web_user_t *user, bo
         user->remote_failures++;
         if ((uint32_t)user->remote_failures >= limit * ACCOUNT_FAIL_FACTOR)
         {
-            user->remote_locked_until = now + lock_duration(1);
+            user->remote_locked_until = now + lock_duration(++user->remote_lock_count);
             user->remote_failures = 0;
             TRACE_WARNING("Web UI login of user '%s' locked for logins from outside the local networks\r\n", user->username);
             add_event_unlocked("account_locked", user->username, ip, "too many failed logins from outside");
@@ -1579,12 +1592,6 @@ error_t web_auth_unauthorized(HttpConnection *connection)
     return send_message(connection, 401, "unauthorized", "Login required");
 }
 
-/* behind a proxy that is not trusted every client has the proxy's address, often a local one */
-static bool forwarding_ignored(HttpConnection *connection)
-{
-    return connection->request.forwardedFor[0] != '\0' && !peer_is_trusted_proxy(connection);
-}
-
 static void warn_untrusted_forwarding(HttpConnection *connection)
 {
     static bool warned = false;
@@ -1608,7 +1615,7 @@ bool web_auth_gate(HttpConnection *connection, const char_t *uri, error_t *error
         return false;
     }
     web_auth_client_ip(connection, ip, sizeof(ip));
-    bool lan = ip_is_lan(ip);
+    bool lan = ip_is_lan(connection, ip);
     warn_untrusted_forwarding(connection);
 
     const char *deny = settings_get_string("web_auth.deny_networks");
@@ -1772,7 +1779,7 @@ static bool check_password(HttpConnection *connection, const char *username, con
     char stored[WEB_AUTH_HASH_MAX];
     char ip[WEB_AUTH_IP_STR_MAX];
     web_auth_client_ip(connection, ip, sizeof(ip));
-    bool lan = ip_is_lan(ip);
+    bool lan = ip_is_lan(connection, ip);
     *busy = false;
     lock_auth();
     web_user_t *user = find_user_unlocked(username);
@@ -2086,19 +2093,26 @@ error_t handleApiAuthStatus(HttpConnection *connection, const char_t *uri, const
     cJSON_AddBoolToObject(json, "loggedIn", logged_in);
     cJSON_AddStringToObject(json, "username", enabled && info.found ? info.username : "");
     cJSON_AddBoolToObject(json, "envOverride", env);
-    cJSON_AddNumberToObject(json, "userCount", count);
+    /* the first setup needs it; visitors of a login page learn nothing about the users */
+    if (!enabled || info.found)
+    {
+        cJSON_AddNumberToObject(json, "userCount", count);
+    }
     cJSON_AddBoolToObject(json, "twoFactorSetupRequired", enabled && info.found && setup_2fa);
     cJSON_AddBoolToObject(json, "passwordChangeRequired", logged_in && must_change_pw);
     cJSON_AddBoolToObject(json, "twoFactorEnabled", totp);
     cJSON_AddBoolToObject(json, "twoFactorRequired", required);
     cJSON_AddNumberToObject(json, "recoveryCodesLeft", left);
-    cJSON_AddNumberToObject(json, "passwordMinLength", settings_get_unsigned("web_auth.password_min_length"));
+    if (!enabled || info.found)
+    {
+        cJSON_AddNumberToObject(json, "passwordMinLength", settings_get_unsigned("web_auth.password_min_length"));
+    }
     /* lets the admin check a proxy setup; only shown to logged-in users or without login */
     if (!enabled || logged_in)
     {
         cJSON *client = cJSON_AddObjectToObject(json, "client");
         cJSON_AddStringToObject(client, "ip", ip);
-        cJSON_AddBoolToObject(client, "lan", ip_is_lan(ip));
+        cJSON_AddBoolToObject(client, "lan", ip_is_lan(connection, ip));
         cJSON_AddBoolToObject(client, "secure", web_auth_request_secure(connection));
         cJSON_AddBoolToObject(client, "viaTrustedProxy", peer_is_trusted_proxy(connection));
         cJSON_AddBoolToObject(client, "forwardedForIgnored", forwarding_ignored(connection));
@@ -2129,7 +2143,7 @@ error_t handleApiAuthLogin(HttpConnection *connection, const char_t *uri, const 
 
     char ip[WEB_AUTH_IP_STR_MAX];
     web_auth_client_ip(connection, ip, sizeof(ip));
-    bool lan = ip_is_lan(ip);
+    bool lan = ip_is_lan(connection, ip);
     time_t now = time(NULL);
 
     char stored[WEB_AUTH_HASH_MAX];
@@ -2283,7 +2297,7 @@ static void count_tfa_failure_unlocked(web_user_t *user, const char *ip, bool la
     }
     if ((uint32_t)++user->tfa_failures >= settings_get_unsigned("web_auth.lockout_attempts") * ACCOUNT_FAIL_FACTOR)
     {
-        user->tfa_locked_until = now + lock_duration(1);
+        user->tfa_locked_until = now + lock_duration(++user->tfa_lock_count);
         user->tfa_failures = 0;
         TRACE_WARNING("Web UI 2FA of user '%s' locked for logins from outside after wrong codes\r\n", user->username);
         add_event_unlocked("account_locked", user->username, ip, "too many wrong 2FA codes");
@@ -2314,7 +2328,7 @@ error_t handleApiAuthLogin2fa(HttpConnection *connection, const char_t *uri, con
     }
     char ip[WEB_AUTH_IP_STR_MAX];
     web_auth_client_ip(connection, ip, sizeof(ip));
-    bool lan = ip_is_lan(ip);
+    bool lan = ip_is_lan(connection, ip);
     char hash[HASH_HEX];
     token_hash(challenge, hash, sizeof(hash));
     wipe(challenge, sizeof(challenge));
@@ -2439,10 +2453,36 @@ error_t handleApiAuthRefreshToken(HttpConnection *connection, const char_t *uri,
     {
         return send_message(connection, 401, "unauthorized", "Login required");
     }
+
+    /* Sliding session: a refresh moves the end of the session that authenticated this request to a
+     * full lifetime from now, so clients that stay open remain logged in while they are used. The
+     * idle limit still applies. */
+    char token[WEB_BEARER_TOKEN_MAX + 1];
+    bool bearer;
+    bool extended = false;
+    request_token(connection, token, sizeof(token), &bearer);
+    if (osStrlen(token) == TOKEN_HEX - 1)
+    {
+        char hash[HASH_HEX];
+        token_hash(token, hash, sizeof(hash));
+        lock_auth();
+        web_session_t *s = find_session_unlocked(hash);
+        if (s != NULL && !s->restricted)
+        {
+            s->expires = time(NULL) + (time_t)settings_get_unsigned("web_auth.session_days") * 24 * 3600;
+            sessions_dirty = true;
+            extended = true;
+        }
+        unlock_auth();
+    }
+
     cJSON *json = cJSON_CreateObject();
     cJSON_AddBoolToObject(json, "ok", true);
     cJSON_AddStringToObject(json, "username", username);
-    return send_json_status(connection, 200, json, NULL, false);
+    /* renew the cookie as well when the browser holds this session in it */
+    const char *cookie = connection->request.webSessionCookieHost[0] != '\0' ? connection->request.webSessionCookieHost : connection->request.webSessionCookie;
+    bool renew = extended && (!bearer || web_auth_const_equal_str(cookie, token));
+    return send_json_status(connection, 200, json, renew ? token : NULL, false);
 }
 
 /* ---------- two-factor authentication of the own account ---------- */
@@ -2645,7 +2685,7 @@ static bool confirm_second_factor(HttpConnection *connection, const char *userna
     char code[RECOVERY_CODE_MAX];
     char ip[WEB_AUTH_IP_STR_MAX];
     web_auth_client_ip(connection, ip, sizeof(ip));
-    bool lan = ip_is_lan(ip);
+    bool lan = ip_is_lan(connection, ip);
     time_t now = time(NULL);
     lock_auth();
     web_user_t *user = find_user_unlocked(username);
@@ -2855,6 +2895,12 @@ error_t handleApiAuthUsersCreate(HttpConnection *connection, const char_t *uri, 
     char group[WEB_ACL_GROUP_ID_MAX + 1] = "";
     json_string(body, "group", group, sizeof(group));
     delete_body(body);
+    /* without group the limit of the level applies; asks the rights, so before lock_auth */
+    bool level_within[ACL_LEVEL_COUNT];
+    for (int i = 0; i < ACL_LEVEL_COUNT; i++)
+    {
+        level_within[i] = web_acl_level_check(connection, i);
+    }
     /* the group decides the level; asks the rights, so before lock_auth */
     int group_level = -1;
     if (group[0] != '\0')
@@ -2897,6 +2943,11 @@ error_t handleApiAuthUsersCreate(HttpConnection *connection, const char_t *uri, 
     {
         wipe(password, sizeof(password));
         return send_message(connection, 400, problem, password_message(problem));
+    }
+    if (!web_acl_is_admin(connection) && web_acl_private_files_left(username))
+    {
+        wipe(password, sizeof(password));
+        return send_message(connection, 409, "exists", "An earlier user of this name left files, only an admin may create it");
     }
     char hash[WEB_AUTH_HASH_MAX];
     char hash_ip[WEB_AUTH_IP_STR_MAX];
@@ -2944,7 +2995,7 @@ error_t handleApiAuthUsersCreate(HttpConnection *connection, const char_t *uri, 
     }
     if (connection->private.web_user_known &&
         (actor == NULL || !acl_may_manage_level(actor->level, level) ||
-         (actor->level != ACL_LEVEL_ADMIN && !can_manage)))
+         (actor->level != ACL_LEVEL_ADMIN && !can_manage) || (group[0] == '\0' && !level_within[level])))
     {
         unlock_auth();
         return send_message(connection, 403, "forbidden", "You may not create users of this level");
@@ -2968,6 +3019,8 @@ error_t handleApiAuthUsersCreate(HttpConnection *connection, const char_t *uri, 
     u->must_change_pw = must_change_pw;
     u->level = level;
     copy_str(u->group, sizeof(u->group), group);
+    /* what the creator may not do, the created user may not either */
+    copy_str(u->deny, sizeof(u->deny), actor != NULL && actor->level != ACL_LEVEL_ADMIN ? actor->deny : "");
     copy_str(u->created_by, sizeof(u->created_by), actor != NULL ? actor->username : "");
     u->totp_last_step = -1;
     u->created = time(NULL);
@@ -3020,6 +3073,12 @@ error_t handleApiAuthUsersUpdate(HttpConnection *connection, const char_t *uri, 
     const char *new_level = json_str(body, "level");
     const char *new_group = json_str(body, "group");
     const char *new_deny = json_str(body, "deny");
+    /* without group the limit of the level applies; asks the rights, so before lock_auth */
+    bool level_within[ACL_LEVEL_COUNT];
+    for (int i = 0; i < ACL_LEVEL_COUNT; i++)
+    {
+        level_within[i] = web_acl_level_check(connection, i);
+    }
     /* the group decides the level; asks the rights, so before lock_auth */
     int group_level = -1;
     if (new_group != NULL && new_group[0] != '\0')
@@ -3059,6 +3118,7 @@ error_t handleApiAuthUsersUpdate(HttpConnection *connection, const char_t *uri, 
         delete_body(body);
         return send_message(connection, 403, "forbidden", "You may not change this user");
     }
+    web_user_t before = *user;
     if (new_deny != NULL)
     {
         char bad[64];
@@ -3091,12 +3151,24 @@ error_t handleApiAuthUsersUpdate(HttpConnection *connection, const char_t *uri, 
             delete_body(body);
             return send_message(connection, 409, "last_admin", "At least one admin must remain");
         }
+        if ((new_group == NULL || new_group[0] == '\0') && !level_within[level])
+        {
+            unlock_auth();
+            delete_body(body);
+            return send_message(connection, 403, "forbidden", "You may not give this level");
+        }
         user->level = level;
         /* a level without group is its built-in group */
         copy_str(user->group, sizeof(user->group), new_group != NULL ? new_group : "");
     }
     else if (new_group != NULL)
     {
+        if (!level_within[user->level])
+        {
+            unlock_auth();
+            delete_body(body);
+            return send_message(connection, 403, "forbidden", "You may not give this level");
+        }
         /* "": back to the built-in group of the level */
         user->group[0] = '\0';
     }
@@ -3123,16 +3195,27 @@ error_t handleApiAuthUsersUpdate(HttpConnection *connection, const char_t *uri, 
         user->totp_sealed[0] = '\0';
         user->totp_last_step = -1;
         osMemset(user->recovery, 0, sizeof(user->recovery));
-        add_event_unlocked("2fa_reset", user->username, ip, info.found ? info.username : NULL);
-    }
-    int revoked = 0;
-    if (revoke || reset_2fa || restricted)
-    {
-        /* revoking the own sessions keeps the one in use */
-        revoked = revoke_user_sessions_unlocked(user->username, info.found ? info.token_hash : NULL);
     }
     bool ok = save_users_unlocked();
-    add_event_unlocked("user_updated", user->username, ip, info.found ? info.username : NULL);
+    int revoked = 0;
+    if (!ok)
+    {
+        *user = before;
+    }
+    else
+    {
+        if (reset_2fa)
+        {
+            add_event_unlocked("2fa_reset", user->username, ip, info.found ? info.username : NULL);
+        }
+        if (revoke || reset_2fa || restricted)
+        {
+            /* revoking the own sessions keeps the one in use */
+            revoked = revoke_user_sessions_unlocked(user->username, info.found ? info.token_hash : NULL);
+        }
+        add_event_unlocked("user_updated", user->username, ip, info.found ? info.username : NULL);
+    }
+    wipe(&before, sizeof(before));
     cJSON *json = cJSON_CreateObject();
     cJSON_AddBoolToObject(json, "ok", ok);
     cJSON_AddNumberToObject(json, "sessionsRevoked", revoked);
@@ -3202,8 +3285,26 @@ error_t handleApiAuthUsersDelete(HttpConnection *connection, const char_t *uri, 
     }
     user_count--;
     osMemset(&users[user_count], 0, sizeof(users[user_count]));
+    /* the users it created go to the one who deletes it, not to a later user of the same name */
+    web_user_t *actor = actor_unlocked(connection);
+    bool handed[MAX_WEB_USERS];
+    for (int i = 0; i < user_count; i++)
+    {
+        handed[i] = !osStrcasecmp(users[i].created_by, removed.username);
+        if (handed[i])
+        {
+            copy_str(users[i].created_by, sizeof(users[i].created_by), actor != NULL ? actor->username : "");
+        }
+    }
     if (!save_users_unlocked())
     {
+        for (int i = 0; i < user_count; i++)
+        {
+            if (handed[i])
+            {
+                copy_str(users[i].created_by, sizeof(users[i].created_by), removed.username);
+            }
+        }
         /* put the user back where it was */
         for (int i = user_count; i > index; i--)
         {
@@ -3599,8 +3700,10 @@ error_t handleApiAuthUnlock(HttpConnection *connection, const char_t *uri, const
     if (user != NULL)
     {
         user->remote_failures = 0;
+        user->remote_lock_count = 0;
         user->remote_locked_until = 0;
         user->tfa_failures = 0;
+        user->tfa_lock_count = 0;
         user->tfa_locked_until = 0;
         n++;
     }

@@ -69,8 +69,9 @@ class WebLegacyGoneTests(unittest.TestCase):
             status, headers, _ = self.request("/")
             self.assertEqual(status, 302)
             self.assertEqual(headers.get("location"), "/web/v2/index.html")
-            status, _, body = self.request("/web/v2/")
-            self.assertEqual((status, body), (200, "web2"))
+            for path in ("/web/v2/", "/web/v2/tonies"):
+                status, _, body = self.request(path)
+                self.assertEqual((status, body), (200, "web2"))
             # the classic entry follows too: browsers keep an old 301 from / to /web
             for path in ("/web", "/web/"):
                 status, headers, _ = self.request(path)

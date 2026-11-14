@@ -10,6 +10,7 @@
 #include "debug.h"
 #include "error_text.h"
 #include "fs_ext.h"
+#include "handler.h"
 #include "handler_sse.h"
 #include "mutex_manager.h"
 #include "os_port.h"
@@ -292,6 +293,27 @@ bool cfw_event_content(HttpConnection *connection, const char_t *uri, client_ctx
     return true;
 }
 
+static bool add_ruid(uint64_t **ruids, size_t *count, size_t *size, uint64_t ruid)
+{
+    if (*count == *size)
+    {
+        *size = *size ? *size * 2 : 16;
+        uint64_t *grown = osAllocMem(*size * sizeof(uint64_t));
+        if (grown == NULL)
+        {
+            return false;
+        }
+        if (*count > 0)
+        {
+            osMemcpy(grown, *ruids, *count * sizeof(uint64_t));
+        }
+        osFreeMem(*ruids);
+        *ruids = grown;
+    }
+    (*ruids)[(*count)++] = ruid;
+    return true;
+}
+
 size_t cfw_store_list_tags(uint64_t **ruids)
 {
     size_t count = 0;
@@ -316,28 +338,87 @@ size_t cfw_store_list_tags(uint64_t **ruids)
         }
         osStrncpy(text, entry.name, 16);
         text[16] = '\0';
-        if (!cfw_parse_ruid(text, &ruid))
+        if (cfw_parse_ruid(text, &ruid) && !add_ruid(ruids, &count, &size, ruid))
         {
-            continue;
+            break;
         }
-        if (count == size)
-        {
-            size = size ? size * 2 : 16;
-            uint64_t *grown = osAllocMem(size * sizeof(uint64_t));
-            if (grown == NULL)
-            {
-                break;
-            }
-            if (count > 0)
-            {
-                osMemcpy(grown, *ruids, count * sizeof(uint64_t));
-            }
-            osFreeMem(*ruids);
-            *ruids = grown;
-        }
-        (*ruids)[count++] = ruid;
     }
     fsCloseDir(fsDir);
+    return count;
+}
+
+/* "global resume for all tonies" acts as if it were set on every tonie without a value of its own. Its files
+   carry the time stamp of the last switch, kept in cfw/global_resume, so that boxes get a switch once; 0: never on */
+static uint32_t global_resume_stamp(void)
+{
+    static uint8_t last[5] = {0, 0, 0, 0, 0xFF}; /* time stamp of the switch and the state; 0xFF: not read yet */
+    uint8_t on = get_settings()->cfw.global_resume;
+    if (last[4] != on)
+    {
+        char *dir = cfw_dir(get_settings()->internal.configdirfull, "");
+        char *path = dir ? custom_asprintf("%sglobal_resume", dir) : NULL;
+        if (last[4] == 0xFF)
+        {
+            size_t length = 0;
+            uint8_t *data = path ? cfw_read_file(path, sizeof(last), &length) : NULL;
+            osMemcpy(last, length == sizeof(last) ? data : (uint8_t[5]){0}, sizeof(last));
+            osFreeMem(data);
+        }
+        if (last[4] != on)
+        {
+            cfw_put_le32(last, cfw_next_timestamp(cfw_le32(last)));
+            last[4] = on;
+            cfw_write_file(path, last, sizeof(last));
+        }
+        osFreeMem(path);
+        osFreeMem(dir);
+    }
+    return cfw_le32(last);
+}
+
+/* the tags of the stored files and, once global resume for all tonies was on, the tonies with content */
+static size_t list_tags(settings_t *settings, uint64_t **ruids)
+{
+    size_t count = cfw_store_list_tags(ruids);
+    size_t size = count;
+    const char *contentDir = settings->internal.contentdirfull;
+    FsDir *top = global_resume_stamp() != 0 && contentDir != NULL ? fsOpenDir(contentDir) : NULL;
+    FsDirEntry upper;
+    while (top != NULL && fsReadDir(top, &upper) == NO_ERROR)
+    {
+        char *path = osStrlen(upper.name) == 8 ? custom_asprintf("%s%c%s", contentDir, PATH_SEPARATOR, upper.name) : NULL;
+        FsDir *dir = path ? fsOpenDir(path) : NULL;
+        osFreeMem(path);
+        FsDirEntry lower;
+        while (dir != NULL && fsReadDir(dir, &lower) == NO_ERROR)
+        {
+            char text[17];
+            uint64_t ruid;
+            osSprintf(text, "%.8s%.8s", upper.name, lower.name);
+            /* <8 hex>/<8 hex>.json; system sounds have content too, but no tag */
+            if (osStrlen(lower.name) != 13 || osStrcasecmp(&lower.name[8], ".json") || !cfw_parse_ruid(text, &ruid) || (ruid >> 32) == 0)
+            {
+                continue;
+            }
+            bool listed = false;
+            for (size_t i = 0; i < count && !listed; i++)
+            {
+                listed = (*ruids)[i] == ruid;
+            }
+            if (!listed)
+            {
+                add_ruid(ruids, &count, &size, ruid);
+            }
+        }
+        if (dir != NULL)
+        {
+            fsCloseDir(dir);
+        }
+    }
+    if (top != NULL)
+    {
+        fsCloseDir(top);
+    }
     return count;
 }
 
@@ -879,6 +960,61 @@ static size_t global_file(cfw_box_t *box, settings_t *settings, uint8_t *file)
     return cfw_tbs_build(CFW_TBS_KIND_GLOBAL, box->globalOrigin, box->globalTimestamp, body, length, file);
 }
 
+/* live content and streams play from the start every time: global resume for all tonies leaves them out */
+static bool tonie_is_live(settings_t *settings, uint64_t ruid)
+{
+    char text[17];
+    char *contentPath = NULL;
+    cfw_format_ruid(ruid, text);
+    getContentPathFromCharRUID(text, &contentPath, settings);
+    char *jsonPath = contentPath ? custom_asprintf("%s.json", contentPath) : NULL;
+    tonie_info_t *info = jsonPath && fsFileExists(jsonPath) ? getTonieInfo(contentPath, false, settings) : NULL;
+    bool live = info != NULL && (info->json.live || info->json._source_type == CT_SOURCE_STREAM || info->json._source_type == CT_SOURCE_TAP_STREAM);
+    freeTonieInfo(info);
+    osFreeMem(jsonPath);
+    osFreeMem(contentPath);
+    return live;
+}
+
+/* the stored file of a tag; a profile, also a missing one, gets global resume for all tonies where it has no
+   value of its own, and the time stamp of the last switch when that is newer */
+static bool tag_file(cfw_box_t *box, settings_t *settings, uint64_t ruid, uint8_t *file, size_t *length)
+{
+    bool stored = cfw_store_read_tag(ruid, file, length);
+    uint32_t stamp = global_resume_stamp();
+    if (stamp == 0 || (stored && file[4] == CFW_TBS_KIND_EVENT))
+    {
+        return stored;
+    }
+    if (stored && cfw_tbs_timestamp(file) > stamp)
+    {
+        stamp = cfw_tbs_timestamp(file);
+    }
+    uint32_t known;
+    if (known_get(box, ruid, &known) && stamp <= known)
+    {
+        return false;
+    }
+    bool own = false;
+    size_t pos = 0;
+    cfw_record_t record;
+    while (stored && cfw_tbs_next_record(file, &pos, &record))
+    {
+        own |= record.key == 0x0D;
+    }
+    uint8_t body[CFW_TBS_MAX];
+    size_t bodyLength = stored ? *length - CFW_TBS_MIN : 0;
+    osMemcpy(body, &file[12], bodyLength);
+    if (get_settings()->cfw.global_resume && !own && CFW_TBS_MIN + bodyLength + 3 <= CFW_TBS_MAX && !tonie_is_live(settings, ruid))
+    {
+        body[bodyLength++] = 0x0D;
+        body[bodyLength++] = 1;
+        body[bodyLength++] = 1;
+    }
+    *length = cfw_tbs_build(CFW_TBS_KIND_PROFILE, stored ? file[5] : CFW_TBS_ORIGIN_SERVER, stamp, body, bodyLength, file);
+    return *length > 0;
+}
+
 /* the file the box should get for this ruid (0: the global file), adapted to its capabilities */
 static bool due_file(cfw_box_t *box, settings_t *settings, uint64_t ruid, uint8_t *file, size_t *length)
 {
@@ -888,7 +1024,7 @@ static bool due_file(cfw_box_t *box, settings_t *settings, uint64_t ruid, uint8_
     {
         storedLength = global_file(box, settings, stored);
     }
-    else if (!cfw_store_read_tag(ruid, stored, &storedLength))
+    else if (!tag_file(box, settings, ruid, stored, &storedLength))
     {
         return false;
     }
@@ -917,7 +1053,7 @@ static bool box_has_pending(cfw_box_t *box, settings_t *settings)
     size_t length;
     bool pending = due_file(box, settings, 0, file, &length);
     uint64_t *ruids = NULL;
-    size_t count = pending ? 0 : cfw_store_list_tags(&ruids);
+    size_t count = pending ? 0 : list_tags(settings, &ruids);
     for (size_t i = 0; i < count && !pending; i++)
     {
         pending = due_file(box, settings, ruids[i], file, &length);
@@ -1002,7 +1138,7 @@ size_t cfw_freshness_finalize(client_ctx_t *client_ctx, uint8_t *buffer, size_t 
             }
         }
         uint64_t *ruids = NULL;
-        size_t count = cfw_store_list_tags(&ruids);
+        size_t count = list_tags(settings, &ruids);
         for (size_t i = 0; i < count; i++)
         {
             if (!due_file(box, settings, ruids[i], file, &fileLength))

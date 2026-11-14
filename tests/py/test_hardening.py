@@ -188,6 +188,29 @@ class Crawler508(Base):
         self.assertTrue("locked to mitigate security risks" in text, "crawler User-Agent was not detected")
 
 
+class FrameAncestors(Base):
+    """The web UI may be framed by the pages named in web_auth.frame_ancestors, by itself only without."""
+
+    def frame_headers(self):
+        conn = http.client.HTTPConnection(BASE.hostname, BASE.port, timeout=10)
+        try:
+            conn.request("GET", "/web/")
+            resp = conn.getresponse()
+            resp.read()
+            return resp.getheader("X-Frame-Options"), resp.getheader("Content-Security-Policy")
+        finally:
+            conn.close()
+
+    def test_frame_ancestors(self):
+        self.assertEqual(self.frame_headers(), ("SAMEORIGIN", "frame-ancestors 'self'"))
+        name = "/api/settings/set/web_auth.frame_ancestors"
+        self.assertEqual(request("POST", name, "https://ha.example.org")[0], 200)
+        try:
+            self.assertEqual(self.frame_headers(), (None, "frame-ancestors 'self' https://ha.example.org"))
+        finally:
+            self.assertEqual(request("POST", name, "")[0], 200)
+
+
 class KeyPermissions512(Base):
     """Generated private keys were left readable for other local users (default umask)."""
 
@@ -236,11 +259,13 @@ class LongMoveTarget(Base):
 
     def test_deep_list_path_is_not_the_root(self):
         self.put_library("__deep_list.txt")
-        try:
-            _, body = request("GET", "/api/fileIndexV2?special=library&path=" + "a" * 200)
-        except http.client.RemoteDisconnected:
-            body = ""  # the folder does not exist
-        self.assertNotIn("__deep_list.txt", body)
+        for length in (200, 300):  # fits the buffer / does not fit and is refused
+            with self.subTest(length=length):
+                try:
+                    _, body = request("GET", "/api/fileIndexV2?special=library&path=" + "a" * length)
+                except http.client.RemoteDisconnected:
+                    body = ""  # the folder does not exist, or the request was refused
+                self.assertNotIn("__deep_list.txt", body)
 
 
 class Ota(Base):
@@ -389,6 +414,25 @@ class Secrets505(Base):
         self.assertEqual(status, 200)
         leaked = [o["ID"] for o in json.loads(text)["options"] if "PRIVATE KEY" in str(o.get("value", ""))]
         self.assertEqual(leaked, [])
+
+
+class DumpRuidAuth(Base):
+    """A box asking about a tag whose content json cannot be written (here a file is where its directory goes)
+    crashed the server: dumpRuidAuth took the length of the cloud_ruid that the json never got."""
+
+    def test_unwritable_content_json(self):
+        blocker = BASE_DIR / "data" / "content" / "default" / "0A00DEAD"
+        blocker.parent.mkdir(parents=True, exist_ok=True)
+        blocker.write_bytes(b"")
+        try:
+            for path in ("/v1/claim/0a00dead500304e0", "/v1/content/0a00dead500304e0"):
+                try:
+                    request("GET", path, headers={"Authorization": "BD " + "5a" * 32}, timeout=5)
+                except (OSError, http.client.HTTPException):
+                    pass  # the crash
+                self.assertTrue(self.server_alive(), f"{path} crashed the server")
+        finally:
+            blocker.unlink()
 
 
 if __name__ == "__main__":

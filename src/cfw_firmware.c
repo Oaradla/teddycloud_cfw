@@ -1044,12 +1044,12 @@ static bool page_request(HttpConnection *connection, const char_t *uri, settings
     return true;
 }
 
-/* the server for the server block: the host the box asked for, without a vendor domain
-   and with the port of the request (443 when Host has none); false: none to give */
-static bool esp32_server(HttpConnection *connection, char *host, size_t hostSize, uint16_t *port)
+/* the server for the server block from a Host value: the host without a vendor domain and
+   with its port (443 when it has none); false: none to give */
+static bool esp32_server(const char *hostPort, char *host, size_t hostSize, uint16_t *port)
 {
     static const char *vendor[] = {"tbs.toys", "bxcl.de", "boxine.de", "tonies.com", "tonies.de", "tonies.cloud"};
-    osStrncpy(host, connection->request.host, hostSize - 1);
+    osStrncpy(host, hostPort, hostSize - 1);
     host[hostSize - 1] = '\0';
     *port = 443;
     char *colon = osStrchr(host, ':');
@@ -1081,18 +1081,40 @@ static bool esp32_server(HttpConnection *connection, char *host, size_t hostSize
     return true;
 }
 
-/* the delivery body of an ESP32 image with the server block filled in, in a file of its own */
-static char *esp32_body(uint32_t build, const char *host, uint16_t port)
+/* an ESP32 image of the library with the server block filled in; NULL when it cannot be made */
+static uint8_t *esp32_image(uint32_t build, const char *host, uint16_t port, cfw_esp32_image_t *esp)
 {
     char *source = firmware_path(CFW_PLATFORM_ESP32, build, "bin");
     size_t size = 0;
     uint8_t *data = source ? cfw_read_file(source, CFW_ESP32_BODY_MAX, &size) : NULL;
     osFreeMem(source);
-    cfw_esp32_image_t esp;
-    char *path = NULL;
-    if (data != NULL && cfw_esp32_parse(data, size, &esp) && cfw_esp32_set_server(data, &esp, host, port))
+    if (data != NULL && cfw_esp32_parse(data, size, esp) && cfw_esp32_set_server(data, esp, host, port))
     {
-        esp32_fix(data, &esp);
+        esp32_fix(data, esp);
+        return data;
+    }
+    osFreeMem(data);
+    return NULL;
+}
+
+uint8_t *cfw_firmware_esp32_image(uint32_t build, const char *hostPort, size_t *length)
+{
+    char host[65];
+    uint16_t port = 0;
+    cfw_esp32_image_t esp;
+    uint8_t *data = esp32_server(hostPort, host, sizeof(host), &port) ? esp32_image(build, host, port, &esp) : NULL;
+    *length = data != NULL ? esp.length : 0;
+    return data;
+}
+
+/* the delivery body of an ESP32 image with the server block filled in, in a file of its own */
+static char *esp32_body(uint32_t build, const char *host, uint16_t port)
+{
+    cfw_esp32_image_t esp;
+    uint8_t *data = esp32_image(build, host, port, &esp);
+    char *path = NULL;
+    if (data != NULL)
+    {
         char hex[65];
         hex_digest(data, esp.length, hex);
         path = cfw_firmware_temp_path();
@@ -1183,7 +1205,7 @@ static bool esp32_install_request(HttpConnection *connection, const char_t *uri,
 
     char host[65] = "";
     uint16_t port = 0;
-    if (!esp32_server(connection, host, sizeof(host), &port))
+    if (!esp32_server(connection->request.host, host, sizeof(host), &port))
     {
         host[0] = '\0';
         port = 0;

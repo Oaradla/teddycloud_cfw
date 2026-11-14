@@ -222,6 +222,9 @@ size_t cfw_firmware_list(cfw_image_t **images);
 bool cfw_firmware_get(const char *platform, uint32_t build, cfw_image_t *image);
 /* the release package kept beside a CC3200 image, with the card tree; NULL when there is none */
 char *cfw_firmware_package(uint32_t build);
+/* an ESP32 image of the library as it goes into an app slot, with the server block filled from hostPort
+   (host[:port]); NULL when there is none or the host cannot go into the block */
+uint8_t *cfw_firmware_esp32_image(uint32_t build, const char *hostPort, size_t *length);
 /* an image (CC3200 slot image, ESP32 app image or body, or the original ESP32 firmware as app image or in a
    flash dump, with patch applied; patch may be NULL) into the library, or for a release package (zip) each of its
    images with its setup page; images holds *count entries, *count is set to the number added */

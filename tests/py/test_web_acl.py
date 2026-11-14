@@ -206,7 +206,9 @@ def test_box_owners(world):
     assert gast.post("/api/settings/set/toniebox.max_vol_hdp?overlay=%s" % b1, "1", raw=True)[0] == 200
     assert gast.post("/api/acl/set", {"type": "box", "id": b1, "owners": ["alice", "gast", "bob"]})[0] == 403
     assert gast.post("/api/auth/users/create", {"username": "gast2", "password": "Gast2-Password-1", "level": "guest"})[0] == 403
-    assert alice.post("/api/acl/set", {"type": "box", "id": b1, "owners": ["alice"]})[0] == 200
+    # other owners are removed by admins only
+    assert alice.post("/api/acl/set", {"type": "box", "id": b1, "owners": ["alice"]})[0] == 403
+    assert Client("admin").post("/api/acl/set", {"type": "box", "id": b1, "owners": ["alice"]})[0] == 200
     assert gast.get("/api/getBoxes")[1]["boxes"] == []
     # an owner may hand the box on, but not leave it without owners; admins may
     status, data = alice.post("/api/acl/set", {"type": "box", "id": b1, "owners": []})
@@ -256,6 +258,7 @@ def test_deleted_user_takes_the_shares_of_the_private_folder(world):
 
 def test_release_package_is_for_admins(world):
     assert Client("bob").get("/api/cfw/firmware/package?build=1")[0] == 403
+    assert Client("bob").get("/api/cfw/firmware/esp32Image?build=1")[0] == 403
 
 
 def test_users_list_is_not_for_guests(world):
@@ -292,7 +295,8 @@ def test_tag_belongs_to_the_box_owner_after_first_placement(world):
     assert bob.get("/api/getTagInfo?ruid=%s" % RUID_A)[0] != 403
     assert alice.post("/api/acl/set", {"type": "tonie", "id": RUID_A, "owners": ["alice", "bob"]})[0] == 200
     assert "tonie.edit" in bob.get("/api/acl/mine")[1]["tonies"][RUID_A.upper()]["rights"]
-    assert alice.post("/api/acl/set", {"type": "tonie", "id": RUID_A, "owners": ["alice"]})[0] == 200
+    assert alice.post("/api/acl/set", {"type": "tonie", "id": RUID_A, "owners": ["alice"]})[0] == 403
+    assert bob.post("/api/acl/set", {"type": "tonie", "id": RUID_A, "owners": ["alice"]})[0] == 200
     # admin assigns an unplaced tag by hand
     assert Client("admin").post("/api/acl/set", {"type": "tonie", "id": RUID_B, "owners": ["bob"]})[0] == 200
     assert alice.get("/api/getTagInfo?ruid=%s" % RUID_B)[0] == 403
@@ -368,6 +372,12 @@ def test_playlist_files_must_be_readable(world):
     assert upload("/api/tafUpload?special=library&path=private/alice&name=x.taf", "up3.tap") == 403
     for name in ("up.tap", "up2.tap", "up3.tap"):
         assert not (lib / "private/alice" / name).exists()
+    # a refused playlist leaves the one it was to replace
+    kept = playlist("lib://private/alice/x.taf")
+    (lib / "private/alice/up4.tap").write_text(kept)
+    assert upload("/api/fileUpload?special=library&path=private/alice", "up4.tap") == 403
+    assert (lib / "private/alice/up4.tap").read_text() == kept
+    assert not (lib / "private/alice/up4.tap.upload").exists() and not (lib / "private/alice/up4.tap.old").exists()
     # nor does a file become a playlist by its name
     (lib / "private/alice/list.txt").write_text(playlist("lib://private/bob/secret.taf"))
     assert alice.post("/api/fileMove?special=library", "source=private/alice/list.txt&target=private/alice/list.tap", raw=True)[0] == 403
@@ -553,6 +563,22 @@ def test_resume_positions_of_viewable_tonies(world):
         assert admin.post("/api/settings/set/cfw.enabled", "false", raw=True)[0] == 200
 
 
+def test_remote_play_needs_the_tonie(world):
+    admin, b1 = Client("admin"), world["box1"]
+    if admin.get("/api/settings/get/cfw.enabled")[0] != 200:
+        pytest.skip("server without custom firmware support")
+    mine, other = "3333333333333333", "4444444444444444"
+    assert admin.post("/api/acl/set", {"type": "tonie", "id": mine, "owners": ["alice"]})[0] == 200
+    assert admin.post("/api/acl/set", {"type": "tonie", "id": other, "owners": ["bob"]})[0] == 200
+    assert admin.post("/api/settings/set/cfw.enabled", "true", raw=True)[0] == 200
+    try:
+        alice = Client("alice")
+        assert alice.post("/api/cfw/remote?overlay=%s" % b1, {"command": "play", "ruid": other})[0] == 403
+        assert alice.post("/api/cfw/remote?overlay=%s" % b1, {"command": "play", "ruid": mine})[0] != 403
+    finally:
+        assert admin.post("/api/settings/set/cfw.enabled", "false", raw=True)[0] == 200
+
+
 def test_firmware_update_with_box_update(world):
     """the firmware update of a box goes with box.update; the builds themselves stay the admin's"""
     b1, b2 = world["box1"], world["box2"]
@@ -650,6 +676,62 @@ def test_own_groups(world):
         admin.post("/api/acl/set", {"type": "box", "id": b1, "owners": ["alice"]})
     assert admin.post("/api/acl/groups/delete", {"id": gid})[0] == 200
     assert all(g["id"] != gid for g in admin.get("/api/acl/catalog")[1]["groups"])
+
+
+def test_created_users_keep_the_limits_of_their_creator(world):
+    admin = Client("admin")
+    status, data = admin.post("/api/acl/groups/set", {"name": "Managers", "base": "user", "rights": "users.manage, tonie.view"})
+    assert status == 200, data
+    gid = data["id"]
+    PW["mgr"], PW["m2"] = "Mgr-Password-111", "M2-Password-1111"
+    assert admin.post("/api/auth/users/create", {"username": "mgr", "password": PW["mgr"], "group": gid})[0] == 200
+    assert admin.post("/api/auth/users/update", {"username": "alice", "deny": "box.cfw"})[0] == 200
+    try:
+        mgr = Client("mgr")
+        # no group: the limit of the level, which is more than the own
+        assert mgr.post("/api/auth/users/create", {"username": "m2", "password": PW["m2"], "level": "user"})[0] == 403
+        assert mgr.post("/api/auth/users/create", {"username": "m2", "password": PW["m2"], "group": gid})[0] == 200
+        assert mgr.post("/api/auth/users/update", {"username": "m2", "group": ""})[0] == 403
+        assert mgr.post("/api/auth/users/update", {"username": "m2", "level": "user"})[0] == 403
+        assert Client("alice").post("/api/auth/users/create", {"username": "a2", "password": "A2-Password-1111"})[0] == 200
+        users = {u["username"]: u for u in admin.get("/api/auth/users/get")[1]["userDetails"]}
+        assert users["a2"]["deny"] == "box.cfw" and users["m2"]["group"] == gid
+    finally:
+        assert admin.post("/api/auth/users/update", {"username": "alice", "deny": ""})[0] == 200
+        for name in ("mgr", "m2", "a2"):
+            admin.post("/api/auth/users/delete", {"username": name})
+    assert admin.post("/api/acl/groups/delete", {"id": gid})[0] == 200
+
+
+def test_reused_user_name_inherits_nothing(world):
+    admin = Client("admin")
+    PW["m1"], PW["u1"] = "M1-Password-1111", "U1-Password-1111"
+    assert Client("alice").post("/api/auth/users/create", {"username": "m1", "password": PW["m1"]})[0] == 200
+    assert Client("m1").post("/api/auth/users/create", {"username": "u1", "password": PW["u1"]})[0] == 200
+    (Path(SANDBOX) / "data" / "library" / "private/m1/left.taf").write_bytes(b"x")
+    try:
+        assert admin.post("/api/auth/users/delete", {"username": "m1"})[0] == 200
+        users = {u["username"]: u for u in admin.get("/api/auth/users/get")[1]["userDetails"]}
+        assert users["u1"]["createdBy"] == "admin"
+        assert Client("bob").post("/api/auth/users/create", {"username": "m1", "password": PW["m1"]})[0] == 409
+        assert admin.post("/api/auth/users/create", {"username": "m1", "password": PW["m1"]})[0] == 200
+    finally:
+        for name in ("m1", "u1"):
+            admin.post("/api/auth/users/delete", {"username": name})
+
+
+def test_user_change_that_is_not_saved_is_not_kept(world):
+    admin = Client("admin")
+    config = Path(SANDBOX) / "config"
+    mode = config.stat().st_mode
+    config.chmod(0o555)
+    try:
+        status = admin.post("/api/auth/users/update", {"username": "bob", "level": "guest"})[0]
+    finally:
+        config.chmod(mode)
+    assert status == 500
+    users = {u["username"]: u for u in admin.get("/api/auth/users/get")[1]["userDetails"]}
+    assert users["bob"]["level"] == "user"
 
 
 def test_long_rights_lists_apply_in_full(world):
@@ -805,6 +887,9 @@ def test_pictures_used_only_in_private_folders_are_seen_by_their_owners(world):
     changed()
     assert sees(alice, "private.png") and not sees(bob, "private.png") and sees(admin, "private.png")
     assert bob.get("/custom_img//./private.png")[0] != 200
+    # an unused tonie of bob pointing at it does not make it public
+    for name in ("private.png", "PRIVATE.PNG"):
+        assert bob.post("/api/toniesCustomJsonUpsert", {**custom_tonie("Vis-3"), "pic": "/custom_img/" + name})[0] == 403, name
     public = {**custom_tonie("Vis-2"), "pic": "/custom_img/private.png"}
     assert admin.post("/api/toniesCustomJsonUpsert", public)[0] == 200
     put_taf("library/vis/vis.taf", int(public["audio_id"][0]))
@@ -877,3 +962,27 @@ def test_owned_lists_only_existing_folders(world):
 def test_mine_names_the_folders_where_rights_end(world):
     folders = Client("bob").get("/api/acl/mine")[1]["folders"]
     assert "folder.write" in folders[""]["rights"] and "folder.write" not in folders["private"]["rights"]
+
+
+def test_deleting_an_own_folder_with_many_entries_below(world):
+    admin, alice = Client("admin"), Client("alice")
+    assert alice.post("/api/dirCreate?special=library", "many", raw=True)[0] == 200
+    for i in range(70):
+        assert alice.post("/api/dirCreate?special=library", "many/%d" % i, raw=True)[0] == 200
+        assert admin.post("/api/acl/set", {"type": "folder", "id": "many/%d" % i, "owners": ["alice"]})[0] == 200
+    assert admin.post("/api/acl/set", {"type": "folder", "id": "many/69", "owners": ["bob"]})[0] == 200
+    assert alice.post("/api/fileDelete?special=library", "many", raw=True)[0] == 403
+    assert admin.post("/api/acl/set", {"type": "folder", "id": "many/69", "owners": ["alice"]})[0] == 200
+    assert alice.post("/api/fileDelete?special=library", "many", raw=True)[0] == 200
+
+
+def test_uses_in_long_library_paths_count(world):
+    admin, alice = Client("admin"), Client("alice")
+    tonie = custom_tonie("Long-1")
+    assert admin.post("/api/toniesCustomJsonUpsert", tonie)[0] == 200
+    audio_id = int(tonie["audio_id"][0])
+    put_taf("library/private/alice/short/a.taf", audio_id)
+    deep = put_taf("library/private/alice/" + "/".join(["x" * 100] * 3) + "/b.taf", audio_id)
+    assert alice.post("/api/toniesCustomJsonOrphans", ["private/alice/short"])[1] == []
+    deep.unlink()
+    assert alice.post("/api/toniesCustomJsonOrphans", ["private/alice/short"])[1] == ["Long-1"]

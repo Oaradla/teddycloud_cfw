@@ -39,6 +39,7 @@ static void settings_generate_internal_dirs(settings_t *settings);
 static void settings_changed();
 static error_t settings_save_ovl(bool overlay);
 static error_t settings_load_ovl(bool overlay);
+static void settings_remember_file_time(bool overlay);
 static setting_item_t *settings_get_by_name_id(const char *item, uint8_t settingsId);
 static char *settings_sanitize_box_id(const char *input_id);
 
@@ -164,6 +165,7 @@ static void option_map_init(uint8_t settingsId)
     OPTION_INTERNAL_STRING("commonName", &settings->commonName, "default", "common name of the certificate (for overlays)", LEVEL_NONE)
     OPTION_INTERNAL_STRING("boxName", &settings->boxName, "Toniebox", "Name of the box", LEVEL_NONE)
     OPTION_INTERNAL_STRING("boxModel", &settings->boxModel, "", "Model of the box", LEVEL_NONE)
+    OPTION_INTERNAL_UNSIGNED("boxVersion", &settings->boxVersion, BOX_UNKNOWN, BOX_UNKNOWN, BOX_TB2, "Version (IC) of the box, persisted from the User Agent", LEVEL_NONE)
 
     OPTION_TREE_DESC("log", "Logging", LEVEL_DETAIL)
     OPTION_UNSIGNED("log.level", &settings->log.level, 4, 0, 6, "Loglevel", "0=off - 6=verbose", LEVEL_DETAIL)
@@ -423,6 +425,7 @@ static void option_map_init(uint8_t settingsId)
     OPTION_BOOL("web_auth.remote_https_only", &settings->web_auth.remote_https_only, FALSE, "HTTPS only from outside", "Reject plain HTTP to the web UI from addresses outside the local networks (direct TLS or a trusted proxy with X-Forwarded-Proto: https).", LEVEL_DETAIL)
     OPTION_STRING("web_auth.allow_networks", &settings->web_auth.allow_networks, "", "Allowed networks", "Additional networks (e.g. a VPN) that may reach the web UI when access from outside is disabled.", LEVEL_EXPERT)
     OPTION_STRING("web_auth.deny_networks", &settings->web_auth.deny_networks, "", "Blocked networks", "Addresses or networks that may never reach the web UI.", LEVEL_EXPERT)
+    OPTION_STRING("web_auth.frame_ancestors", &settings->web_auth.frame_ancestors, "", "Allowed embedding pages", "Origins (e.g. https://ha.example.org) that may show the web UI in a frame, separated by spaces. Empty: only teddyCloud itself.", LEVEL_EXPERT)
 
     OPTION_TREE_DESC("toniebox", "Toniebox", LEVEL_BASIC)
     OPTION_BOOL("toniebox.api_access", &settings->toniebox.api_access, TRUE, "API access", "Grant access to the API (default value for new boxes)", LEVEL_EXPERT)
@@ -448,6 +451,7 @@ static void option_map_init(uint8_t settingsId)
     OPTION_BOOL("cfw.show_battery", &settings->cfw.show_battery, TRUE, "Show battery", "Show the battery voltage the box reported last and whether it stands on the charging station in the box list (custom firmware with the battery report)", LEVEL_BASIC)
     OPTION_BOOL("cfw.battery_log", &settings->cfw.battery_log, TRUE, "Battery log", "Append every battery report of the box to cfw/battery/<box>.csv in the config directory, for a later charge display", LEVEL_DETAIL)
     OPTION_BOOL("cfw.setup_page_update", &settings->cfw.setup_page_update, TRUE, "Update the setup page", "Deliver the setup page of the firmware a box runs, or the default setup page, to boxes with the custom firmware; off: the page on the box's card stays as it is", LEVEL_DETAIL)
+    OPTION_BOOL("cfw.global_resume", &settings->cfw.global_resume, FALSE, "Global resume for all tonies", "Every tonie continues on any box where it stopped on another one, as if global resume were switched on for each; a tonie keeps the value set for it in its own settings. Live content and streams are left out", LEVEL_BASIC)
     OPTION_STRING("cfw.event_image", &settings->cfw.event_image, "/img_cfw_event.png", "Event tag picture", "Picture shown for a tonie that is an event tag, instead of the picture of its content", LEVEL_BASIC)
     OPTION_ENUM("cfw.event_notice_language", &settings->cfw.event_notice_language, 0, 2, "Event tag notice language", "An event tag plays no content. A box without the custom firmware hears a notice in this language instead", "0=German|1=English|2=French", LEVEL_BASIC)
     OPTION_BOOL("cfw.force_box_settings", &settings->cfw.force_box_settings, FALSE, "Show CFW settings for this box", "Show the box settings of the custom firmware for this box although it has not connected with the custom firmware yet", LEVEL_DETAIL)
@@ -680,6 +684,7 @@ settings_t *get_settings_cn(const char *commonName)
                 osFreeMem(key);
 
                 settings_generate_internal_dirs(&Settings_Overlay[i]);
+                settings_load_client_certs_id(i);
                 Settings_Overlay[i].internal.config_used = true;
                 settings_save_ovl(true);
                 mutex_unlock(MUTEX_SETTINGS);
@@ -1026,23 +1031,6 @@ error_t settings_save()
     return err;
 }
 
-/* the time of the file as it is in memory now, so settings_loop only reloads changes from outside */
-static void settings_note_file_time(bool overlay)
-{
-    FsFileStat stat;
-    if (fsGetFileStat(overlay ? config_overlay_file_path : config_file_path, &stat) == NO_ERROR)
-    {
-        if (overlay)
-        {
-            settings_last_load_ovl = stat.modified;
-        }
-        else
-        {
-            settings_last_load = stat.modified;
-        }
-    }
-}
-
 static error_t settings_save_ovl(bool overlay)
 {
     char_t *config_path = (!overlay ? config_file_path : config_overlay_file_path);
@@ -1078,7 +1066,7 @@ static error_t settings_save_ovl(bool overlay)
         while (option_map[pos].type != TYPE_END)
         {
             setting_item_t *opt = &option_map[pos];
-            if (!opt->internal || !osStrcmp(opt->option_name, "configVersion") || (overlay && (!osStrcmp(opt->option_name, "commonName") || !osStrcmp(opt->option_name, "boxName") || !osStrcmp(opt->option_name, "boxModel"))))
+            if (!opt->internal || !osStrcmp(opt->option_name, "configVersion") || (overlay && (!osStrcmp(opt->option_name, "commonName") || !osStrcmp(opt->option_name, "boxName") || !osStrcmp(opt->option_name, "boxModel") || !osStrcmp(opt->option_name, "boxVersion"))))
             {
                 char *overlayPrefix;
                 if (overlay)
@@ -1131,7 +1119,7 @@ static error_t settings_save_ovl(bool overlay)
         }
     }
     fsCloseFile(file);
-    settings_note_file_time(overlay);
+    settings_remember_file_time(overlay);
     Settings_Overlay[0].internal.config_changed = false;
 
     return NO_ERROR;
@@ -1417,10 +1405,28 @@ static error_t settings_load_ovl(bool overlay)
         }
         Settings_Overlay[0].internal.config_changed = false;
     }
-
-    settings_note_file_time(overlay);
+    settings_remember_file_time(overlay);
 
     return NO_ERROR;
+}
+
+/* settings_loop reloads a config file whose time differs from the one remembered here. A file this
+   server wrote itself must not count as changed: the reload resets every overlay and drops their
+   internal values. */
+static void settings_remember_file_time(bool overlay)
+{
+    FsFileStat stat;
+    if (fsGetFileStat(!overlay ? config_file_path : config_overlay_file_path, &stat) == NO_ERROR)
+    {
+        if (overlay)
+        {
+            settings_last_load_ovl = stat.modified;
+        }
+        else
+        {
+            settings_last_load = stat.modified;
+        }
+    }
 }
 
 uint16_t settings_get_size()
@@ -1893,21 +1899,21 @@ void settings_loop()
 {
     FsFileStat stat;
     settings_free_parked(false);
-    if (fsGetFileStat(config_file_path, &stat) == NO_ERROR)
+    /* Under the lock: settings_save holds it from writing a file until its new time is remembered,
+       so a file in the middle of being saved does not look changed. */
+    mutex_lock(MUTEX_SETTINGS);
+    bool changed = fsGetFileStat(config_file_path, &stat) == NO_ERROR && compareDateTime(&stat.modified, &settings_last_load);
+    bool changed_ovl = fsGetFileStat(config_overlay_file_path, &stat) == NO_ERROR && compareDateTime(&stat.modified, &settings_last_load_ovl);
+    mutex_unlock(MUTEX_SETTINGS);
+    if (changed)
     {
-        if (compareDateTime(&stat.modified, &settings_last_load))
-        {
-            TRACE_INFO("Settings file changed. Reloading.\r\n");
-            settings_load();
-        }
+        TRACE_INFO("Settings file changed. Reloading.\r\n");
+        settings_load();
     }
-    if (fsGetFileStat(config_overlay_file_path, &stat) == NO_ERROR)
+    else if (changed_ovl)
     {
-        if (compareDateTime(&stat.modified, &settings_last_load_ovl))
-        {
-            TRACE_INFO("Overlay settings file changed. Reloading.\r\n");
-            settings_load();
-        }
+        TRACE_INFO("Overlay settings file changed. Reloading.\r\n");
+        settings_load();
     }
 }
 

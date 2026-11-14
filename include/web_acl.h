@@ -72,12 +72,17 @@ typedef enum
 /* may the user of the connection put users into the group; base: its level (user or guest).
    Takes lock_acl, so never under lock_auth. */
 web_acl_group_check_t web_acl_group_check(HttpConnection *connection, const char *id, int *base);
+/* may the user of the connection give the level without group: its limit is no more than the own one.
+   Takes lock_acl, so never under lock_auth. */
+bool web_acl_level_check(HttpConnection *connection, int level);
 
 /* 403 response for a request the user may not do */
 error_t web_acl_forbidden(HttpConnection *connection);
 
 void web_acl_user_created(const char *username);
 void web_acl_user_deleted(const char *username);
+/* true if the private folder of the name holds files, e.g. of an earlier user of that name */
+bool web_acl_private_files_left(const char *username);
 /* a box asked for a tag: unassigned tags go to the owners of the box, tags of others are
    borrowed by them (seen, not owned) */
 void web_acl_tag_placed(const char *ruid, const char *box_id);

@@ -24,3 +24,15 @@ void test_fs_remove_filename(void)
     char area[2] = {'/', '\0'};
     assert(fsRemoveFilename(&area[1]) != NO_ERROR);
 }
+
+void test_fs_path_has_parent(void)
+{
+    assert(fsPathHasParent(".."));
+    assert(fsPathHasParent("../x"));
+    assert(fsPathHasParent("a/../b"));
+    assert(fsPathHasParent("a\\.."));
+    assert(!fsPathHasParent("Vol..2"));
+    assert(!fsPathHasParent("a..b/c"));
+    assert(!fsPathHasParent("Part 1...mp3"));
+    assert(!fsPathHasParent(""));
+}

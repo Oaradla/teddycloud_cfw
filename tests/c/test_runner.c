@@ -19,11 +19,13 @@ static const test_case_t tests[] = {
     {"os_shell_quote", test_os_shell_quote},
     {"os_chmod_owner_only", test_os_chmod_owner_only},
     {"fs_remove_filename", test_fs_remove_filename},
+    {"fs_path_has_parent", test_fs_path_has_parent},
     {"hex_encode", test_hex_encode},
     {"escape_string", test_escape_string},
     {"split_url", test_split_url},
     {"ipv4_is_public", test_ipv4_is_public},
     {"esp32_port_patch", test_esp32_port_patch},
+    {"esp32_port_patch_check", test_esp32_port_patch_check},
     {"socket_receive_line_from_full_buffer", test_socket_receive_line_from_full_buffer},
     {"socket_receive_line_capped_at_size", test_socket_receive_line_capped_at_size},
     {"cfw_crc", test_cfw_crc},
@@ -64,6 +66,7 @@ static const test_case_t tests[] = {
     {"error_text", test_error_text},
     {"log_lock", test_log_lock},
     {"range_ext", test_range_ext},
+    {"os_task_ends_without_its_stack", test_os_task_ends_without_its_stack},
 };
 
 int main(void)

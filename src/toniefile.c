@@ -21,6 +21,7 @@
 #include "opus.h"
 #include "ogg/ogg.h"
 #include "server_helpers.h"
+#include "mutex_manager.h"
 #include "version.h"
 #include "proto/toniebox.pb.taf-header.pb-c.h"
 
@@ -93,6 +94,20 @@ size_t toniefile_header(uint8_t *buffer, size_t length, TonieboxAudioFileHeader 
     return size;
 }
 
+uint32_t toniefile_new_audio_ids(uint32_t count)
+{
+    static uint32_t next = 0;
+    mutex_lock(MUTEX_AUDIO_ID);
+    uint32_t audio_id = (uint32_t)(time(NULL) - TEDDY_BENCH_AUDIO_ID_DEDUCT);
+    if (audio_id < next)
+    {
+        audio_id = next;
+    }
+    next = audio_id + count;
+    mutex_unlock(MUTEX_AUDIO_ID);
+    return audio_id;
+}
+
 toniefile_t *toniefile_create(const char *fullPath, uint32_t audio_id, bool append, int32_t size)
 {
     int err;
@@ -143,7 +158,7 @@ toniefile_t *toniefile_create(const char *fullPath, uint32_t audio_id, bool appe
             }
             audio_id = tafHeader->audio_id;
             ctx->taf.audio_id = audio_id;
-            toniebox_audio_file_header__free_unpacked(tafHeader, NULL);
+            /* tafHeader is still needed further down (ogg/page state) and freed there */
         }
     }
     else
@@ -774,7 +789,7 @@ error_t ffmpeg_stream(char source[99][PATH_LEN], size_t source_len, size_t *curr
     {
         size = get_settings()->encode.stream_max_size - TONIE_HEADER_LENGTH;
     }
-    toniefile_t *taf = toniefile_create(target_taf, time(NULL) - TEDDY_BENCH_AUDIO_ID_DEDUCT, append, size);
+    toniefile_t *taf = toniefile_create(target_taf, toniefile_new_audio_ids(1), append, size);
     if (!taf)
     {
         TRACE_ERROR("toniefile_create() failed, aborting\r\n");

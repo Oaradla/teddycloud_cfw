@@ -1088,6 +1088,15 @@ def test_esp32_install_through_the_original_firmware():
         esp.close()
 
 
+def test_esp32_image_for_the_setup_in_the_browser():
+    """an ESP32 image as it goes into an app slot, with the server block the web UI asks for"""
+    status, body = api_bytes("GET", f"/api/cfw/firmware/esp32Image?build={BUILD + 50}&host=tc.local:8443")
+    assert status == 200 and cfw.esp32_server_block(body) == ("tc.local", 8443)
+    assert hashlib.sha256(body[:-32]).digest() == body[-32:]
+    assert api_bytes("GET", f"/api/cfw/firmware/esp32Image?build={BUILD + 50}&host=prod.de0.tonies.de")[0] == 404
+    assert api_bytes("GET", f"/api/cfw/firmware/esp32Image?build={BUILD + 35}&host=tc.local")[0] == 404
+
+
 def test_esp32_platform_survives_a_settings_reload():
     """the platform of an ESP32 box that has not asked since the settings were written and reloaded (which
     resets the platform taken from the User-Agent) stays ESP32: its images stay assignable"""

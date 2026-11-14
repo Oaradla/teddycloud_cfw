@@ -56,14 +56,11 @@ static bool walk_library(const char *base, const char *rel, use_fn fn, void *ctx
         {
             continue;
         }
-        char path[LIB_PATH_MAX];
-        if (osSnprintf(path, sizeof(path), "%s%s%s", rel, rel[0] ? "/" : "", entry.name) >= (int)sizeof(path))
-        {
-            continue;
-        }
+        char *path = custom_asprintf("%s%s%s", rel, rel[0] ? "/" : "", entry.name);
         if (entry.attributes & FS_FILE_ATTR_DIRECTORY)
         {
             go_on = walk_library(base, path, fn, ctx);
+            osFreeMem(path);
             continue;
         }
         char *abs = custom_asprintf("%s%c%s", base, PATH_SEPARATOR, path);
@@ -71,6 +68,7 @@ static bool walk_library(const char *base, const char *rel, use_fn fn, void *ctx
         go_on = fn(ctx, info, path, NULL);
         freeTonieInfo(info);
         osFreeMem(abs);
+        osFreeMem(path);
     }
     if (dir != NULL)
     {
@@ -153,11 +151,12 @@ static bool use_writable(HttpConnection *connection, const char *lib, const char
     {
         return web_acl_tonie_allowed(connection, ruid, "tonie.edit");
     }
-    char folder[LIB_PATH_MAX];
-    osSnprintf(folder, sizeof(folder), "%s", lib);
+    char *folder = custom_asprintf("%s", lib);
     char *slash = strrchr(folder, '/');
     *(slash ? slash : folder) = '\0';
-    return web_acl_folder_allowed(connection, folder, "folder.write");
+    bool ok = web_acl_folder_allowed(connection, folder, "folder.write");
+    osFreeMem(folder);
+    return ok;
 }
 
 static bool tally_use(void *ctx, tonie_info_t *info, const char *lib, const char *ruid)
@@ -346,19 +345,21 @@ bool web_acl_image_allowed(HttpConnection *connection, const char *name)
     return ok;
 }
 
-/* per custom tonie of root: how often it is used, whether somewhere else than in the private folders of others */
+/* per custom tonie of root: how often it is used, whether outside the private folders, in whose private folders */
 typedef struct
 {
     cJSON *root;
-    char own[LIB_PATH_MAX]; /* the private folder of the user */
     int *uses;
-    bool *seen;
+    bool *open;
+    cJSON **owners; /* objects with the names of the private folders */
 } sight_t;
 
 static bool sight_use(void *ctx, tonie_info_t *info, const char *lib, const char *ruid)
 {
     sight_t *s = ctx;
-    bool seen = lib == NULL || !acl_path_within(lib, "private") || acl_path_within(lib, s->own);
+    bool open = lib == NULL || !acl_path_within(lib, "private");
+    const char *name = !open && lib[7] == '/' ? &lib[8] : NULL;
+    const char *end = name != NULL ? strchr(name, '/') : NULL;
     int i = 0;
     const cJSON *entry = NULL;
     cJSON_ArrayForEach(entry, s->root)
@@ -366,36 +367,71 @@ static bool sight_use(void *ctx, tonie_info_t *info, const char *lib, const char
         if (model_used(entry, info))
         {
             s->uses[i]++;
-            s->seen[i] |= seen;
+            s->open[i] |= open;
+            if (end != NULL)
+            {
+                char *owner = custom_asprintf("%.*s", (int)(end - name), name);
+                if (cJSON_GetObjectItemCaseSensitive(s->owners[i], owner) == NULL)
+                {
+                    cJSON_AddTrueToObject(s->owners[i], owner);
+                }
+                osFreeMem(owner);
+            }
         }
         i++;
     }
     return true;
 }
 
-/* the pictures of root whose custom tonies are all used, and only in the private folders of others */
-static cJSON *pictures_hidden(HttpConnection *connection, cJSON *root)
+static void sight_free(sight_t *s)
 {
-    int n = cJSON_GetArraySize(root) + 1;
-    sight_t s = {root, "", osAllocMem(sizeof(int) * n), osAllocMem(sizeof(bool) * n)};
-    osSnprintf(s.own, sizeof(s.own), "private/%s", connection->private.web_user);
-    osMemset(s.uses, 0, sizeof(int) * n);
-    osMemset(s.seen, 0, sizeof(bool) * n);
-    walk_uses(sight_use, &s);
+    int n = cJSON_GetArraySize(s->root) + 1;
+    for (int i = 0; s->owners != NULL && i < n; i++)
+    {
+        cJSON_Delete(s->owners[i]);
+    }
+    cJSON_Delete(s->root);
+    osFreeMem(s->uses);
+    osFreeMem(s->open);
+    osFreeMem(s->owners);
+    osMemset(s, 0, sizeof(*s));
+}
+
+static void sight_read(sight_t *s)
+{
+    s->root = load_models();
+    int n = cJSON_GetArraySize(s->root) + 1;
+    s->uses = osAllocMem(sizeof(int) * n);
+    s->open = osAllocMem(sizeof(bool) * n);
+    s->owners = osAllocMem(sizeof(cJSON *) * n);
+    osMemset(s->uses, 0, sizeof(int) * n);
+    osMemset(s->open, 0, sizeof(bool) * n);
+    for (int i = 0; i < n; i++)
+    {
+        s->owners[i] = cJSON_CreateObject();
+    }
+    walk_uses(sight_use, s);
+}
+
+/* the pictures whose custom tonies are all used, and only in the private folders of others */
+static cJSON *pictures_hidden(HttpConnection *connection, const sight_t *s)
+{
+    const char *user = connection->private.web_user;
     cJSON *shown = cJSON_CreateObject();
     int i = 0;
     const cJSON *entry = NULL;
-    cJSON_ArrayForEach(entry, root)
+    cJSON_ArrayForEach(entry, s->root)
     {
         const char *pic = picture_of(entry);
-        if (pic != NULL && (s.uses[i] == 0 || s.seen[i]) && !cJSON_HasObjectItem(shown, pic))
+        bool seen = s->open[i] || cJSON_GetObjectItemCaseSensitive(s->owners[i], user) != NULL;
+        if (pic != NULL && (s->uses[i] == 0 || seen) && !cJSON_HasObjectItem(shown, pic))
         {
             cJSON_AddTrueToObject(shown, pic);
         }
         i++;
     }
     cJSON *hidden = cJSON_CreateObject();
-    cJSON_ArrayForEach(entry, root)
+    cJSON_ArrayForEach(entry, s->root)
     {
         const char *pic = picture_of(entry);
         if (pic != NULL && !cJSON_HasObjectItem(shown, pic) && !cJSON_HasObjectItem(hidden, pic) &&
@@ -405,23 +441,14 @@ static cJSON *pictures_hidden(HttpConnection *connection, cJSON *root)
         }
     }
     cJSON_Delete(shown);
-    osFreeMem(s.uses);
-    osFreeMem(s.seen);
     return hidden;
 }
 
-/* a tonies page asks for many pictures at once: the hidden ones of the last users are kept a few seconds */
-#define HIDDEN_KEEP_MS 5000
-#define HIDDEN_USERS 8
+/* a tonies page asks for many pictures at once: the uses, the same for every user, are kept a few seconds */
+#define SIGHT_KEEP_MS 5000
 
-typedef struct
-{
-    char user[sizeof(((http_connection_private_t *)NULL)->web_user)];
-    systime_t time;
-    cJSON *hidden;
-} hidden_cache_t;
-
-static hidden_cache_t hidden_cache[HIDDEN_USERS];
+static sight_t sight;
+static systime_t sight_time;
 
 cJSON *web_acl_images_hidden(HttpConnection *connection)
 {
@@ -429,32 +456,15 @@ cJSON *web_acl_images_hidden(HttpConnection *connection)
     {
         return cJSON_CreateObject();
     }
-    const char *user = connection->private.web_user;
     systime_t now = osGetSystemTime();
     mutex_lock(MUTEX_WEB_ACL_IMAGES);
-    hidden_cache_t *slot = &hidden_cache[0];
-    for (size_t i = 0; i < HIDDEN_USERS; i++)
+    if (sight.root == NULL || now - sight_time > SIGHT_KEEP_MS)
     {
-        if (!osStrcmp(hidden_cache[i].user, user))
-        {
-            slot = &hidden_cache[i];
-            break;
-        }
-        if (hidden_cache[i].time < slot->time)
-        {
-            slot = &hidden_cache[i];
-        }
+        sight_free(&sight);
+        sight_read(&sight);
+        sight_time = now;
     }
-    if (slot->hidden == NULL || osStrcmp(slot->user, user) || now - slot->time > HIDDEN_KEEP_MS)
-    {
-        cJSON_Delete(slot->hidden);
-        cJSON *root = load_models();
-        slot->hidden = pictures_hidden(connection, root);
-        cJSON_Delete(root);
-        osSnprintf(slot->user, sizeof(slot->user), "%s", user);
-        slot->time = now;
-    }
-    cJSON *hidden = cJSON_Duplicate(slot->hidden, true);
+    cJSON *hidden = pictures_hidden(connection, &sight);
     mutex_unlock(MUTEX_WEB_ACL_IMAGES);
     return hidden;
 }

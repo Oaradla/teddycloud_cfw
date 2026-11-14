@@ -54,6 +54,7 @@ error_t handleApiCfwResume(HttpConnection *connection, const char_t *uri, const 
 error_t handleApiCfwResumeChoose(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiCfwBattery(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiCfwFirmwarePackage(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
+error_t handleApiCfwFirmwareEsp32Image(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiCfwFirmwareList(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiCfwFirmwareUpload(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);
 error_t handleApiCfwFirmwareEdit(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx);

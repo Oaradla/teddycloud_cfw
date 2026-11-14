@@ -22,6 +22,7 @@
 #include "http/mime.h"
 #include "http_ext.h"
 #include "pcaplog.h"
+#include "settings.h"
 
 /* collects X-Forwarded-For headers; when too long only the rightmost hops are kept, as those are the ones added
  * by trusted proxies */
@@ -208,8 +209,16 @@ size_t httpExtFormatResponseHeader(HttpConnection *connection, char *p)
     if (!connection->private.api_access_only)
     {
         p += osSprintf(p, "X-Content-Type-Options: nosniff\r\n");
-        p += osSprintf(p, "X-Frame-Options: SAMEORIGIN\r\n");
-        p += osSprintf(p, "Content-Security-Policy: frame-ancestors 'self'\r\n");
+        const char *embedders = settings_get_string("web_auth.frame_ancestors");
+        if (embedders == NULL || embedders[0] == '\0' || osStrlen(embedders) > 512 || strpbrk(embedders, "\r\n;,") != NULL)
+        {
+            p += osSprintf(p, "X-Frame-Options: SAMEORIGIN\r\n");
+            embedders = "";
+        }
+        /* files of the users (library, content, pictures) never run as a page of teddyCloud */
+        const char *uri = connection->request.uri;
+        bool sandbox = !osStrncmp(uri, "/content/", 9) || !osStrncmp(uri, "/custom_img/", 12);
+        p += osSprintf(p, "Content-Security-Policy: frame-ancestors 'self'%s%s%s\r\n", embedders[0] ? " " : "", embedders, sandbox ? "; sandbox" : "");
         p += osSprintf(p, "Referrer-Policy: same-origin\r\n");
     }
 

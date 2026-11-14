@@ -139,6 +139,7 @@ typedef struct
     bool remote_https_only;
     char *allow_networks;
     char *deny_networks;
+    char *frame_ancestors;
 } settings_web_auth_t;
 
 typedef struct
@@ -464,6 +465,7 @@ typedef struct
     bool battery_log;
     bool force_box_settings;
     bool setup_page_update;
+    bool global_resume;
     char *event_image;
     uint32_t event_notice_language;
     settings_cfw_box_t box;
@@ -477,6 +479,7 @@ typedef struct
     char *commonName;
     char *boxName;
     char *boxModel;
+    uint32_t boxVersion;
     char *ip;
     settings_core_t core;
     settings_cloud_t cloud;

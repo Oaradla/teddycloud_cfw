@@ -17,6 +17,7 @@
 #include "handler_api.h"
 #include "cfw.h"
 #include "web_acl.h"
+#include "web_acl_core.h"
 #include "http/mime.h"
 #include "handler_cloud.h"
 #include "settings.h"
@@ -526,6 +527,7 @@ error_t handleApiGetBoxes(HttpConnection *connection, const char_t *uri, const c
         cJSON_AddStringToObject(jsonEntry, "commonName", settings->commonName);
         cJSON_AddStringToObject(jsonEntry, "boxName", settings->boxName);
         cJSON_AddStringToObject(jsonEntry, "boxModel", settings->boxModel); // TODO add color name + url
+        cJSON_AddNumberToObject(jsonEntry, "boxVersion", settings->boxVersion);
 
         cJSON_AddItemToArray(jsonArray, jsonEntry);
     }
@@ -634,6 +636,27 @@ error_t handleApiSettingsGet(HttpConnection *connection, const char_t *uri, cons
     return httpWriteResponse(connection, (char_t *)response_ptr, connection->response.contentLength, false);
 }
 
+/* settings_set_* derives the internal directories only for the base settings; overlays and resets
+   need it here. Cert settings take effect only when the files are loaded, and that load must not
+   generate: a path that does not exist yet would replace the server certificate. */
+static void apply_setting(const char *item, uint8_t settingsId, bool derive_dirs)
+{
+    if (derive_dirs)
+    {
+        settings_changed_id(settingsId);
+    }
+    mutex_lock(MUTEX_SETTINGS);
+    if (osStrncmp(item, "core.server_cert", 16) == 0)
+    {
+        settings_try_load_certs_id(settingsId);
+    }
+    else if (osStrncmp(item, "core.client_cert.", 17) == 0)
+    {
+        settings_load_client_certs_id(settingsId);
+    }
+    mutex_unlock(MUTEX_SETTINGS);
+}
+
 error_t handleApiSettingsSet(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
     const char *response = "invalid value";
@@ -681,6 +704,8 @@ error_t handleApiSettingsSet(HttpConnection *connection, const char_t *uri, cons
         }
         else if ((size > 0 || opt->type == TYPE_STRING) && settings_set_by_string_ovl(item, data, overlay))
         {
+            uint8_t settingsId = get_overlay_id(overlay);
+            apply_setting(item, settingsId, settingsId > 0);
             response = "OK";
             statusCode = 200;
             /* only admins may trigger the write of the config */
@@ -723,6 +748,7 @@ error_t handleApiSettingsReset(HttpConnection *connection, const char_t *uri, co
             {
                 TRACE_INFO("Setting: '%s' overlay removed\r\n", item);
             }
+            apply_setting(item, get_overlay_id(overlay), true);
             success = true;
         }
         else
@@ -779,16 +805,16 @@ static toniesJson_item_t *library_tap_item(const char *tapPath, settings_t *sett
 }
 
 /* the picture of a library folder: the one picture of the playlists and TAFs directly in it, when
-   they have just one (an album split into chapters, or a single TAF); NULL otherwise */
+   they have just one (an album split into chapters, or a single TAF); NULL otherwise, to be freed */
 #define LIBRARY_FOLDER_PICTURE_MAX_FILES 64
-static const char *library_folder_picture_scan(const char *dirPath, settings_t *settings)
+static char *library_folder_picture_scan(const char *dirPath, settings_t *settings)
 {
     FsDir *dir = fsOpenDir(dirPath);
     if (dir == NULL)
     {
         return NULL;
     }
-    const char *picture = NULL;
+    char *picture = NULL;
     bool_t ambiguous = false;
     size_t seen = 0;
     FsDirEntry entry;
@@ -827,7 +853,7 @@ static const char *library_folder_picture_scan(const char *dirPath, settings_t *
         }
         if (picture == NULL)
         {
-            picture = item->picture;
+            picture = strdup(item->picture);
         }
         else if (osStrcmp(picture, item->picture) != 0)
         {
@@ -835,13 +861,18 @@ static const char *library_folder_picture_scan(const char *dirPath, settings_t *
         }
     }
     fsCloseDir(dir);
-    return ambiguous ? NULL : picture;
+    if (ambiguous)
+    {
+        osFreeMem(picture);
+        return NULL;
+    }
+    return picture;
 }
 
 /* the last answers of library_folder_picture_scan, which reads every TAF of a folder: a listing shows
    many folders and is asked for often. An answer counts while the folder is unchanged, for a minute
    (a custom tonie may give a file another picture meanwhile) */
-#define LIBRARY_FOLDER_PICTURE_CACHE 128
+#define LIBRARY_FOLDER_PICTURE_CACHE 1024
 #define LIBRARY_FOLDER_PICTURE_SECONDS 60
 typedef struct
 {
@@ -864,16 +895,19 @@ static char *library_folder_picture(const char *dirPath, settings_t *settings)
     time_t now = time(NULL);
     char *picture = NULL;
     bool_t found = false;
+    library_folder_picture_t *c = NULL;
     mutex_lock(MUTEX_LIBRARY_FOLDER_PICTURE);
-    for (size_t i = 0; i < LIBRARY_FOLDER_PICTURE_CACHE && !found; i++)
+    for (size_t i = 0; i < LIBRARY_FOLDER_PICTURE_CACHE && c == NULL; i++)
     {
-        library_folder_picture_t *c = &library_folder_pictures[i];
-        if (c->path != NULL && !osStrcmp(c->path, dirPath) && !osMemcmp(&c->modified, &stat.modified, sizeof(stat.modified)) &&
-            now - c->checked < LIBRARY_FOLDER_PICTURE_SECONDS)
+        if (library_folder_pictures[i].path != NULL && !osStrcmp(library_folder_pictures[i].path, dirPath))
         {
-            found = true;
-            picture = c->picture ? strdup(c->picture) : NULL;
+            c = &library_folder_pictures[i];
         }
+    }
+    if (c != NULL && !osMemcmp(&c->modified, &stat.modified, sizeof(stat.modified)) && now - c->checked < LIBRARY_FOLDER_PICTURE_SECONDS)
+    {
+        found = true;
+        picture = c->picture ? strdup(c->picture) : NULL;
     }
     mutex_unlock(MUTEX_LIBRARY_FOLDER_PICTURE);
     if (found)
@@ -881,11 +915,14 @@ static char *library_folder_picture(const char *dirPath, settings_t *settings)
         return picture;
     }
 
-    const char *scanned = library_folder_picture_scan(dirPath, settings);
-    picture = scanned ? strdup(scanned) : NULL;
+    picture = library_folder_picture_scan(dirPath, settings);
     mutex_lock(MUTEX_LIBRARY_FOLDER_PICTURE);
-    library_folder_picture_t *c = &library_folder_pictures[library_folder_pictures_next];
-    library_folder_pictures_next = (library_folder_pictures_next + 1) % LIBRARY_FOLDER_PICTURE_CACHE;
+    /* the folder's own slot, it may have been taken meanwhile */
+    if (c == NULL || c->path == NULL || osStrcmp(c->path, dirPath))
+    {
+        c = &library_folder_pictures[library_folder_pictures_next];
+        library_folder_pictures_next = (library_folder_pictures_next + 1) % LIBRARY_FOLDER_PICTURE_CACHE;
+    }
     osFreeMem(c->path);
     osFreeMem(c->picture);
     c->path = strdup(dirPath);
@@ -2208,18 +2245,53 @@ typedef struct
     bool_t denied;
 } library_save_ctx;
 
+/* a playlist is written beside its name first, so that a refused one leaves the old one in place */
+#define LIBRARY_UPLOAD_SUFFIX ".upload"
+
+static error_t file_save_start_library(void *in_ctx, const char *name, const char *filename)
+{
+    if (!library_name_ends(filename, ".tap"))
+    {
+        return file_save_start(in_ctx, name, filename);
+    }
+    char *part = custom_asprintf("%s" LIBRARY_UPLOAD_SUFFIX, filename);
+    error_t error = file_save_start(in_ctx, name, part);
+    osFreeMem(part);
+    return error;
+}
+
 static error_t file_save_end_library(void *in_ctx)
 {
     library_save_ctx *ctx = (library_save_ctx *)in_ctx;
-    char *path = ctx->base.file ? strdup(ctx->base.filename) : NULL;
+    char *part = ctx->base.file ? strdup(ctx->base.filename) : NULL;
     error_t error = file_save_end(in_ctx);
-    if (error == NO_ERROR && !library_tap_allowed(ctx->connection, path))
+    if (error != NO_ERROR || !library_name_ends(part, LIBRARY_UPLOAD_SUFFIX))
+    {
+        osFreeMem(part);
+        return error;
+    }
+    char *path = strdup(part);
+    path[osStrlen(path) - osStrlen(LIBRARY_UPLOAD_SUFFIX)] = '\0';
+    char *old = custom_asprintf("%s.old", path);
+    bool_t hadOld = fsFileExists(path) && fsRenameFile(path, old) == NO_ERROR;
+    fsRenameFile(part, path);
+    if (!library_tap_allowed(ctx->connection, path))
     {
         fsDeleteFile(path);
+        if (hadOld)
+        {
+            fsRenameFile(old, path);
+        }
         ctx->denied = true;
         error = ERROR_ACCESS_DENIED;
     }
+    else if (hadOld)
+    {
+        fsDeleteFile(old);
+    }
+    osFreeMem(old);
     osFreeMem(path);
+    osFreeMem(part);
     return error;
 }
 
@@ -2266,7 +2338,7 @@ error_t handleApiFileUpload(HttpConnection *connection, const char_t *uri, const
         osMemset(&cbr, 0x00, sizeof(cbr));
         osMemset(&ctx, 0x00, sizeof(ctx));
 
-        cbr.multipart_start = &file_save_start;
+        cbr.multipart_start = &file_save_start_library;
         cbr.multipart_add = &file_save_add;
         cbr.multipart_end = &file_save_end_library;
 
@@ -2536,7 +2608,7 @@ static error_t handleApiContentTrackExport(HttpConnection *connection, const cha
     }
     osMemcpy(pages, tafInfo->tafHeader->track_page_nums, page_count * sizeof(uint32_t));
     num_bytes = tafInfo->tafHeader->num_bytes;
-    tonieItem = tonies_byAudioId(tafInfo->tafHeader->audio_id);
+    tonieItem = tonies_byAudioIdPreferHash(tafInfo->tafHeader->audio_id, tafInfo->tafHeader->sha1_hash.data);
     tonie_album_name(tonieItem, album, sizeof(album));
     if (tonieItem != NULL)
     {
@@ -2919,6 +2991,31 @@ error_t handleApiContent(HttpConnection *connection, const char_t *uri, const ch
 
     return error;
 }
+
+static error_t writeApiStatusText(HttpConnection *connection, uint_t statusCode, const char *message);
+
+/* The tag plays its own cloud content: a TAF in the content dir, or the library file it was cached to.
+ * A forced cloud download clears the source, so it must not be offered for any other source. */
+static bool_t isCachedCloudContent(tonie_info_t *tonieInfo, settings_t *settings)
+{
+    if (tonieInfo->json._source_type != CT_SOURCE_NONE && tonieInfo->json._source_type != CT_SOURCE_TAF)
+    {
+        return false;
+    }
+    if (tonieInfo->json.source == NULL || tonieInfo->json.source[0] == '\0')
+    {
+        return true;
+    }
+    if (tonieInfo->tafHeader == NULL)
+    {
+        return false;
+    }
+    char *cachePath = getLibraryCachePathNoCreate(settings, tonieInfo->tafHeader->audio_id, true);
+    bool_t cached = osStrcmp(tonieInfo->json.source, cachePath) == 0;
+    osFreeMem(cachePath);
+    return cached;
+}
+
 error_t handleApiContentDownload(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
 {
     // TODO Rewrite URL
@@ -2978,6 +3075,30 @@ error_t handleApiContentDownload(HttpConnection *connection, const char_t *uri, 
         return export_error;
     }
 
+    bool_t forceCloud = false;
+    char force_param[8];
+    if (queryGet(queryString, "force", force_param, sizeof(force_param)) && force_param[0] == 't')
+    {
+        tonie_info_t *tonieInfo = getTonieInfo(pathAbsolute, false, client_ctx->settings);
+        bool_t cached = isCachedCloudContent(tonieInfo, client_ctx->settings);
+        freeTonieInfo(tonieInfo);
+        if (!cached)
+        {
+            osFreeMem(pathAbsolute);
+            TRACE_WARNING("Not redownloading '%s', the tag has a custom source\r\n", path);
+            return writeApiStatusText(connection, 409, "Tag has a custom source, not redownloading it");
+        }
+        if (!client_ctx->settings->cloud.cacheContent)
+        {
+            osFreeMem(pathAbsolute);
+            TRACE_WARNING("Not redownloading '%s', cloud.cacheContent is disabled\r\n", path);
+            return writeApiStatusText(connection, 409, "Caching cloud content is disabled, not redownloading");
+        }
+        forceCloud = true;
+        /* force and overlay are local parameters, the cloud gets a plain content request */
+        queryString = "";
+    }
+
     char ruid[17];
 
     contentJson_t contentJson;
@@ -2998,13 +3119,13 @@ error_t handleApiContentDownload(HttpConnection *connection, const char_t *uri, 
     if (isSys || contentJson.nocloud)
     {
         osSprintf((char *)uri, "/v1/content/%s", ruid);
-        error = handleCloudContent(connection, uri, queryString, client_ctx, true);
+        error = handleCloudContent(connection, uri, queryString, client_ctx, true, forceCloud);
     }
     else
     {
         osMemcpy(connection->private.authentication_token, contentJson.cloud_auth, contentJson.cloud_auth_len);
         osSprintf((char *)uri, "/v2/content/%s", ruid);
-        error = handleCloudContent(connection, uri, queryString, client_ctx, false);
+        error = handleCloudContent(connection, uri, queryString, client_ctx, false, forceCloud);
     }
 
     free_content_json(&contentJson);
@@ -3393,7 +3514,7 @@ error_t handleApiTafUpload(HttpConnection *connection, const char_t *uri, const 
         osMemset(&cbr, 0x00, sizeof(cbr));
         osMemset(&ctx, 0x00, sizeof(ctx));
 
-        cbr.multipart_start = &file_save_start;
+        cbr.multipart_start = &file_save_start_library;
         cbr.multipart_add = &file_save_add;
         cbr.multipart_end = &file_save_end_library;
 
@@ -4908,7 +5029,12 @@ error_t handleApiToniesCustomJsonUpsert(HttpConnection *connection, const char_t
             cJSON_Delete(requestJson);
             return writeApiStatusText(connection, 400, "The audio id belongs to an official tonie");
         }
-        if (!web_acl_model_allowed(connection, existingIndex >= 0 ? cJSON_GetArrayItem(root, existingIndex) : NULL))
+        /* pointing a tonie at a picture would show it to everyone */
+        const char *pic = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(entry, "pic"));
+        char picName[256];
+        bool picHidden = pic != NULL && !osStrncmp(pic, "/custom_img/", 12) && acl_path_normalize(pic + 12, picName, sizeof(picName)) &&
+                         !web_acl_image_visible(connection, picName);
+        if (picHidden || !web_acl_model_allowed(connection, existingIndex >= 0 ? cJSON_GetArrayItem(root, existingIndex) : NULL))
         {
             cJSON_Delete(created);
             cJSON_Delete(root);
@@ -5893,7 +6019,7 @@ bool isHexString(const char *buf, size_t maxLen)
     return isHex;
 }
 
-error_t getTagInfoJson(char ruid[17], cJSON *jsonTarget, client_ctx_t *client_ctx)
+error_t getTagInfoJson(char ruid[17], cJSON *jsonTarget, bool_t validate, client_ctx_t *client_ctx)
 {
     error_t error = NO_ERROR;
     /* build filename with 8 chars of the taf/json */
@@ -5910,7 +6036,7 @@ error_t getTagInfoJson(char ruid[17], cJSON *jsonTarget, client_ctx_t *client_ct
         contentJson_t contentJson;
         /* read TAF info - would create .json if not existing */
         // tonie_info_t *tafInfo = getTonieInfoFromRuid(ruid, true, client_ctx->settings);
-        tonie_info_t *tafInfo = getTonieInfo(fullTagPath, false, client_ctx->settings);
+        tonie_info_t *tafInfo = getTonieInfoV2(fullTagPath, false, validate, client_ctx->settings);
         /* now update with updated model if found. */
         saveTonieInfo(tafInfo, true);
         contentJson = tafInfo->json;
@@ -5944,6 +6070,7 @@ error_t getTagInfoJson(char ruid[17], cJSON *jsonTarget, client_ctx_t *client_ct
             }
             cJSON_AddBoolToObject(jsonEntry, "valid", tafInfo->valid);
             cJSON_AddBoolToObject(jsonEntry, "exists", tafInfo->exists);
+            cJSON_AddBoolToObject(jsonEntry, "corrupt", tafInfo->corrupt);
             cJSON_AddBoolToObject(jsonEntry, "live", tafInfo->json.live);
             cJSON_AddBoolToObject(jsonEntry, "nocloud", tafInfo->json.nocloud);
             cJSON_AddBoolToObject(jsonEntry, "hasCloudAuth", tafInfo->json._has_cloud_auth && !tafInfo->json.cloud_override);
@@ -5975,6 +6102,12 @@ error_t getTagInfoJson(char ruid[17], cJSON *jsonTarget, client_ctx_t *client_ct
                 {
                     cJSON_AddStringToObject(jsonEntry, "downloadTriggerUrl", "");
                 }
+            }
+            if (tafInfo->exists && !tafInfo->json.nocloud && client_ctx->settings->cloud.cacheContent && (contentJson._has_cloud_auth || isSys) && isCachedCloudContent(tafInfo, client_ctx->settings))
+            {
+                char *redownloadUrl = custom_asprintf("%s&force=true", downloadUrl);
+                cJSON_AddStringToObject(jsonEntry, "redownloadUrl", redownloadUrl);
+                osFreeMem(redownloadUrl);
             }
             osFreeMem(audioUrl);
             osFreeMem(downloadUrl);
@@ -6045,10 +6178,13 @@ error_t handleApiTagInfo(HttpConnection *connection, const char_t *uri, const ch
     {
         return ERROR_FAILURE;
     }
+    /* validate=true reads the whole TAF to check its SHA1 hash and length */
+    char validate[8];
+    bool_t fullValidation = queryGet(queryString, "validate", validate, sizeof(validate)) && validate[0] == 't';
 
     cJSON *json = cJSON_CreateObject();
 
-    error_t error = getTagInfoJson(ruid, json, client_ctx);
+    error_t error = getTagInfoJson(ruid, json, fullValidation, client_ctx);
     if (error != NO_ERROR)
     {
         cJSON_Delete(json);
@@ -6144,7 +6280,7 @@ error_t handleApiTagIndex(HttpConnection *connection, const char_t *uri, const c
             {
                 continue;
             }
-            if (getTagInfoJson(ruid, jsonArray, client_ctx) == NO_ERROR)
+            if (getTagInfoJson(ruid, jsonArray, false, client_ctx) == NO_ERROR)
             {
                 break;
             }
@@ -6235,8 +6371,17 @@ error_t handleDeleteOverlay(HttpConnection *connection, const char_t *uri, const
         TRACE_ERROR("No overlay detected %s\n", overlay);
         return ERROR_FAILURE;
     }
-    get_settings_cn(overlay)->internal.config_used = false;
-    settings_save();
+    settings_t *settings = get_settings_cn(overlay);
+    settings->internal.config_used = false;
+    if (settings_save() != NO_ERROR)
+    {
+        settings->internal.config_used = true;
+        TRACE_ERROR("Could not save the settings, overlay %s not removed\n", overlay);
+        return ERROR_FAILURE;
+    }
+    /* The slot still carries the box's name and values; loading the saved files clears it, so the box
+       starts over on its next connection. */
+    settings_load();
     TRACE_INFO("Removed overlay %s\n", overlay);
 
     return httpOkResponse(connection);
@@ -6573,7 +6718,7 @@ error_t handleApiTafSplit(HttpConnection *connection, const char_t *uri, const c
     tap.files = osAllocMem(chapters * sizeof(tap_file_t));
     osMemset(tap.files, 0, chapters * sizeof(tap_file_t));
 
-    uint32_t chapter_audio_id = (uint32_t)(time(NULL) - TEDDY_BENCH_AUDIO_ID_DEDUCT);
+    uint32_t chapter_audio_id = toniefile_new_audio_ids((uint32_t)chapters);
     for (size_t i = 0; i < chapters && error == NO_ERROR; i++)
     {
         char given[256];

@@ -60,6 +60,8 @@ typedef struct
 /* packs the header into the 4092 bytes after the length field, returns its size or 0; the type
    comes from the generated header, whose struct tag differs between protobuf-c versions */
 size_t toniefile_header(uint8_t *buffer, size_t length, TonieboxAudioFileHeader *tafHeader);
+/* the first of count new audio ids: the time like teddybench, but never one handed out before */
+uint32_t toniefile_new_audio_ids(uint32_t count);
 toniefile_t *toniefile_create(const char *fullPath, uint32_t audio_id, bool append, int32_t size);
 error_t toniefile_close(toniefile_t *ctx);
 error_t toniefile_encode(toniefile_t *ctx, int16_t *sample_buffer, size_t samples_available);

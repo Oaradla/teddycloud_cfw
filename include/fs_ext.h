@@ -26,5 +26,7 @@ error_t fsCopyFileRange(FILE *src, uint32_t offset, uint32_t end, FILE *dst);
 error_t fsMoveFile(const char_t *source_path, const char_t *target_path, bool_t overwrite);
 error_t fsCreateDirEx(const char_t *path, bool_t recursive);
 error_t fsRemoveFilename(char *dir);
+/* true when a part of the path is ".."; names like "Part 1...mp3" are fine */
+bool_t fsPathHasParent(const char_t *path);
 /* removes a file, or a folder with everything in it; symbolic links are removed, not followed */
 error_t fsRemoveTree(const char_t *path);

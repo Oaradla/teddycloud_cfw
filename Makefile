@@ -609,6 +609,9 @@ endif
 # MSVC has no weak symbols, so rename the Cyclone variants in their own object only.
 $(OBJ_DIR)/cyclone/cyclone_ssl/tls/tls_certificate$(OBJ_EXT): CFLAGS += -DtlsParseCertificateList=tlsParseCertificateList_override
 $(OBJ_DIR)/cyclone/cyclone_crypto/mpi/mpi$(OBJ_EXT): CFLAGS += -DmpiCheckProbablePrime=mpiCheckProbablePrime_upstream
+# src/platform/platform_linux.c creates tasks detached (rebuilt with the Makefile, else an old object clashes)
+$(OBJ_DIR)/src/cyclone/common/os_port_posix$(OBJ_EXT): CFLAGS += -DosCreateTask=osCreateTask_upstream
+$(OBJ_DIR)/src/cyclone/common/os_port_posix$(OBJ_EXT): $(THIS_MAKEFILE)
 ifneq ($(PLATFORM),windows)
 # was #pragma GCC optimize("O3") in the patched mpi.c
 $(OBJ_DIR)/cyclone/cyclone_crypto/mpi/mpi$(OBJ_EXT): CFLAGS += -O3
@@ -845,12 +848,14 @@ dev-sandbox-restart: dev-sandbox-down
 TEST_C_SRC := $(wildcard tests/c/*.c)
 # crypto of the web login (tests/c/test_web_auth.c)
 TEST_C_CRYPTO_SRC := cyclone/cyclone_crypto/hash/sha1.c cyclone/cyclone_crypto/hash/sha256.c cyclone/cyclone_crypto/mac/hmac.c cyclone/cyclone_crypto/kdf/pbkdf.c cyclone/cyclone_crypto/cipher/aes.c cyclone/cyclone_crypto/aead/gcm.c cyclone/common/cpu_endian.c
+TEST_C_CFLAGS := -I include -I src/cyclone/common -I src/cyclone/cyclone_tcp -I cyclone/common -I cyclone/cyclone_tcp -I cyclone/cyclone_ssl -I cyclone/cyclone_ssl/tls -I cyclone/cyclone_ssl/tls13 -I cyclone/cyclone_crypto -D GPL_LICENSE_TERMS_ACCEPTED -pthread -ffunction-sections
 
 .PHONY: test_c
 test_c: $(PROTO_H_FILES)
 	$(QUIET)$(ECHO) "[ ${CYAN}TEST${NC} ] Build and run C unit tests"
 	$(QUIET)mkdir -p $(BIN_DIR)
-	$(QUIET)$(CC) -I include -I src/proto -I include/protobuf-c -I src/cyclone/common -I src/cyclone/cyclone_tcp -I cyclone/common -I cyclone/cyclone_tcp -I cyclone/cyclone_ssl -I cyclone/cyclone_ssl/tls -I cyclone/cyclone_ssl/tls13 -I cyclone/cyclone_crypto -D GPL_LICENSE_TERMS_ACCEPTED -pthread -ffunction-sections -Wl,--gc-sections -o $(BIN_DIR)/test_c $(TEST_C_SRC) $(SRC_DIR)/os_ext.c $(SRC_DIR)/str_ext.c $(SRC_DIR)/fs_ext.c $(SRC_DIR)/esp32_port.c $(SRC_DIR)/platform/platform_linux.c $(SRC_DIR)/cyclone/common/os_port_posix.c $(SRC_DIR)/cfw_format.c $(SRC_DIR)/cfw_battery_model.c $(SRC_DIR)/cfw_resume_model.c $(SRC_DIR)/box_cert.c $(SRC_DIR)/zip_writer.c $(SRC_DIR)/web_auth_crypto.c $(SRC_DIR)/web_auth_net.c $(SRC_DIR)/web_acl_core.c $(SRC_DIR)/error_text.c $(SRC_DIR)/range_ext.c $(TEST_C_CRYPTO_SRC)
+	$(QUIET)$(CC) $(TEST_C_CFLAGS) -DosCreateTask=osCreateTask_upstream -c -o $(BIN_DIR)/test_c_os_port_posix.o $(SRC_DIR)/cyclone/common/os_port_posix.c
+	$(QUIET)$(CC) $(TEST_C_CFLAGS) -I src/proto -I include/protobuf-c -Wl,--gc-sections -o $(BIN_DIR)/test_c $(TEST_C_SRC) $(SRC_DIR)/os_ext.c $(SRC_DIR)/str_ext.c $(SRC_DIR)/fs_ext.c $(SRC_DIR)/esp32_port.c $(SRC_DIR)/platform/platform_linux.c $(BIN_DIR)/test_c_os_port_posix.o $(SRC_DIR)/box_cert.c $(SRC_DIR)/zip_writer.c $(SRC_DIR)/error_text.c $(SRC_DIR)/range_ext.c $(SRC_DIR)/cfw_format.c $(SRC_DIR)/cfw_battery_model.c $(SRC_DIR)/cfw_resume_model.c $(SRC_DIR)/web_auth_crypto.c $(SRC_DIR)/web_auth_net.c $(SRC_DIR)/web_acl_core.c $(TEST_C_CRYPTO_SRC)
 	$(QUIET)$(BIN_DIR)/test_c
 
 .PHONY: test

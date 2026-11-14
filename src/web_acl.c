@@ -629,31 +629,20 @@ bool web_acl_folder_tree_writable(HttpConnection *connection, const char *path)
         return false;
     }
     /* folders below with own entries (e.g. one shared or owned by someone else) must be writable too */
-    char keys[64][PATH_MAX_LEN];
-    int n = 0;
+    bool ok = true;
     lock_acl();
     cJSON *entry = NULL;
     cJSON_ArrayForEach(entry, cJSON_GetObjectItemCaseSensitive(acl, "folders"))
     {
-        if (entry->string != NULL && osStrcmp(entry->string, norm) != 0 && acl_path_within(entry->string, norm))
+        if (entry->string != NULL && osStrcmp(entry->string, norm) != 0 && acl_path_within(entry->string, norm) &&
+            !folder_decide_unlocked(&u, entry, "folder.write", false))
         {
-            if (n >= 64)
-            {
-                unlock_acl();
-                return false;
-            }
-            osSnprintf(keys[n++], PATH_MAX_LEN, "%s", entry->string);
+            ok = false;
+            break;
         }
     }
     unlock_acl();
-    for (int i = 0; i < n; i++)
-    {
-        if (!web_acl_folder_allowed(connection, keys[i], "folder.write"))
-        {
-            return false;
-        }
-    }
-    return true;
+    return ok;
 }
 
 /* entries of a folder tree follow a rename, or go with a delete (dst NULL) */
@@ -1011,6 +1000,7 @@ static const route_policy_t policies[] = {
     {"/api/cfw/deliver", P_BOX, "box.update", 0, NULL},
     /* the builds a box can get; changing them and the setup in the browser are the admin's */
     {"/api/cfw/firmware/package", P_ADMIN, NULL, 0, NULL},
+    {"/api/cfw/firmware/esp32Image", P_ADMIN, NULL, 0, NULL},
     {"/api/cfw/firmware", P_ALLOW, NULL, 0, "GET"},
     {"/api/", P_ADMIN, NULL, 0, NULL},
     {"/content/download/", P_TONIE_PATH, "tonie.view", 18, NULL},
@@ -1280,6 +1270,25 @@ void web_acl_user_created(const char *username)
             osFreeMem(dir);
         }
     }
+}
+
+bool web_acl_private_files_left(const char *username)
+{
+    const char *lib = settings_get_string("internal.librarydirfull");
+    char *dir = custom_asprintf("%s%c" PRIVATE_DIR "%c%s", lib != NULL ? lib : "", PATH_SEPARATOR, PATH_SEPARATOR, username);
+    FsDir *d = dir != NULL ? fsOpenDir(dir) : NULL;
+    bool left = false;
+    FsDirEntry entry;
+    while (d != NULL && !left && fsReadDir(d, &entry) == NO_ERROR)
+    {
+        left = osStrcmp(entry.name, ".") && osStrcmp(entry.name, "..");
+    }
+    if (d != NULL)
+    {
+        fsCloseDir(d);
+    }
+    osFreeMem(dir);
+    return left;
 }
 
 static void remove_user_from(cJSON *map, const char *username)
@@ -1957,9 +1966,22 @@ error_t handleApiAclSet(HttpConnection *connection, const char_t *uri, const cha
             return err;
         }
     }
+    acl_user_t actor = current_user(connection);
     lock_acl();
     map = map_for(type, id, key, sizeof(key), scope);
     cJSON *entry = cJSON_GetObjectItemCaseSensitive(map, key);
+    /* owners who are no admins add owners and leave themselves; the other owners stay */
+    cJSON *kept = owners != NULL && !admin ? cJSON_GetObjectItemCaseSensitive(entry, "owners") : NULL;
+    cJSON_ArrayForEach(o, kept)
+    {
+        if (cJSON_IsString(o) && osStrcasecmp(o->valuestring, actor.user) && !in_list(body, "owners", o->valuestring))
+        {
+            unlock_acl();
+            err = send_error(connection, 403, "forbidden", "Only admins remove other owners");
+            cJSON_Delete(body);
+            return err;
+        }
+    }
     if (entry == NULL)
     {
         /* a new folder entry keeps the owners of the parent; looked up before the entry exists */
@@ -2091,6 +2113,19 @@ web_acl_group_check_t web_acl_group_check(HttpConnection *connection, const char
         *base = (int)level;
     }
     return ok ? WEB_ACL_GROUP_OK : WEB_ACL_GROUP_FORBIDDEN;
+}
+
+bool web_acl_level_check(HttpConnection *connection, int level)
+{
+    acl_user_t u = current_user(connection);
+    if (!u.known || u.level == ACL_LEVEL_ADMIN)
+    {
+        return true;
+    }
+    lock_acl();
+    bool ok = acl_list_within(level_max_unlocked((acl_level_t)level), user_limit_unlocked(&u));
+    unlock_acl();
+    return ok;
 }
 
 static bool group_name_valid(const char *name)

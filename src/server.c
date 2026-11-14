@@ -209,6 +209,7 @@ request_type_t request_paths[] = {
     {REQ_POST, "/api/cfw/firmware/githubDownload", SERTY_WEB, &handleApiCfwFirmwareGithubDownload},
     {REQ_POST, "/api/cfw/firmware/github", SERTY_WEB, &handleApiCfwFirmwareGithub},
     {REQ_GET, "/api/cfw/firmware/package", SERTY_WEB, &handleApiCfwFirmwarePackage},
+    {REQ_GET, "/api/cfw/firmware/esp32Image", SERTY_WEB, &handleApiCfwFirmwareEsp32Image},
     {REQ_GET, "/api/cfw/firmware", SERTY_WEB, &handleApiCfwFirmwareList},
     {REQ_POST, "/api/cfw/deliver", SERTY_WEB, &handleApiCfwDeliver},
     {REQ_POST, "/api/assignUnknown", SERTY_WEB, &handleApiAssignUnknown},
@@ -445,8 +446,10 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
             }
             client_ctx->state = get_toniebox_state_id(client_ctx->settings->internal.overlayNumber);
 
+            /* only a box that is let in may tell its firmware and hardware */
+            bool accepted = connection->private.authenticated || !client_ctx->settings->core.boxCertAuth;
             char *ua = connection->request.userAgent;
-            if (ua != NULL && osStrlen(ua) > 3)
+            if (accepted && ua != NULL && osStrlen(ua) > 3)
             {
                 settings_internal_toniebox_firmware_t *firmware_info = &client_ctx->settings->internal.toniebox_firmware;
 
@@ -578,6 +581,15 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
                     TRACE_INFO("Box generation set %d to %d\r\n", client_ctx->settings->toniebox.boxGeneration, boxGen);
                     settings_set_unsigned_id("toniebox.boxGeneration", boxGen, client_ctx->settings->internal.overlayNumber);
                 }
+
+                settings_box_type boxIC = firmware_info->boxIC;
+                if (boxIC != BOX_UNKNOWN && client_ctx->settings->boxVersion != boxIC && client_ctx->settings->internal.overlayNumber > 0)
+                {
+                    // persist the hardware in the overlay, so it is known before the box connects again
+                    TRACE_INFO("Box version set %d to %d\r\n", client_ctx->settings->boxVersion, boxIC);
+                    settings_set_unsigned_id("boxVersion", boxIC, client_ctx->settings->internal.overlayNumber);
+                    settings_save();
+                }
             }
         }
     }
@@ -611,6 +623,10 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
 
         if (httpExtIsHttps(connection) && client_ctx->settings->core.boxCertAuth && connection->private.api_access_only && !connection->private.authenticated)
         {
+            char peer[48];
+            ipAddrToString(&connection->socket->remoteIpAddr, peer);
+            /* fixed format for fail2ban, see contrib/fail2ban */
+            TRACE_WARNING("Box port: client certificate refused from %s\r\n", peer);
             error = httpServerUriUnauthorizedCallback(connection, uri);
             break;
         }
@@ -674,8 +690,8 @@ error_t httpServerRequestCallback(HttpConnection *connection, const char_t *uri,
                 }
             }
 
-            /* web2 keeps its routes in the fragment (#/...), so only its folder itself needs its index */
-            if (!strcmp(uri, "/web/v2") || !strcmp(uri, "/web/v2/"))
+            /* web2 keeps its routes in the fragment (#/...): its folder and any other path in it without a file get its index */
+            if (!strcmp(uri, "/web/v2") || (!strncmp(uri, "/web/v2/", 8) && !strchr(uri, '.')))
             {
                 uri = "/web/v2/index.html";
             }

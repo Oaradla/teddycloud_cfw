@@ -102,6 +102,8 @@
             "fromBox": "As the box",
             "ownValue": "This figure's own value",
             "useBox": "Use the box's value",
+            "fromSettings": "As in the settings",
+            "useSettings": "Use the settings' value",
             "globalResume": "Global resume",
             "globalResumeHint": "The tonie continues on any box where it stopped on another one (includes resume). The box asks teddyCloud for the position when it is placed.",
             "globalResumeOld": "These boxes have an older custom firmware without global resume; there the tonie does not continue where it stopped on another box: {{boxes}}"
@@ -350,6 +352,7 @@
                 },
                 "esp32": {
                     "title": "Toniebox with ESP32 chip (through teddyCloud)",
+                    "flasher": "If the box is open for flashing anyway, the <flasher>ESP32 flasher</flasher> writes the custom firmware along with it (choice in the flashing step); steps 2 to 5 are then not needed.",
                     "step1": "The box must run the original firmware patched for teddyCloud, see <setup>Add Toniebox</setup> (ESP32). Keep the flash dump made there in a safe place.",
                     "step2": "Load the flash dump of the original firmware into the library below (the patches for teddyCloud are explained at the upload). With it the box can go back to the original firmware at any time.",
                     "step3": "Load the release package of the custom firmware (<code>toniebox-cfw-….zip</code>) into the library below.",
@@ -2084,6 +2087,10 @@
                 "label": "Update the setup page",
                 "description": "Deliver the setup page of the firmware a box runs, or the default setup page, to boxes with the custom firmware; off: the page on the box's card stays as it is"
             },
+            "cfw_global_resume": {
+                "label": "Global resume for all tonies",
+                "description": "Every tonie continues on any box where it stopped on another one, as if global resume were switched on for each; a tonie keeps the value set in its own settings. Live content and streams are left out"
+            },
             "cfw_event_image": {
                 "label": "Event tag picture",
                 "description": "Picture shown for a tonie that is an event tag, instead of the picture of its content"
@@ -2319,6 +2326,10 @@
             "web_auth_lockout_minutes": {
                 "label": "Lockout time (minutes)",
                 "description": "Duration of the first lockout after failed logins."
+            },
+            "web_auth_frame_ancestors": {
+                "label": "Allowed embedding pages",
+                "description": "Origins (e.g. https://ha.example.org) that may show the web UI in a frame, separated by spaces. Empty: only teddyCloud itself."
             },
             "web_auth_trusted_proxies": {
                 "label": "Trusted reverse proxies",
@@ -2717,7 +2728,7 @@
         "title": "Share: {{name}}",
         "ownersButton": "Owners",
         "ownersTitle": "Owners: {{name}}",
-        "ownersOnlyHint": "Owners have all rights and assign further owners. A tonie placed on another user's box shows up for that user without belonging to them; they can hide it for themselves."
+        "ownersOnlyHint": "Owners have all rights and assign further owners; they can remove themselves, other owners only an admin can remove. A tonie placed on another user's box shows up for that user without belonging to them; they can hide it for themselves."
     },
     "teddycloud": {
         "newVersionAvailable": "There is a new version available!",
@@ -3239,6 +3250,7 @@
                     "certsMissing": "Missing on the box: {{names}}",
                     "noPreloader": "The package has no preloader.",
                     "noMcuimg": "/sys/mcuimg.bin was not in the backup.",
+                    "noOriginal": "An earlier run broke off while writing the preloader, and the original bootloader /sys/pre-img.bin is missing. Restore it from the backup first.",
                     "unnamedFiles": "{{count}} files have no name in the file table and no known name.",
                     "other": "{{message}}"
                 }
@@ -3384,6 +3396,12 @@
                 "automatically": "Automatically",
                 "backupFlash": "Important: Backup your original unpatched firmware",
                 "cancel": "Cancel",
+                "cfwCustom": "Custom firmware",
+                "cfwFirmware": "Firmware",
+                "cfwHint": "The custom firmware goes into a free app slot beside the original firmware and starts right after flashing. If it does not confirm itself three times in a row, the box starts the original firmware again. If the box gets stuck in a start loop before that, only writing back the flash dump helps: keep it safe.",
+                "cfwNoImage": "For the custom firmware, load a release with an ESP32 image into Box Update → Library.",
+                "cfwOriginal": "Original firmware (patched for teddyCloud)",
+                "cfwSupportOff": "For the custom firmware, switch on CFW support (Settings → Custom Firmware) and load a release into Box Update → Library.",
                 "chipMAC": "Chip MAC",
                 "chipType": "Chip Type",
                 "chipTypeError": "Chip type error - unexpected type read. Read {{actualtype}}, expected {{expectedtype}}. Abort processing, check connection and try again!",
@@ -3652,6 +3670,7 @@
             "title": "Content",
             "toniePicture": "Tonie Picture"
         },
+        "corruptHint": "The audio file is corrupted. Open the information to redownload it from the cloud.",
         "currentPath": "Current Path: ",
         "customEditor": {
             "actions": {
@@ -3888,6 +3907,8 @@
                 "browserFailed": "The browser could not encode, the server does it",
                 "encoding": "Encoding in the browser: {{done}} of {{total}} files",
                 "joining": "Putting the TAF together ...",
+                "oldPartsText": "The folder holds {{count}} old parts that the new playlist does not contain: {{names}}. Replace them? They are deleted once the new playlist is built.",
+                "oldPartsTitle": "Replace the old parts?",
                 "playlistCreated": "\"{{file}}\" was created, with its {{count}} tracks as TAFs of their own next to it.",
                 "serverEncoding": "The server encodes: {{done}} of {{total}} files",
                 "uploading": "Uploading: {{done}} of {{total}} files"
@@ -4012,6 +4033,7 @@
             "deleteShownBy": "Figures showing this picture: {{count}}. They lose their picture."
         },
         "infoModal": {
+            "corrupt": "Corrupted:",
             "download": "Download TAF as *.ogg",
             "exists": "Exists:",
             "model": "Model:",
@@ -4023,7 +4045,11 @@
         "informationModal": {
             "hideTag": "Hide Tonie/Tag",
             "ok": "OK",
-            "unknownModel": "Unknown Model"
+            "redownload": "Redownload",
+            "redownloadConfirm": "Replace the local file with a fresh download from the cloud?",
+            "unknownModel": "Unknown Model",
+            "verifyFile": "Check file",
+            "verifyFileHint": "Reads the whole audio file and checks its SHA1 hash and length. May take a while."
         },
         "lastPlayedOnModal": {
             "lastPlayedOn": "Last played Tonie",
@@ -4054,6 +4080,10 @@
             "downloadingDetails": "Downloading \"{{model}}\" [{{ruid}}]...",
             "errorDuringDownload": "Error during background download",
             "errorDuringDownloadDetails": "Error during background download of \"{{model}}\" [{{ruid}}]: ",
+            "errorDuringRedownload": "Error during redownload",
+            "errorDuringRedownloadDetails": "Error during redownload of \"{{model}}\" [{{ruid}}]: ",
+            "errorDuringVerify": "Error during check",
+            "errorDuringVerifyDetails": "Error during check of \"{{model}}\" [{{ruid}}]: ",
             "errorFetchingUpdatedCard": "Error fetching updated card!",
             "errorFetchingUpdatedCardDetails": "Error fetching updated card for \"{{model}}\" [{{ruid}}]: ",
             "filterDeleted": "Filter deleted",
@@ -4072,6 +4102,10 @@
             "liveEnabledDetails": "Live flag enabled for \"{{model}}\" [{{ruid}}]",
             "noFilterFound": "No filter found",
             "noFilterFoundDetails": "No filter with name {{name}} was found",
+            "redownloadedFile": "Redownloaded file",
+            "redownloadedFileDetails": "Redownloaded \"{{model}}\" [{{ruid}}] from the cloud",
+            "redownloading": "Redownloading...",
+            "redownloadingDetails": "Redownloading \"{{model}}\" [{{ruid}}] from the cloud...",
             "setToEmptyValue": "empty",
             "setTonieToModelFailed": "Could not change tonie model!",
             "setTonieToModelFailedDetails": "Could not change tonie model for [{{ruid}}]: ",
@@ -4080,7 +4114,11 @@
             "setTonieToSourceFailed": "Could not change tonie source!",
             "setTonieToSourceFailedDetails": "Could not change tonie source for [{{ruid}}]: ",
             "setTonieToSourceSuccessful": "Set tonie source successful!",
-            "setTonieToSourceSuccessfulDetails": "Set tonie source to {{selectedSource}} for [{{ruid}}]"
+            "setTonieToSourceSuccessfulDetails": "Set tonie source to {{selectedSource}} for [{{ruid}}]",
+            "verifiedCorrupt": "File is corrupted",
+            "verifiedCorruptDetails": "The audio file of \"{{model}}\" [{{ruid}}] failed the full check. Redownload it from the cloud.",
+            "verifiedValid": "File is valid",
+            "verifiedValidDetails": "The audio file of \"{{model}}\" [{{ruid}}] passed the full check"
         },
         "navigationTitle": "Tonies",
         "noData": "No Tonies/Custom tags found.",
@@ -4319,6 +4357,7 @@
                 "customFilterHelp": {
                     "fields": {
                         "claimed": "Whether this Tonie has been claimed (true/false).",
+                        "corrupt": "Whether the audio file failed the full check (true/false).",
                         "episode": "The episode name of the Tonie.",
                         "exists": "Whether the Tonie exists (true/false).",
                         "hasCloudAuth": "Whether the Tonie has cloud authorization (true/false).",

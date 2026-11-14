@@ -102,6 +102,8 @@
             "fromBox": "Como la caja",
             "ownValue": "Valor propio de esta figura",
             "useBox": "Usar el valor de la caja",
+            "fromSettings": "Como en los ajustes",
+            "useSettings": "Usar el valor de los ajustes",
             "globalResume": "Reanudación global",
             "globalResumeHint": "El tonie continúa en cualquier caja donde se detuvo en otra (incluye reanudar). La caja pregunta a teddyCloud la posición al colocarlo.",
             "globalResumeOld": "Estas cajas tienen un firmware personalizado más antiguo sin reanudación global; allí el tonie no continúa donde se detuvo en otra caja: {{boxes}}"
@@ -350,6 +352,7 @@
                 },
                 "esp32": {
                     "title": "Toniebox con chip ESP32 (a través de teddyCloud)",
+                    "flasher": "Si la caja ya está abierta para flashear, el <flasher>flasher ESP32</flasher> escribe también el firmware personalizado (opción en el paso de flasheo); los pasos 2 a 5 ya no son necesarios.",
                     "step1": "La caja debe funcionar con el firmware original parcheado para teddyCloud, ver <setup>Añadir Toniebox</setup> (ESP32). Guarda bien el volcado de flash creado allí.",
                     "step2": "Carga el volcado de flash del firmware original abajo en la biblioteca (los parches para teddyCloud se explican en la carga). Así la caja puede volver al firmware original en cualquier momento.",
                     "step3": "Carga el paquete de versión del firmware personalizado (<code>toniebox-cfw-….zip</code>) abajo en la biblioteca.",
@@ -2084,6 +2087,10 @@
                 "label": "Actualizar la página de configuración",
                 "description": "Entregar a las cajas con firmware personalizado la página de configuración del firmware que ejecuta la caja, o la página de configuración predeterminada; desactivado: la página de la tarjeta de la caja se queda como está"
             },
+            "cfw_global_resume": {
+                "label": "Reanudación global para todos los tonies",
+                "description": "Cada tonie continúa en cualquier caja donde se detuvo en otra, como si la reanudación global estuviera activada en cada uno; un tonie conserva el valor fijado en sus propios ajustes. Se excluyen el contenido en directo y los streams"
+            },
             "cfw_event_image": {
                 "label": "Imagen de las etiquetas de evento",
                 "description": "Imagen que se muestra para un Tonie que es una etiqueta de evento, en lugar de la imagen de su contenido"
@@ -2319,6 +2326,10 @@
             "web_auth_lockout_minutes": {
                 "label": "Tiempo de bloqueo (minutos)",
                 "description": "Duración del primer bloqueo tras inicios de sesión fallidos."
+            },
+            "web_auth_frame_ancestors": {
+                "label": "Páginas que pueden incrustar",
+                "description": "Orígenes (p. ej. https://ha.example.org) que pueden mostrar la interfaz web en un marco, separados por espacios. Vacío: solo el propio teddyCloud."
             },
             "web_auth_trusted_proxies": {
                 "label": "Proxies inversos de confianza",
@@ -2717,7 +2728,7 @@
         "title": "Compartir: {{name}}",
         "ownersButton": "Propietarios",
         "ownersTitle": "Propietarios: {{name}}",
-        "ownersOnlyHint": "Los propietarios tienen todos los derechos y designan a otros propietarios. Un tonie colocado en la caja de otro usuario aparece para ese usuario sin pertenecerle; puede ocultarlo para sí mismo."
+        "ownersOnlyHint": "Los propietarios tienen todos los derechos y designan a otros propietarios; pueden quitarse a sí mismos, a otros propietarios solo un administrador. Un tonie colocado en la caja de otro usuario aparece para ese usuario sin pertenecerle; puede ocultarlo para sí mismo."
     },
     "teddycloud": {
         "newVersionAvailable": "¡Hay una nueva versión disponible!",
@@ -3239,6 +3250,7 @@
                     "certsMissing": "Falta en la caja: {{names}}",
                     "noPreloader": "El paquete no contiene ningún preloader.",
                     "noMcuimg": "/sys/mcuimg.bin no estaba en la copia de seguridad.",
+                    "noOriginal": "Una ejecución anterior se interrumpió al escribir el preloader y falta el bootloader original /sys/pre-img.bin. Restáuralo primero desde la copia de seguridad.",
                     "unnamedFiles": "{{count}} archivos no tienen nombre en la tabla de archivos ni un nombre conocido.",
                     "other": "{{message}}"
                 }
@@ -3384,6 +3396,12 @@
                 "automatically": "Automáticamente",
                 "backupFlash": "Importante: Haz una copia de seguridad del firmware original sin modificar",
                 "cancel": "Cancelar",
+                "cfwCustom": "Firmware personalizado",
+                "cfwFirmware": "Firmware",
+                "cfwHint": "El firmware personalizado se escribe en una ranura de aplicación libre junto al firmware original y arranca justo después de flashear. Si no se confirma tres veces seguidas, la caja vuelve a arrancar el firmware original. Si la caja queda atrapada antes en un bucle de arranque, solo ayuda volver a escribir el volcado de la flash: guárdalo bien.",
+                "cfwNoImage": "Para el firmware personalizado, carga una versión con imagen ESP32 en Box Update → Biblioteca.",
+                "cfwOriginal": "Firmware original (parcheado para teddyCloud)",
+                "cfwSupportOff": "Para el firmware personalizado, activa el soporte CFW (Ajustes → Custom Firmware) y carga una versión en Box Update → Biblioteca.",
                 "chipMAC": "Chip MAC",
                 "chipType": "Tipo de chip",
                 "chipTypeError": "Error de tipo de chip - Se leyó un tipo inesperado. Leído {{actualtype}}, esperado {{expectedtype}}. Proceso abortado, revise la conexión y vuelva a intentarlo.",
@@ -3652,6 +3670,7 @@
             "title": "Contenido",
             "toniePicture": "Imagen de Tonie"
         },
+        "corruptHint": "El archivo de audio está dañado. Abre la información para descargarlo de nuevo desde la nube.",
         "currentPath": "Ruta actual: ",
         "customEditor": {
             "actions": {
@@ -3888,6 +3907,8 @@
                 "browserFailed": "El navegador no pudo codificar, lo hace el servidor",
                 "encoding": "Codificando en el navegador: {{done}} de {{total}} archivos",
                 "joining": "Montando el TAF ...",
+                "oldPartsText": "La carpeta contiene {{count}} partes antiguas que la nueva lista no incluye: {{names}}. ¿Reemplazarlas? Se borran en cuanto la nueva lista esté creada.",
+                "oldPartsTitle": "¿Reemplazar las partes antiguas?",
                 "playlistCreated": "Se creó \"{{file}}\", con sus {{count}} pistas como TAF propios al lado.",
                 "serverEncoding": "El servidor codifica: {{done}} de {{total}} archivos",
                 "uploading": "Subiendo: {{done}} de {{total}} archivos"
@@ -4012,6 +4033,7 @@
             "deleteShownBy": "Figuras que muestran esta imagen: {{count}}. Perderán su imagen."
         },
         "infoModal": {
+            "corrupt": "Dañado:",
             "download": "Descargar TAF como *.ogg",
             "exists": "Existe:",
             "model": "Modelo:",
@@ -4023,7 +4045,11 @@
         "informationModal": {
             "hideTag": "Ocultar Tonie/Tag",
             "ok": "OK",
-            "unknownModel": "Modelo desconocido"
+            "redownload": "Descargar de nuevo",
+            "redownloadConfirm": "¿Reemplazar el archivo local por una nueva descarga desde la nube?",
+            "unknownModel": "Modelo desconocido",
+            "verifyFile": "Comprobar archivo",
+            "verifyFileHint": "Lee todo el archivo de audio y comprueba su hash SHA1 y su longitud. Puede tardar un poco."
         },
         "lastPlayedOnModal": {
             "lastPlayedOn": "Último Tonie reproducido",
@@ -4054,6 +4080,10 @@
             "downloadingDetails": "Descargando \"{{model}}\" [{{ruid}}]...",
             "errorDuringDownload": "Error durante la descarga en segundo plano",
             "errorDuringDownloadDetails": "Error durante la descarga en segundo plano de \"{{model}}\" [{{ruid}}]: ",
+            "errorDuringRedownload": "Error al descargar de nuevo",
+            "errorDuringRedownloadDetails": "Error al descargar de nuevo \"{{model}}\" [{{ruid}}]: ",
+            "errorDuringVerify": "Error durante la comprobación",
+            "errorDuringVerifyDetails": "Error durante la comprobación de \"{{model}}\" [{{ruid}}]: ",
             "errorFetchingUpdatedCard": "Error al obtener la tarjeta actualizada",
             "errorFetchingUpdatedCardDetails": "Error al obtener la tarjeta actualizada para \"{{model}}\" [{{ruid}}]: ",
             "filterDeleted": "Filtro eliminado",
@@ -4072,6 +4102,10 @@
             "liveEnabledDetails": "Indicador en vivo habilitado para \"{{model}}\" [{{ruid}}]",
             "noFilterFound": "No se encontró ningún filtro",
             "noFilterFoundDetails": "No se encontró ningún filtro con el nombre {{name}}",
+            "redownloadedFile": "Archivo descargado de nuevo",
+            "redownloadedFileDetails": "\"{{model}}\" [{{ruid}}] se descargó de nuevo desde la nube",
+            "redownloading": "Descargando de nuevo...",
+            "redownloadingDetails": "Descargando de nuevo \"{{model}}\" [{{ruid}}] desde la nube...",
             "setToEmptyValue": "vacío",
             "setTonieToModelFailed": "No se pudo cambiar el modelo de tonie.",
             "setTonieToModelFailedDetails": "No se pudo cambiar el modelo de tonie para [{{ruid}}]: ",
@@ -4080,7 +4114,11 @@
             "setTonieToSourceFailed": "No se pudo cambiar la fuente de tonie.",
             "setTonieToSourceFailedDetails": "No se pudo cambiar la fuente de tonie para [{{ruid}}]: ",
             "setTonieToSourceSuccessful": "Fuente de tonie configurada con éxito.",
-            "setTonieToSourceSuccessfulDetails": "Fuente de tonie configurada como {{selectedSource}} para [{{ruid}}]"
+            "setTonieToSourceSuccessfulDetails": "Fuente de tonie configurada como {{selectedSource}} para [{{ruid}}]",
+            "verifiedCorrupt": "El archivo está dañado",
+            "verifiedCorruptDetails": "El archivo de audio de \"{{model}}\" [{{ruid}}] no superó la comprobación completa. Descárgalo de nuevo desde la nube.",
+            "verifiedValid": "El archivo es válido",
+            "verifiedValidDetails": "El archivo de audio de \"{{model}}\" [{{ruid}}] superó la comprobación completa"
         },
         "navigationTitle": "Tonies",
         "noData": "No se encontraron Tonies/Tags personalizados.",
@@ -4319,6 +4357,7 @@
                 "customFilterHelp": {
                     "fields": {
                         "claimed": "Si este Tonie ha sido reclamado (true/false).",
+                        "corrupt": "Si el archivo de audio no superó la comprobación completa (true/false).",
                         "episode": "El nombre del episodio del Tonie.",
                         "exists": "Si el Tonie existe (true/false).",
                         "hasCloudAuth": "Si el Tonie tiene autorización en la nube (true/false).",

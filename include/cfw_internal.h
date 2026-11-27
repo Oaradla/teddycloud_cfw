@@ -63,6 +63,9 @@ typedef struct
     time_t sent;
 } cfw_known_t;
 
+/* the low half of a virtual RUID, the high half is the audio id of the content */
+#define CFW_VIRTUAL_RUID_SUFFIX "76697274"
+
 typedef struct
 {
     uint8_t command;
@@ -112,6 +115,8 @@ typedef struct
     size_t knownSize;
     time_t answerTime;  /* the last freshness-check answer */
     uint64_t applyRuid; /* the settings file sent last with command 64 */
+    uint64_t playRuid;   /* the content sent last with command 71 */
+    uint64_t remoteRuid; /* the content command 71 started, while the box plays it */
     time_t lastSyncCheck;
     uint32_t syncUnanswered; /* command 6 sent without a freshness check since */
     bool syncStalled;        /* files are due but none fitted into the last answer */

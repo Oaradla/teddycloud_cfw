@@ -11,23 +11,32 @@
 #include "os_port.h"
 #include "server_helpers.h"
 #include "settings.h"
+#include "tonie_audio_playlist.h"
 
 /* Custom tonies are used by library files and by tonie contents: with one of their audio ids or,
    for a tonie, with the model set in its content json. */
 
 #define LIB_PATH_MAX 256
 
-/* lib: path of a library file below the library, ruid: tonie as "HI8LO8"; one of them is set */
-typedef bool (*use_fn)(void *ctx, tonie_info_t *info, const char *lib, const char *ruid);
+/* what a library file or a tonie plays: the model of its content json and the audio id, if any */
+typedef struct
+{
+    const char *model;
+    bool audio;
+    uint32_t audio_id;
+} use_t;
 
-static bool model_used(const cJSON *entry, tonie_info_t *info)
+/* lib: path of a library file below the library, ruid: tonie as "HI8LO8"; one of them is set */
+typedef bool (*use_fn)(void *ctx, const use_t *use, const char *lib, const char *ruid);
+
+static bool model_used(const cJSON *entry, const use_t *use)
 {
     const cJSON *model = cJSON_GetObjectItemCaseSensitive(entry, "model");
-    if (cJSON_IsString(model) && info->json.tonie_model != NULL && !osStrcasecmp(info->json.tonie_model, model->valuestring))
+    if (cJSON_IsString(model) && use->model != NULL && !osStrcasecmp(use->model, model->valuestring))
     {
         return true;
     }
-    if (!info->valid || info->tafHeader == NULL)
+    if (!use->audio)
     {
         return false;
     }
@@ -35,12 +44,52 @@ static bool model_used(const cJSON *entry, tonie_info_t *info)
     cJSON_ArrayForEach(id, cJSON_GetObjectItemCaseSensitive(entry, "audio_id"))
     {
         uint32_t value = cJSON_IsString(id) ? (uint32_t)strtoul(id->valuestring, NULL, 10) : (uint32_t)id->valuedouble;
-        if (value == info->tafHeader->audio_id)
+        if (value == use->audio_id)
         {
             return true;
         }
     }
     return false;
+}
+
+static bool is_tap(const char *path)
+{
+    size_t len = osStrlen(path);
+    return len > 4 && !osStrcasecmp(&path[len - 4], ".tap");
+}
+
+/* a playlist by its own audio id, a TAF by its header only: the audio is not read */
+static use_t library_use(char *abs)
+{
+    use_t use = {NULL, false, 0};
+    if (is_tap(abs))
+    {
+        tonie_audio_playlist_t tap = {0};
+        if (tap_load(abs, &tap) == NO_ERROR)
+        {
+            use.audio = true;
+            use.audio_id = (uint32_t)tap.audio_id;
+        }
+        tap_free(&tap);
+        return use;
+    }
+    FsFile *file = fsOpenFile(abs, FS_FILE_MODE_READ);
+    if (file == NULL)
+    {
+        return use;
+    }
+    TonieboxAudioFileHeader *header = readTafHeader(file, abs);
+    fsCloseFile(file);
+    if (header != NULL && header->sha1_hash.len == 20)
+    {
+        use.audio = true;
+        use.audio_id = header->audio_id;
+    }
+    if (header != NULL)
+    {
+        toniebox_audio_file_header__free_unpacked(header, NULL);
+    }
+    return use;
 }
 
 static bool walk_library(const char *base, const char *rel, use_fn fn, void *ctx)
@@ -64,9 +113,12 @@ static bool walk_library(const char *base, const char *rel, use_fn fn, void *ctx
             continue;
         }
         char *abs = custom_asprintf("%s%c%s", base, PATH_SEPARATOR, path);
-        tonie_info_t *info = getTonieInfo(abs, false, get_settings());
-        go_on = fn(ctx, info, path, NULL);
-        freeTonieInfo(info);
+        /* the TAF a playlist builds stands for the playlist */
+        if (!tap_is_built_taf(abs))
+        {
+            use_t use = library_use(abs);
+            go_on = fn(ctx, &use, path, NULL);
+        }
         osFreeMem(abs);
         osFreeMem(path);
     }
@@ -107,7 +159,8 @@ static bool walk_tonies(const char *base, use_fn fn, void *ctx)
             osSnprintf(ruid, sizeof(ruid), "%s%s", hi.name, lo.name);
             char *abs = custom_asprintf("%s%c%s", hiPath, PATH_SEPARATOR, lo.name);
             tonie_info_t *info = getTonieInfo(abs, false, get_settings());
-            go_on = fn(ctx, info, NULL, ruid);
+            use_t use = {info->json.tonie_model, info->valid && info->tafHeader != NULL, info->tafHeader ? info->tafHeader->audio_id : 0};
+            go_on = fn(ctx, &use, NULL, ruid);
             freeTonieInfo(info);
             osFreeMem(abs);
         }
@@ -159,7 +212,7 @@ static bool use_writable(HttpConnection *connection, const char *lib, const char
     return ok;
 }
 
-static bool tally_use(void *ctx, tonie_info_t *info, const char *lib, const char *ruid)
+static bool tally_use(void *ctx, const use_t *use, const char *lib, const char *ruid)
 {
     tally_t *t = ctx;
     bool inside = false;
@@ -172,7 +225,7 @@ static bool tally_use(void *ctx, tonie_info_t *info, const char *lib, const char
     const cJSON *entry = NULL;
     cJSON_ArrayForEach(entry, t->root)
     {
-        if (model_used(entry, info))
+        if (model_used(entry, use))
         {
             t->uses[i]++;
             t->outside[i] |= !inside;
@@ -354,7 +407,7 @@ typedef struct
     cJSON **owners; /* objects with the names of the private folders */
 } sight_t;
 
-static bool sight_use(void *ctx, tonie_info_t *info, const char *lib, const char *ruid)
+static bool sight_use(void *ctx, const use_t *use, const char *lib, const char *ruid)
 {
     sight_t *s = ctx;
     bool open = lib == NULL || !acl_path_within(lib, "private");
@@ -364,7 +417,7 @@ static bool sight_use(void *ctx, tonie_info_t *info, const char *lib, const char
     const cJSON *entry = NULL;
     cJSON_ArrayForEach(entry, s->root)
     {
-        if (model_used(entry, info))
+        if (model_used(entry, use))
         {
             s->uses[i]++;
             s->open[i] |= open;

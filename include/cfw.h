@@ -23,6 +23,7 @@ bool_t cfw_rtnl_idle(HttpConnection *connection);
    for switching back. A box without the CFW gets a notice in cfw.event_notice_language instead */
 bool cfw_tag_is_event(settings_t *settings, uint64_t ruid);
 bool cfw_tag_is_event_ruid(settings_t *settings, const char *ruid);
+bool cfw_is_virtual_ruid(const char *ruid);
 bool cfw_event_content(HttpConnection *connection, const char_t *uri, client_ctx_t *client_ctx, const char *ruid, error_t *result);
 /* an accepted request of the box: the header X-CFW-Build (cfwBuild, 0: none) tells that it comes from the CFW
    and its build; a request without it comes from the original firmware, whose build is

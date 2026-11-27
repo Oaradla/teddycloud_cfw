@@ -6019,6 +6019,21 @@ bool isHexString(const char *buf, size_t maxLen)
     return isHex;
 }
 
+/* a playlist names the chapters of its TAF when each of its files is one chapter */
+static void tap_tracks_json(const tonie_audio_playlist_t *tap, size_t chapters, cJSON *info)
+{
+    if (info == NULL || tap->filesCount != chapters)
+    {
+        return;
+    }
+    cJSON *tracks = cJSON_CreateArray();
+    for (size_t i = 0; i < tap->filesCount; i++)
+    {
+        cJSON_AddItemToArray(tracks, cJSON_CreateString(tap->files[i].name));
+    }
+    cJSON_ReplaceItemInObject(info, "tracks", tracks);
+}
+
 error_t getTagInfoJson(char ruid[17], cJSON *jsonTarget, bool_t validate, client_ctx_t *client_ctx)
 {
     error_t error = NO_ERROR;
@@ -6122,6 +6137,11 @@ error_t getTagInfoJson(char ruid[17], cJSON *jsonTarget, bool_t validate, client
                 addToniesJsonInfoJson(item2, contentJson._source_model, jsonSourceInfo);
                 cJSON *tonieInfoCopy = cJSON_DetachItemFromObject(jsonSourceInfo, "tonieInfo");
                 cJSON_AddItemToObject(jsonEntry, "sourceInfo", tonieInfoCopy);
+            }
+            if (contentJson._source_type == CT_SOURCE_TAP_CACHED)
+            {
+                tap_tracks_json(&contentJson._tap, tafInfo->additional.track_positions.count, cJSON_GetObjectItem(jsonEntry, "tonieInfo"));
+                tap_tracks_json(&contentJson._tap, tafInfo->additional.track_positions.count, cJSON_GetObjectItem(jsonEntry, "sourceInfo"));
             }
             if (cfw_tag_is_event_ruid(client_ctx->settings, ruid))
             {

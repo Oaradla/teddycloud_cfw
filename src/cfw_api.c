@@ -12,6 +12,8 @@
 #include "fs_ext.h"
 #include "os_port.h"
 #include "server_helpers.h"
+#include "handler.h"
+#include "tonie_audio_playlist.h"
 
 #define CFW_BODY_MAX 8192
 
@@ -714,6 +716,10 @@ static int remote_command(const cJSON *json, uint8_t *args, size_t *argsLength, 
     {
         args[(*argsLength)++] = step;
     }
+    else if (command == CFW_CMD_PLAY && cJSON_IsString(cJSON_GetObjectItemCaseSensitive(json, "file")))
+    {
+        *argsLength = 8; /* the RUID of the virtual tonie, filled in by the caller */
+    }
     else if (command == CFW_CMD_PLAY && !cfw_parse_ruid(ruidText, &ruid))
     {
         osSnprintf(message, messageSize, "ruid missing or invalid");
@@ -725,6 +731,81 @@ static int remote_command(const cJSON *json, uint8_t *args, size_t *argsLength, 
         *argsLength = 8;
     }
     return command;
+}
+
+/* the audio id of a TAF or playlist of the library, 0 without one */
+static uint32_t library_audio_id(const char *source)
+{
+    char *path = strdup(source);
+    resolveSpecialPathPrefix(&path, get_settings());
+    uint32_t audioId = 0;
+    size_t len = osStrlen(path);
+    if (len > 4 && !osStrcasecmp(&path[len - 4], ".tap"))
+    {
+        tonie_audio_playlist_t tap;
+        osMemset(&tap, 0, sizeof(tap));
+        if (tap_load(path, &tap) == NO_ERROR && tap._valid)
+        {
+            audioId = (uint32_t)tap.audio_id;
+        }
+        tap_free(&tap);
+    }
+    else
+    {
+        FsFile *file = fsOpenFile(path, FS_FILE_MODE_READ);
+        TonieboxAudioFileHeader *header = file != NULL ? readTafHeader(file, path) : NULL;
+        if (header != NULL)
+        {
+            audioId = header->audio_id;
+            toniebox_audio_file_header__free_unpacked(header, NULL);
+        }
+        if (file != NULL)
+        {
+            fsCloseFile(file);
+        }
+    }
+    osFreeMem(path);
+    return audioId;
+}
+
+/* a hidden content entry of its own per audio id, so the box never plays an older cached content
+   under that RUID */
+static uint_t virtual_tonie(HttpConnection *connection, settings_t *settings, const char *file, uint8_t args[8], char *message, size_t messageSize)
+{
+    char *source = custom_asprintf("lib://%s", file[0] == '/' ? file + 1 : file);
+    uint32_t audioId = 0;
+    uint_t status = 200;
+    if (!web_acl_source_allowed(connection, source))
+    {
+        osSnprintf(message, messageSize, "no right on this file");
+        status = 403;
+    }
+    else if ((audioId = library_audio_id(source)) == 0)
+    {
+        osSnprintf(message, messageSize, "no TAF or playlist");
+        status = 400;
+    }
+    else
+    {
+        char ruid[17];
+        osSnprintf(ruid, sizeof(ruid), "%08" PRIx32 CFW_VIRTUAL_RUID_SUFFIX, audioId);
+        tonie_info_t *info = getTonieInfoFromRuid(ruid, true, settings);
+        if (osStrcmp(info->json.source, source) || !info->json.nocloud || !info->json.hide)
+        {
+            osFreeMem(info->json.source);
+            info->json.source = strdup(source);
+            info->json.nocloud = true;
+            info->json.hide = true;
+            info->json._updated = true;
+        }
+        saveTonieInfo(info, true);
+        freeTonieInfo(info);
+        uint64_t value = 0;
+        cfw_parse_ruid(ruid, &value);
+        cfw_ruid_to_bytes(value, args);
+    }
+    osFreeMem(source);
+    return status;
 }
 
 error_t handleApiCfwRemote(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
@@ -743,12 +824,19 @@ error_t handleApiCfwRemote(HttpConnection *connection, const char_t *uri, const 
     size_t argsLength = 0;
     char message[128] = "invalid JSON";
     int command = json ? remote_command(json, args, &argsLength, message, sizeof(message)) : -1;
-    cJSON_Delete(json);
-    if (command < 0)
+    const char *file = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(json, "file"));
+    bool virtualTonie = command == CFW_CMD_PLAY && file != NULL;
+    uint_t status = command < 0 ? 400 : 200;
+    if (virtualTonie)
     {
-        return send_message(connection, 400, message);
+        status = virtual_tonie(connection, settings, file, args, message, sizeof(message));
     }
-    if (command == CFW_CMD_PLAY)
+    cJSON_Delete(json);
+    if (status != 200)
+    {
+        return send_message(connection, status, message);
+    }
+    if (command == CFW_CMD_PLAY && !virtualTonie)
     {
         char ruid[17];
         cfw_format_ruid(cfw_ruid_from_bytes(args), ruid);
@@ -758,7 +846,7 @@ error_t handleApiCfwRemote(HttpConnection *connection, const char_t *uri, const 
         }
     }
 
-    uint_t status = cfw_remote_send(settings, (uint8_t)command, args, argsLength, message, sizeof(message));
+    status = cfw_remote_send(settings, (uint8_t)command, args, argsLength, message, sizeof(message));
     return send_message(connection, status, message);
 }
 
@@ -771,6 +859,7 @@ static void add_status(cJSON *json, const cfw_box_t *box)
     cJSON *status = cJSON_AddObjectToObject(json, "status");
     cJSON_AddStringToObject(status, "state", box->status[0] < 5 ? states[box->status[0]] : "unknown");
     cJSON_AddStringToObject(status, "ruid", ruid ? text : "");
+    cJSON_AddBoolToObject(status, "remotePlay", ruid != 0 && ruid == box->remoteRuid);
     cJSON_AddNumberToObject(status, "audioId", box->status[3]);
     cJSON_AddNumberToObject(status, "chapter", box->status[4]);
     cJSON_AddNumberToObject(status, "position", box->status[5]);
@@ -784,6 +873,23 @@ static void add_status(cJSON *json, const cfw_box_t *box)
     cJSON_AddBoolToObject(locks, "tilt", (box->status[8] >> 1) & 1);
     cJSON_AddBoolToObject(locks, "volume", (box->status[8] >> 2) & 1);
     cJSON_AddNumberToObject(status, "time", (double)box->statusTime);
+}
+
+/* the library file a virtual tonie plays, for those who may read it */
+static void add_virtual_file(HttpConnection *connection, settings_t *settings, cJSON *status)
+{
+    char *ruid = cJSON_GetStringValue(cJSON_GetObjectItemCaseSensitive(status, "ruid"));
+    if (ruid == NULL || !cfw_is_virtual_ruid(ruid))
+    {
+        return;
+    }
+    tonie_info_t *info = getTonieInfoFromRuid(ruid, false, settings);
+    const char *source = info->json.source;
+    if (source != NULL && !osStrncmp(source, "lib://", 6) && web_acl_source_allowed(connection, source))
+    {
+        cJSON_AddStringToObject(status, "file", source + 6);
+    }
+    freeTonieInfo(info);
 }
 
 error_t handleApiCfwStatus(HttpConnection *connection, const char_t *uri, const char_t *queryString, client_ctx_t *client_ctx)
@@ -827,6 +933,7 @@ error_t handleApiCfwStatus(HttpConnection *connection, const char_t *uri, const 
         }
     }
     cfw_unlock();
+    add_virtual_file(connection, settings, cJSON_GetObjectItemCaseSensitive(json, "status"));
     return send_json(connection, json, 200);
 }
 

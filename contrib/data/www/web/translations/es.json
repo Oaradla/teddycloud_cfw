@@ -97,7 +97,7 @@
             "sleepTimerHint": "Tras un tercio del tiempo el volumen baja lentamente; al final la caja se apaga.",
             "sleepAfter": "Apagar tras",
             "ledLevelHint": "Se aplica mientras la figura está en la caja.",
-            "limitHint": "Volumen máximo mientras la figura está en la caja; puede superar el límite de la caja.",
+            "limitHint": "Volumen máximo mientras la figura está en la caja; puede superar el límite de volumen de la caja.",
             "lockHint": "La figura prevalece en ambos sentidos.",
             "fromBox": "Como la caja",
             "ownValue": "Valor propio de esta figura",
@@ -162,7 +162,7 @@
             "badgeTooltip": "Firmware personalizado, build {{build}}",
             "batteryTooltip": "Batería notificada por última vez: {{time}}",
             "batteryTooltipStation": "Batería notificada por última vez: {{time}} · en la base de carga",
-            "batteryRemaining": "Quedan unos {{time}} de reproducción con el volumen actual",
+            "batteryRemaining": "Quedan unos {{time}} de funcionamiento",
             "connected": "conectada",
             "notConnected": "no conectada"
         },
@@ -199,6 +199,9 @@
             "refresh": "Solicitar estado",
             "playContent": "Reproducir contenido",
             "selectTonie": "Selecciona un Tonie",
+            "fromLibrary": "De la biblioteca",
+            "figureOnBox": "Hay un tonie en la caja. Quítalo primero.",
+            "remotePlay": "a distancia",
             "play": "Reproducir",
             "playHint": "Solo mientras no haya ninguna figura en la caja y la caja esté lista.",
             "commandFailed": "Comando no enviado",
@@ -340,14 +343,13 @@
                 "title": "Instalar el firmware personalizado en una caja",
                 "intro": "Así recibe el firmware personalizado una caja que aún tiene el firmware original. El camino depende del chip de la caja (<identify>identificar la versión de la caja</identify>). El soporte CFW de teddyCloud debe estar activado.",
                 "cc3200": {
-                    "cardZip": "Un contenido de tarjeta SD listo también hace los pasos 3 a 6 (bootloader, firmware, página de configuración, servidor): <card>crear el zip de la tarjeta SD</card>.",
+                    "cardZip": "Un contenido de tarjeta SD listo también hace los pasos 3 y 4 (bootloader, firmware, página de configuración, servidor): <card>crear el zip de la tarjeta SD</card>.",
                     "step1": "La caja ya debe funcionar con teddyCloud y tener el gestor de arranque SD HackieboxNG. Cómo hacerlo está en <setup>Añadir Toniebox</setup> (CC3200).",
                     "step2": "Toma el paquete de versión del firmware personalizado (<code>toniebox-cfw-….zip</code>), el mismo que cargas abajo en la biblioteca, y descomprímelo en tu ordenador.",
-                    "step3": "El firmware personalizado necesita el gestor de arranque HackieboxNG adaptado, con arranque de prueba y vuelta automática en las actualizaciones. Está en el paquete como <code>cc3200/ngbootloader.bin</code>: cópialo sobre <code>/revvox/boot/ngbootloader.bin</code> en la tarjeta SD.",
-                    "step4": "Copia en la tarjeta SD: <code>cc3200/ng-cfw.bin</code> a <code>/revvox/boot/ng-cfw1.bin</code> y <code>setup.htm</code> a <code>/cfw/setup.htm</code>.",
-                    "step5": "Indica el servidor en <code>/cfw/config.txt</code>: <code>host={{host}}</code> (y <code>port=</code> si hace falta). También se puede cambiar después en la página de configuración de la caja.",
-                    "step6": "En <code>/revvox/boot/ngCfg.json</code>, dentro de <code>general</code>, pon <code>\"activeImg\": \"cfw1\"</code> y <code>\"stateFile\": \"/revvox/boot/ngstate.bin\"</code>. El firmware original se conserva: con el <code>activeImg</code> anterior (normalmente <code>\"ofw1\"</code>) la caja arranca como antes.",
-                    "step7": "Vuelve a poner la tarjeta y enciende la caja. Se conecta a teddyCloud con el firmware personalizado y aparece aquí en \"Cajas\". Todas las actualizaciones siguientes llegan por esta página.",
+                    "step3": "Copia el contenido de <code>cc3200/card/</code> del paquete en la raíz de la tarjeta SD: el gestor de arranque HackieboxNG adaptado, con arranque de prueba y vuelta automática en las actualizaciones, el firmware como <code>/revvox/boot/ng-cfw1.bin</code>, el archivo de estado de arranque <code>/revvox/boot/ngstate.bin</code>, el <code>/revvox/boot/ngCfg.json</code> con <code>\"activeImg\": \"cfw1\"</code> y <code>\"stateFile\"</code>, y la página de configuración <code>/cfw/setup.htm</code>. Guarda antes tus propios ajustes de parches del <code>ngCfg.json</code> anterior (por ejemplo <code>altUrl</code>) y vuelve a ponerlos después.",
+                    "step4": "Indica el servidor en <code>/cfw/config.txt</code>: <code>host={{host}}</code> (y <code>port=</code> si hace falta). También se puede cambiar después en la página de configuración de la caja.",
+                    "step5": "Vuelve a poner la tarjeta y enciende la caja. Se conecta a teddyCloud con el firmware personalizado y aparece aquí en \"Cajas\". Todas las actualizaciones siguientes llegan por esta página.",
+                    "step6": "Volver al firmware original: en <code>/revvox/boot/ngCfg.json</code>, dentro de <code>general</code>, vuelve a poner <code>\"activeImg\"</code> en su valor anterior (normalmente <code>\"ofw1\"</code>) y borra la línea <code>\"stateFile\"</code>. Mientras <code>stateFile</code> esté ahí, el gestor de arranque inicia la ranura del archivo de estado de arranque. El firmware original de la memoria flash no cambia.",
                     "title": "Toniebox con chip CC3200 (tarjeta SD)"
                 },
                 "esp32": {
@@ -388,6 +390,8 @@
             "invalidVolume": "El volumen debe estar entre 0 y 15",
             "remoteOff": "El control remoto está desactivado para esta caja",
             "notConnected": "La caja no está conectada con el firmware personalizado",
+            "noRightOnFile": "Sin permiso para este archivo",
+            "noTafOrPlaylist": "No es un TAF ni una lista",
             "noRemote": "El firmware de la caja no tiene control remoto",
             "tooManyCommands": "Demasiados comandos en espera",
             "noImage": "No se recibió ninguna imagen",
@@ -1082,7 +1086,19 @@
             "uploading": "Subiendo..."
         },
         "deleteUsedBy": "Estos tonies lo reproducen y pierden su contenido: {{names}}.",
-        "deleteOrphanModels": "Borrar también los tonies propios que no se usan en ningún otro sitio ({{n}}), con sus imágenes"
+        "deleteOrphanModels": "Borrar también los tonies propios que no se usan en ningún otro sitio ({{n}}), con sus imágenes",
+        "tapCopy": {
+            "action": "Copiar lista",
+            "title": "Copiar \"{{file}}\"",
+            "confirm": "Copiar",
+            "description": "La copia usa los mismos archivos de audio, que se quedan donde están. La imagen y los títulos del original se copian también.",
+            "target": "Guardar la copia en:",
+            "name": "Nombre de la copia:",
+            "success": "Lista copiada",
+            "successDetails": "\"{{file}}\" está ahora en \"{{folder}}\".",
+            "noPicture": "\"{{file}}\" está ahora en \"{{folder}}\". La imagen no se copió porque no se pudo generar la copia.",
+            "failed": "Error al copiar"
+        }
     },
     "footer": {
         "sponsor": "¡Patrocina ahora!",
@@ -3912,7 +3928,10 @@
                 "playlistCreated": "Se creó \"{{file}}\", con sus {{count}} pistas como TAF propios al lado.",
                 "serverEncoding": "El servidor codifica: {{done}} de {{total}} archivos",
                 "uploading": "Subiendo: {{done}} de {{total}} archivos"
-            }
+            },
+            "sortByTrackNumber": "Por número de pista (de las etiquetas)",
+            "noTrackNumbers": "Sin números de pista",
+            "noTrackNumbersDetails": "Los archivos no tienen números de pista."
         },
         "errorFetchingSystemSounds": "Error al obtener los sonidos del sistema",
         "errorFetchingTonies": "Error al obtener los Tonies",

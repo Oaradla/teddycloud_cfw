@@ -1,6 +1,6 @@
 /* The charge of a box: the learning model of cfw_battery_model.c for each box, kept in
    <configdir>/cfw/battery/<box>.model.json and fed with every battery report. A box without a model
-   file learns from its battery log (<box>.csv) first, so the reports logged so far count. */
+   file of this version learns from its battery log (<box>.csv) first, so the reports logged so far count. */
 #include <stdlib.h>
 #include <string.h>
 
@@ -12,6 +12,8 @@
 #include "server_helpers.h"
 #include "settings.h"
 
+/* a model file of another version is not read: the model learns from the battery log again */
+#define MODEL_VERSION 5
 #define MODEL_FILE_MAX (64 * 1024)
 #define LOG_FILE_MAX (8 * 1024 * 1024)
 
@@ -23,7 +25,7 @@ static char *model_path(const char *boxId, const char *suffix)
     return path;
 }
 
-static void report_from_values(cfw_battery_report_t *r, uint32_t mv, uint32_t flags, uint32_t load, uint64_t uptimeMs)
+static void report_from_values(cfw_battery_report_t *r, uint32_t mv, uint32_t flags, uint64_t uptimeMs, uint64_t time)
 {
     osMemset(r, 0, sizeof(*r));
     r->mv = (uint16_t)(mv > 0xFFFF ? 0xFFFF : mv);
@@ -31,10 +33,8 @@ static void report_from_values(cfw_battery_report_t *r, uint32_t mv, uint32_t fl
     r->low = (flags >> 1) & 1;
     r->critical = (flags >> 2) & 1;
     r->implausible = (flags >> 3) & 1;
-    r->state = load & 0xFF;
-    r->step = (load >> 8) & 0xFF;
-    r->headphones = (load >> 16) & 1;
     r->uptimeMs = (uint32_t)uptimeMs;
+    r->time = time;
 }
 
 /* the reports of the battery log: time,mv,station,low,critical,implausible,reason,state,step,headphones,adc,uptime_ms,build */
@@ -74,9 +74,17 @@ static void learn_from_log(cfw_battery_model_t *model, const char *boxId)
         if (n >= 12 && fields[1][0] >= '0' && fields[1][0] <= '9')
         {
             uint32_t flags = (atoi(fields[2]) ? 1u : 0) | (atoi(fields[3]) ? 2u : 0) | (atoi(fields[4]) ? 4u : 0) | (atoi(fields[5]) ? 8u : 0);
-            uint32_t load = ((uint32_t)atoi(fields[7]) & 0xFF) | (((uint32_t)atoi(fields[8]) & 0xFF) << 8) | (atoi(fields[9]) ? 1u << 16 : 0);
+            DateTime date = {0};
+            unsigned year = 0, month = 0, day = 0, hours = 0, minutes = 0, seconds = 0;
+            sscanf(fields[0], "%4u-%2u-%2uT%2u:%2u:%2uZ", &year, &month, &day, &hours, &minutes, &seconds);
+            date.year = year;
+            date.month = month;
+            date.day = day;
+            date.hours = hours;
+            date.minutes = minutes;
+            date.seconds = seconds;
             cfw_battery_report_t r;
-            report_from_values(&r, (uint32_t)atoi(fields[1]), flags, load, strtoull(fields[11], NULL, 10));
+            report_from_values(&r, (uint32_t)atoi(fields[1]), flags, strtoull(fields[11], NULL, 10), convertDateToUnixTime(&date));
             cfw_battery_model_report(model, &r, NULL);
             count++;
         }
@@ -113,29 +121,28 @@ static bool load_model(cfw_battery_model_t *model, const char *boxId)
     }
     cJSON *json = cJSON_ParseWithLength((const char *)data, length);
     osFreeMem(data);
-    if (json == NULL || get_number(json, "version") != 1)
+    if (json == NULL || get_number(json, "version") != MODEL_VERSION)
     {
         cJSON_Delete(json);
         return false;
     }
     get_u16_array(json, "curve", model->curve, CFW_BAT_LEVELS);
     model->cycles = (uint16_t)get_number(json, "cycles");
-    model->baseDrop = (uint16_t)get_number(json, "baseDrop");
-    model->baseDropSamples = (uint16_t)get_number(json, "baseDropSamples");
-    get_u16_array(json, "playDrop", model->playDrop, CFW_BAT_BANDS);
-    get_u16_array(json, "playDropSamples", model->playDropSamples, CFW_BAT_BANDS);
+    model->measured = (uint16_t)get_number(json, "measured");
     model->capacity = (uint32_t)get_number(json, "capacity");
+    cJSON *charge = cJSON_GetObjectItemCaseSensitive(json, "charge");
+    model->chargeValid = cJSON_IsNumber(charge);
+    model->charge = model->chargeValid && charge->valuedouble <= CFW_BAT_FULL ? (uint32_t)charge->valuedouble : 0;
+    model->spread = (uint32_t)get_number(json, "spread");
+    cJSON *rest = cJSON_GetObjectItemCaseSensitive(json, "restCharge");
+    model->restValid = cJSON_IsNumber(rest) && rest->valuedouble <= CFW_BAT_FULL;
+    model->restCharge = model->restValid ? (uint32_t)rest->valuedouble : 0;
 
     cJSON *cycle = cJSON_GetObjectItemCaseSensitive(json, "cycle");
     model->cycleActive = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(cycle, "active"));
-    model->cycleFromFull = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(cycle, "fromFull"));
-    model->cycleUsed = (uint32_t)get_number(cycle, "used");
-    model->cycleStep = (uint16_t)get_number(cycle, "step");
-    model->cycleSkip = (uint16_t)get_number(cycle, "skip");
-    if (model->cycleStep == 0)
-    {
-        model->cycleStep = 1;
-    }
+    model->cycleFrom = (uint32_t)get_number(cycle, "from");
+    model->cycleUsedMs = (uint32_t)get_number(cycle, "usedMs");
+    model->cycleLowMs = (uint32_t)get_number(cycle, "lowMs");
     cJSON *mv = cJSON_GetObjectItemCaseSensitive(cycle, "mv");
     cJSON *at = cJSON_GetObjectItemCaseSensitive(cycle, "at");
     int n = (cJSON_IsArray(mv) && cJSON_IsArray(at)) ? cJSON_GetArraySize(mv) : 0;
@@ -153,15 +160,9 @@ static bool load_model(cfw_battery_model_t *model, const char *boxId)
     cJSON *last = cJSON_GetObjectItemCaseSensitive(json, "last");
     model->lastValid = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(last, "valid"));
     model->lastStation = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(last, "station"));
-    model->lastState = (uint8_t)get_number(last, "state");
-    uint8_t band = (uint8_t)get_number(last, "band");
-    model->lastBand = band < CFW_BAT_BANDS ? band : 0;
     model->lastMv = (uint16_t)get_number(last, "mv");
     model->lastUptimeMs = (uint32_t)get_number(last, "uptimeMs");
-    cJSON *window = cJSON_GetObjectItemCaseSensitive(last, "window");
-    int w = cJSON_IsArray(window) ? cJSON_GetArraySize(window) : 0;
-    model->windowCount = (uint8_t)(w > CFW_BAT_WINDOW ? CFW_BAT_WINDOW : w);
-    get_u16_array(last, "window", model->window, model->windowCount);
+    model->lastTime = (uint64_t)get_number(last, "time");
     cJSON_Delete(json);
     return true;
 }
@@ -182,21 +183,26 @@ void cfw_battery_save(const char *boxId, cfw_battery_model_t *model)
         return;
     }
     cJSON *json = cJSON_CreateObject();
-    cJSON_AddNumberToObject(json, "version", 1);
+    cJSON_AddNumberToObject(json, "version", MODEL_VERSION);
     add_u16_array(json, "curve", model->curve, CFW_BAT_LEVELS);
     cJSON_AddNumberToObject(json, "cycles", model->cycles);
-    cJSON_AddNumberToObject(json, "baseDrop", model->baseDrop);
-    cJSON_AddNumberToObject(json, "baseDropSamples", model->baseDropSamples);
-    add_u16_array(json, "playDrop", model->playDrop, CFW_BAT_BANDS);
-    add_u16_array(json, "playDropSamples", model->playDropSamples, CFW_BAT_BANDS);
+    cJSON_AddNumberToObject(json, "measured", model->measured);
     cJSON_AddNumberToObject(json, "capacity", model->capacity);
+    if (model->chargeValid)
+    {
+        cJSON_AddNumberToObject(json, "charge", model->charge);
+        cJSON_AddNumberToObject(json, "spread", model->spread);
+    }
+    if (model->restValid)
+    {
+        cJSON_AddNumberToObject(json, "restCharge", model->restCharge);
+    }
 
     cJSON *cycle = cJSON_AddObjectToObject(json, "cycle");
     cJSON_AddBoolToObject(cycle, "active", model->cycleActive);
-    cJSON_AddBoolToObject(cycle, "fromFull", model->cycleFromFull);
-    cJSON_AddNumberToObject(cycle, "used", model->cycleUsed);
-    cJSON_AddNumberToObject(cycle, "step", model->cycleStep);
-    cJSON_AddNumberToObject(cycle, "skip", model->cycleSkip);
+    cJSON_AddNumberToObject(cycle, "from", model->cycleFrom);
+    cJSON_AddNumberToObject(cycle, "usedMs", model->cycleUsedMs);
+    cJSON_AddNumberToObject(cycle, "lowMs", model->cycleLowMs);
     add_u16_array(cycle, "mv", model->cycleMv, model->cycleCount);
     cJSON *at = cJSON_AddArrayToObject(cycle, "at");
     for (uint16_t i = 0; i < model->cycleCount; i++)
@@ -207,11 +213,9 @@ void cfw_battery_save(const char *boxId, cfw_battery_model_t *model)
     cJSON *last = cJSON_AddObjectToObject(json, "last");
     cJSON_AddBoolToObject(last, "valid", model->lastValid);
     cJSON_AddBoolToObject(last, "station", model->lastStation);
-    cJSON_AddNumberToObject(last, "state", model->lastState);
-    cJSON_AddNumberToObject(last, "band", model->lastBand);
     cJSON_AddNumberToObject(last, "mv", model->lastMv);
     cJSON_AddNumberToObject(last, "uptimeMs", model->lastUptimeMs);
-    add_u16_array(last, "window", model->window, model->windowCount);
+    cJSON_AddNumberToObject(last, "time", (double)model->lastTime);
 
     char *text = cJSON_PrintUnformatted(json);
     cJSON_Delete(json);
@@ -266,10 +270,10 @@ cfw_battery_model_t *cfw_battery_update(cfw_box_t *box, uint64_t uptimeMs, cfw_b
         *loaded = NULL;
     }
     cfw_battery_report_t r;
-    report_from_values(&r, box->battery[0], box->battery[1], box->battery[3], uptimeMs);
+    report_from_values(&r, box->battery[0], box->battery[1], uptimeMs, (uint64_t)time(NULL));
     if (cfw_battery_model_report(box->batteryModel, &r, &box->batteryResult))
     {
-        TRACE_INFO("CFW: box %s: battery curve learned from a discharge (%u so far)\r\n", box->id, box->batteryModel->cycles);
+        TRACE_INFO("CFW: box %s: battery capacity and curve learned from a discharge (%u so far)\r\n", box->id, box->batteryModel->cycles);
     }
     box->batteryResultValid = true;
 

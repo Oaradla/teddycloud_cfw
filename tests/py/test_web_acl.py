@@ -986,3 +986,15 @@ def test_uses_in_long_library_paths_count(world):
     assert alice.post("/api/toniesCustomJsonOrphans", ["private/alice/short"])[1] == []
     deep.unlink()
     assert alice.post("/api/toniesCustomJsonOrphans", ["private/alice/short"])[1] == ["Long-1"]
+
+
+def test_a_playlist_uses_the_tonie_of_its_audio_id(world):
+    admin, alice = Client("admin"), Client("alice")
+    tonie = custom_tonie("Tap-1")
+    assert admin.post("/api/toniesCustomJsonUpsert", tonie)[0] == 200
+    put_taf("library/private/alice/album/album.taf", int(tonie["audio_id"][0]))
+    tap = Path(SANDBOX) / "data" / "library" / "private" / "alice" / "album" / "parts" / "album.tap"
+    tap.parent.mkdir(parents=True)
+    tap.write_text(json.dumps({"type": "tap", "audio_id": int(tonie["audio_id"][0]), "filepath": "lib://x.taf", "name": "album", "files": []}))
+    assert alice.post("/api/toniesCustomJsonOrphans", ["private/alice/album/album.taf"])[1] == []
+    assert alice.post("/api/toniesCustomJsonOrphans", ["private/alice/album"])[1] == ["Tap-1"]

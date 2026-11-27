@@ -627,34 +627,70 @@ def test_remote_result_and_status(box, box_id, start):
     assert data["lastResult"]["command"] == 72 and data["lastResult"]["result"] == 0
 
 
+def test_virtual_tonie_plays_library_content(box, box_id, start):
+    """a TAF of the library played on the box without a tag: a hidden content entry of its own per
+    audio id, which the box's content request gets and which never becomes the box's last tonie"""
+    taf = os.path.join(SANDBOX, "data", "library", "__virtual.taf")
+    os.makedirs(os.path.dirname(taf), exist_ok=True)
+    with open(os.path.join(os.path.dirname(__file__), "..", "..", "contrib", "data", "www", "cfw", "event-notice-en.taf"), "rb") as f:
+        expected = f.read()
+    with open(taf, "wb") as f:
+        f.write(expected)
+    sock = box.rtnl(cfw.hello(BUILD, CAPS_ALL, **start.next()), keep_open=True)
+    try:
+        reader = cfw.FrameReader(sock)
+        last = api("GET", f"/api/settings/get/internal.last_ruid?overlay={box_id}")[1]
+        status, text = api("POST", f"/api/cfw/remote?overlay={box_id}", {"command": "play", "file": "__virtual.taf"})
+        assert status == 200, text
+        frames = []
+        wait_until(lambda: frames.extend(reader.frames(0.5)) or any((1, 71) in f for f in frames), timeout=10)
+        args = next(v for f in frames if (1, 71) in f for field, v in f if field == 3)
+        ruid = args.hex().upper()
+        assert ruid.endswith("76697274")
+        status, _, body = box.request("GET", f"/v1/content/{ruid}")
+        assert status == 200 and body == expected
+        assert api("GET", f"/api/settings/get/internal.last_ruid?overlay={box_id}")[1] == last
+
+        playing = struct.pack("<9I", 2, int.from_bytes(args[:4], "little"), int.from_bytes(args[4:], "little"), 0, 0, 0, 6 | (15 << 8), 0, 0)
+        box.rtnl(cfw.record(cfw.FUNC_REMOTE_RESULT, struct.pack("<III", 71, 0, 0), **start.next()),
+                 cfw.record(cfw.FUNC_STATUS, playing, **start.next()))
+        wait_until(lambda: api_json("GET", f"/api/cfw/status?overlay={box_id}")[1]["status"]["ruid"] == ruid)
+        data = api_json("GET", f"/api/cfw/status?overlay={box_id}")[1]["status"]
+        assert data["remotePlay"] is True and data["file"] == "__virtual.taf"
+        assert api("POST", f"/api/cfw/remote?overlay={box_id}", {"command": "play", "file": "missing.taf"})[0] == 400
+    finally:
+        sock.close()
+        os.remove(taf)
+
+
 def test_battery_report_shown_and_logged(box, box_id, start):
     later = start.next()
-    later["uptime"] += 120000  # past the first minute of a start, when the voltage is still near rest
+    later["uptime"] += 120000
     box.rtnl(cfw.record(cfw.FUNC_BATTERY, cfw.battery(3712, station=True, reason=0, adc=920), **start.next()),
-             cfw.record(cfw.FUNC_BATTERY, cfw.battery(3650, low=True, state=2, step=6, adc=905), **later))
+             cfw.record(cfw.FUNC_BATTERY, cfw.battery(3720, low=True, state=2, step=6, adc=905), **later))
 
     def battery():
         entry = next(b for b in api_json("GET", "/api/cfw/boxes")[1]["boxes"] if b["id"] == box_id)
         return entry.get("battery")
 
-    wait_until(lambda: battery() is not None and battery()["mv"] == 3650)
+    wait_until(lambda: battery() is not None and battery()["mv"] == 3720)
     assert battery()["low"] is True and battery()["station"] is False and battery()["reason"] == 1
     status, text = api("GET", f"/api/cfw/battery?overlay={box_id}")
     assert status == 200, text
     lines = text.strip().split("\n")
     assert lines[0].startswith("time,mv,station,low,critical,implausible,reason,state,step")
     assert lines[1].split(",")[1:7] == ["3712", "1", "0", "0", "0", "0"] and lines[1].split(",")[10] == "920"
-    assert lines[2].split(",")[1:10] == ["3650", "0", "1", "0", "0", "1", "2", "6", "0"]
-    # the charge: none on the charger; while playing at step 6 the play drop of that volume (30 mV
-    # until learned) is added, 3680 mV idle is 23 % on the default curve
-    assert battery()["percent"] == 23 and battery()["learned"] is False and "remainingMin" not in battery()
+    assert lines[2].split(",")[1:10] == ["3720", "0", "1", "0", "0", "1", "2", "6", "0"]
+    # the charge: none on the charger; the first report off it gives the charge of its voltage,
+    # 3720 mV is 12 % on the default curve
+    assert battery()["percent"] == 12 and battery()["learned"] is False and "remainingMin" not in battery()
     sandbox = os.environ.get("TC_SANDBOX")
     if sandbox:
         model = json.load(open(os.path.join(sandbox, "config", "cfw", "battery", f"{box_id}.model.json")))
-        assert model["version"] == 1 and model["cycle"]["active"] is True and model["last"]["station"] is False
+        assert model["version"] == 5 and model["cycle"]["active"] is True and model["last"]["station"] is False
         # the last report is kept with the box state: shown again after a restart
         state = json.load(open(os.path.join(sandbox, "config", "cfw", "boxes", f"{box_id}.json")))
-        assert state["battery"][0] == 3650 and state["batteryResult"]["percent"] == 23
+        assert state["battery"][0] == 3720 and state["batteryResult"]["percent"] == 12
 
 
 def test_tag_record_names_the_tonie(box, box_id, start):

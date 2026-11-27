@@ -97,7 +97,7 @@
             "sleepTimerHint": "Après un tiers du temps, le volume baisse lentement ; à la fin, la box s'éteint.",
             "sleepAfter": "Éteindre après",
             "ledLevelHint": "S'applique tant que la figurine est sur la box.",
-            "limitHint": "Volume maximal tant que la figurine est sur la box ; peut dépasser la limite de la box.",
+            "limitHint": "Volume maximal tant que la figurine est sur la box ; peut dépasser la limite de volume de la box.",
             "lockHint": "La figurine l'emporte dans les deux sens.",
             "fromBox": "Comme la boîte",
             "ownValue": "Valeur propre de cette figurine",
@@ -162,7 +162,7 @@
             "badgeTooltip": "Firmware personnalisée, build {{build}}",
             "batteryTooltip": "Batterie signalée pour la dernière fois : {{time}}",
             "batteryTooltipStation": "Batterie signalée pour la dernière fois : {{time}} · sur la station de charge",
-            "batteryRemaining": "Encore environ {{time}} de lecture au volume actuel",
+            "batteryRemaining": "Encore environ {{time}} de fonctionnement",
             "connected": "connectée",
             "notConnected": "non connectée"
         },
@@ -199,6 +199,9 @@
             "refresh": "Demander l'état",
             "playContent": "Lire un contenu",
             "selectTonie": "Sélectionner une Tonie",
+            "fromLibrary": "Depuis la bibliothèque",
+            "figureOnBox": "Un tonie est sur la box. Retire-le d'abord.",
+            "remotePlay": "à distance",
             "play": "Lire",
             "playHint": "Uniquement lorsqu'aucune figurine n'est sur la box et que la box est prête.",
             "commandFailed": "Commande non envoyée",
@@ -340,14 +343,13 @@
                 "title": "Installer le firmware personnalisé sur une box",
                 "intro": "Voici comment une box qui a encore le firmware d'origine reçoit le firmware personnalisé. La méthode dépend de la puce de la box (<identify>identifier la version de la box</identify>). Le support CFW de teddyCloud doit être activé.",
                 "cc3200": {
-                    "cardZip": "Un contenu de carte SD prêt à l'emploi fait aussi les étapes 3 à 6 (bootloader, firmware, page de configuration, serveur) : <card>créer le zip de la carte SD</card>.",
+                    "cardZip": "Un contenu de carte SD prêt à l'emploi fait aussi les étapes 3 et 4 (bootloader, firmware, page de configuration, serveur) : <card>créer le zip de la carte SD</card>.",
                     "step1": "La box doit déjà fonctionner avec teddyCloud et avoir le chargeur d'amorçage SD HackieboxNG. Voir <setup>Ajouter Toniebox</setup> (CC3200).",
                     "step2": "Prends le paquet de version du firmware personnalisé (<code>toniebox-cfw-….zip</code>), le même que tu charges dans la bibliothèque ci-dessous, et décompresse-le sur ton ordinateur.",
-                    "step3": "Le firmware personnalisé a besoin du chargeur d'amorçage HackieboxNG adapté, avec démarrage d'essai et retour automatique lors des mises à jour. Il se trouve dans le paquet sous <code>cc3200/ngbootloader.bin</code> : copie-le sur <code>/revvox/boot/ngbootloader.bin</code> de la carte SD.",
-                    "step4": "Copie sur la carte SD : <code>cc3200/ng-cfw.bin</code> vers <code>/revvox/boot/ng-cfw1.bin</code> et <code>setup.htm</code> vers <code>/cfw/setup.htm</code>.",
-                    "step5": "Indique le serveur dans <code>/cfw/config.txt</code> : <code>host={{host}}</code> (et <code>port=</code> si besoin). Il peut aussi être modifié plus tard sur la page de configuration de la box.",
-                    "step6": "Dans <code>/revvox/boot/ngCfg.json</code>, sous <code>general</code>, mets <code>\"activeImg\": \"cfw1\"</code> et <code>\"stateFile\": \"/revvox/boot/ngstate.bin\"</code>. Le firmware d'origine reste : avec l'<code>activeImg</code> précédent (souvent <code>\"ofw1\"</code>) la box démarre comme avant.",
-                    "step7": "Remets la carte et démarre la box. Elle se connecte à teddyCloud avec le firmware personnalisé et apparaît ici sous « Box ». Toutes les mises à jour suivantes passent par cette page.",
+                    "step3": "Copie le contenu de <code>cc3200/card/</code> du paquet à la racine de la carte SD : le chargeur d'amorçage HackieboxNG adapté, avec démarrage d'essai et retour automatique lors des mises à jour, le firmware sous <code>/revvox/boot/ng-cfw1.bin</code>, le fichier d'état de démarrage <code>/revvox/boot/ngstate.bin</code>, le <code>/revvox/boot/ngCfg.json</code> avec <code>\"activeImg\": \"cfw1\"</code> et <code>\"stateFile\"</code>, et la page de configuration <code>/cfw/setup.htm</code>. Sauvegarde d'abord tes propres réglages de patch de l'ancien <code>ngCfg.json</code> (par exemple <code>altUrl</code>) et remets-les ensuite.",
+                    "step4": "Indique le serveur dans <code>/cfw/config.txt</code> : <code>host={{host}}</code> (et <code>port=</code> si besoin). Il peut aussi être modifié plus tard sur la page de configuration de la box.",
+                    "step5": "Remets la carte et démarre la box. Elle se connecte à teddyCloud avec le firmware personnalisé et apparaît ici sous « Box ». Toutes les mises à jour suivantes passent par cette page.",
+                    "step6": "Retour au firmware d'origine : dans <code>/revvox/boot/ngCfg.json</code>, sous <code>general</code>, remets <code>\"activeImg\"</code> à sa valeur précédente (souvent <code>\"ofw1\"</code>) et supprime la ligne <code>\"stateFile\"</code>. Tant que <code>stateFile</code> y figure, le chargeur d'amorçage démarre l'emplacement du fichier d'état de démarrage. Le firmware d'origine dans la mémoire flash reste inchangé.",
                     "title": "Toniebox avec puce CC3200 (carte SD)"
                 },
                 "esp32": {
@@ -388,6 +390,8 @@
             "invalidVolume": "Le volume doit être compris entre 0 et 15",
             "remoteOff": "La télécommande est désactivée pour cette box",
             "notConnected": "La box n'est pas connectée avec le firmware personnalisé",
+            "noRightOnFile": "Pas d'autorisation pour ce fichier",
+            "noTafOrPlaylist": "Ni TAF ni playlist",
             "noRemote": "Le firmware de la box n'a pas de télécommande",
             "tooManyCommands": "Trop de commandes en attente",
             "noImage": "Aucune image reçue",
@@ -1082,7 +1086,19 @@
             "uploading": "Téléversement en cours..."
         },
         "deleteUsedBy": "Ces tonies le lisent et perdent leur contenu : {{names}}.",
-        "deleteOrphanModels": "Supprimer aussi les tonies personnalisés utilisés nulle part ailleurs ({{n}}), avec leurs images"
+        "deleteOrphanModels": "Supprimer aussi les tonies personnalisés utilisés nulle part ailleurs ({{n}}), avec leurs images",
+        "tapCopy": {
+            "action": "Copier la playlist",
+            "title": "Copier \"{{file}}\"",
+            "confirm": "Copier",
+            "description": "La copie utilise les mêmes fichiers audio, qui restent où ils sont. L'image et les titres de l'original sont repris.",
+            "target": "Placer la copie dans :",
+            "name": "Nom de la copie :",
+            "success": "Playlist copiée",
+            "successDetails": "\"{{file}}\" se trouve maintenant dans \"{{folder}}\".",
+            "noPicture": "\"{{file}}\" se trouve maintenant dans \"{{folder}}\". L'image n'a pas été copiée car la copie n'a pas pu être construite.",
+            "failed": "Échec de la copie"
+        }
     },
     "footer": {
         "sponsor": "Parraine maintenant !",
@@ -3912,7 +3928,10 @@
                 "playlistCreated": "« {{file}} » a été créée, avec ses {{count}} pistes en TAF séparés à côté.",
                 "serverEncoding": "Le serveur encode : {{done}} sur {{total}} fichiers",
                 "uploading": "Envoi : {{done}} sur {{total}} fichiers"
-            }
+            },
+            "sortByTrackNumber": "Par numéro de piste (des tags)",
+            "noTrackNumbers": "Aucun numéro de piste",
+            "noTrackNumbersDetails": "Les fichiers ne contiennent pas de numéro de piste."
         },
         "errorFetchingSystemSounds": "Erreur lors de la récupération des sons du système",
         "errorFetchingTonies": "Erreur lors de la récupération des Tonies",

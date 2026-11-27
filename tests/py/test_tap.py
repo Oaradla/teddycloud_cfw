@@ -439,6 +439,10 @@ class Tap(Base, TafCheck):
             status, text = request("GET", "/api/getTagIndex")
             tag = {t["ruid"]: t for t in json.loads(text)["tags"]}[self.RUID]
             self.assertEqual(tag.get("sourceInfo", {}).get("model"), model["model"])
+            names = [f["name"] for f in tap["files"]]
+            self.assertTrue(all(names))
+            self.assertEqual(tag["sourceInfo"]["tracks"], names, "the playlist names the chapters")
+            self.assertEqual(tag["tonieInfo"]["tracks"], names)
         finally:
             request("POST", "/api/toniesCustomJsonDelete", json.dumps({"models": [model["model"]]}), {"Content-Type": "application/json"})
             request("POST", "/api/fileDelete", f"{self.RUID[:8]}/{self.RUID[8:]}.json")

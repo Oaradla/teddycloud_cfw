@@ -1226,6 +1226,10 @@ void setLastUid(uint64_t uid, settings_t *settings)
 }
 void setLastRuid(char ruid[17], settings_t *settings)
 {
+    if (cfw_is_virtual_ruid(ruid))
+    {
+        return;
+    }
     if (get_settings() != settings)
     {
         /* a tag without owner goes to the owners of the box it is placed on */

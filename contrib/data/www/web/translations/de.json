@@ -97,7 +97,7 @@
             "sleepTimerHint": "Nach einem Drittel der Zeit wird die Lautstärke langsam leiser, am Ende schaltet sich die Box aus.",
             "sleepAfter": "Ausschalten nach",
             "ledLevelHint": "Gilt, solange die Figur auf der Box steht.",
-            "limitHint": "Höchste Lautstärke, solange die Figur auf der Box steht; darf über dem Limit der Box liegen.",
+            "limitHint": "Höchste Lautstärke, solange die Figur auf der Box steht; darf über dem Lautstärke-Limit der Box liegen.",
             "lockHint": "Die Figur gewinnt in beide Richtungen.",
             "fromBox": "Wie die Box",
             "ownValue": "Eigener Wert dieser Figur",
@@ -162,7 +162,7 @@
             "badgeTooltip": "Custom Firmware, Build {{build}}",
             "batteryTooltip": "Akku zuletzt gemeldet: {{time}}",
             "batteryTooltipStation": "Akku zuletzt gemeldet: {{time}} · auf der Ladestation",
-            "batteryRemaining": "Noch etwa {{time}} Spielzeit bei der aktuellen Lautstärke",
+            "batteryRemaining": "Noch etwa {{time}} Laufzeit",
             "connected": "verbunden",
             "notConnected": "nicht verbunden"
         },
@@ -199,6 +199,9 @@
             "refresh": "Status abfragen",
             "playContent": "Inhalt abspielen",
             "selectTonie": "Tonie auswählen",
+            "fromLibrary": "Aus der Bibliothek",
+            "figureOnBox": "Auf der Box steht ein Tonie. Nimm ihn erst ab.",
+            "remotePlay": "aus der Ferne",
             "play": "Abspielen",
             "playHint": "Nur wenn keine Figur auf der Box steht und die Box bereit ist.",
             "commandFailed": "Befehl nicht gesendet",
@@ -340,14 +343,13 @@
                 "title": "Custom-Firmware auf eine Box bringen",
                 "intro": "So kommt die Custom-Firmware auf eine Box, die noch die Original-Firmware hat. Der Weg hängt vom Chip der Box ab (<identify>Box-Version bestimmen</identify>). Die CFW-Unterstützung von teddyCloud muss dafür eingeschaltet sein.",
                 "cc3200": {
-                    "cardZip": "Die Schritte 3 bis 6 erledigt auch ein fertiger SD-Karten-Inhalt (Bootloader, Firmware, Setup-Seite, Server): <card>SD-Karten-Zip erstellen</card>.",
+                    "cardZip": "Die Schritte 3 und 4 erledigt auch ein fertiger SD-Karten-Inhalt (Bootloader, Firmware, Setup-Seite, Server): <card>SD-Karten-Zip erstellen</card>.",
                     "step1": "Die Box muss bereits mit teddyCloud laufen und den HackieboxNG-SD-Bootloader haben. Wie das geht, steht unter <setup>Toniebox hinzufügen</setup> (CC3200).",
                     "step2": "Nimm das Release-Paket der Custom-Firmware (<code>toniebox-cfw-….zip</code>), also dasselbe, das du unten in die Bibliothek lädst, und entpacke es auf deinem Rechner.",
-                    "step3": "Die Custom-Firmware braucht den angepassten HackieboxNG-Bootloader mit Probestart und automatischer Rückkehr bei Updates. Er liegt im Paket als <code>cc3200/ngbootloader.bin</code>: kopiere ihn über <code>/revvox/boot/ngbootloader.bin</code> auf der SD-Karte.",
-                    "step4": "Kopiere auf die SD-Karte: <code>cc3200/ng-cfw.bin</code> nach <code>/revvox/boot/ng-cfw1.bin</code> und <code>setup.htm</code> nach <code>/cfw/setup.htm</code>.",
-                    "step5": "Den Server in <code>/cfw/config.txt</code> eintragen: <code>host={{host}}</code> (bei Bedarf auch <code>port=</code>). Das lässt sich später auch auf der Setup-Seite der Box ändern.",
-                    "step6": "In <code>/revvox/boot/ngCfg.json</code> unter <code>general</code> <code>\"activeImg\": \"cfw1\"</code> und <code>\"stateFile\": \"/revvox/boot/ngstate.bin\"</code> setzen. Die Original-Firmware bleibt erhalten: Mit dem vorherigen <code>activeImg</code> (meist <code>\"ofw1\"</code>) startet die Box wieder wie vorher.",
-                    "step7": "Karte wieder einsetzen und die Box starten. Sie meldet sich mit der Custom-Firmware bei teddyCloud und erscheint hier unter „Boxen“. Alle weiteren Updates kommen über diese Seite.",
+                    "step3": "Kopiere den Inhalt von <code>cc3200/card/</code> aus dem Paket ins Hauptverzeichnis der SD-Karte: den angepassten HackieboxNG-Bootloader mit Probestart und automatischer Rückkehr bei Updates, die Firmware als <code>/revvox/boot/ng-cfw1.bin</code>, die Boot-Zustandsdatei <code>/revvox/boot/ngstate.bin</code>, die <code>/revvox/boot/ngCfg.json</code> mit <code>\"activeImg\": \"cfw1\"</code> und <code>\"stateFile\"</code> sowie die Setup-Seite <code>/cfw/setup.htm</code>. Eigene Patch-Einstellungen in der alten <code>ngCfg.json</code> (zum Beispiel <code>altUrl</code>) vorher sichern und danach wieder eintragen.",
+                    "step4": "Den Server in <code>/cfw/config.txt</code> eintragen: <code>host={{host}}</code> (bei Bedarf auch <code>port=</code>). Das lässt sich später auch auf der Setup-Seite der Box ändern.",
+                    "step5": "Karte wieder einsetzen und die Box starten. Sie meldet sich mit der Custom-Firmware bei teddyCloud und erscheint hier unter „Boxen“. Alle weiteren Updates kommen über diese Seite.",
+                    "step6": "Zurück zur Original-Firmware: In <code>/revvox/boot/ngCfg.json</code> unter <code>general</code> <code>\"activeImg\"</code> wieder auf den vorigen Wert setzen (meist <code>\"ofw1\"</code>) und die Zeile <code>\"stateFile\"</code> löschen. Solange <code>stateFile</code> dort steht, startet der Bootloader den Slot aus der Boot-Zustandsdatei. Die Original-Firmware im Flash bleibt unverändert.",
                     "title": "Toniebox mit CC3200-Chip (SD-Karte)"
                 },
                 "esp32": {
@@ -388,6 +390,8 @@
             "invalidVolume": "Die Lautstärke muss 0 bis 15 sein",
             "remoteOff": "Die Fernsteuerung ist für diese Box ausgeschaltet",
             "notConnected": "Die Box ist nicht mit der Custom Firmware verbunden",
+            "noRightOnFile": "Keine Berechtigung für diese Datei",
+            "noTafOrPlaylist": "Keine TAF oder Playlist",
             "noRemote": "Die Firmware der Box hat keine Fernsteuerung",
             "tooManyCommands": "Zu viele Befehle in der Warteschlange",
             "noImage": "Kein Image empfangen",
@@ -1082,7 +1086,19 @@
             "uploading": "Lädt hoch..."
         },
         "deleteUsedBy": "Diese Tonies spielen es ab und verlieren ihren Inhalt: {{names}}.",
-        "deleteOrphanModels": "Eigene Figuren mitlöschen, die sonst nirgends verwendet werden ({{n}}), samt ihren Bildern"
+        "deleteOrphanModels": "Eigene Figuren mitlöschen, die sonst nirgends verwendet werden ({{n}}), samt ihren Bildern",
+        "tapCopy": {
+            "action": "Playlist kopieren",
+            "title": "\"{{file}}\" kopieren",
+            "confirm": "Kopieren",
+            "description": "Die Kopie verweist auf dieselben Audiodateien, sie bleiben wo sie sind. Bild und Titel des Originals werden mit übernommen.",
+            "target": "Kopie ablegen in:",
+            "name": "Name der Kopie:",
+            "success": "Playlist kopiert",
+            "successDetails": "\"{{file}}\" liegt jetzt in \"{{folder}}\".",
+            "noPicture": "\"{{file}}\" liegt jetzt in \"{{folder}}\". Das Bild wurde nicht übernommen, weil sich die Kopie nicht zusammensetzen ließ.",
+            "failed": "Kopieren fehlgeschlagen"
+        }
     },
     "footer": {
         "sponsor": "Jetzt sponsoren!",
@@ -3912,7 +3928,10 @@
                 "playlistCreated": "\"{{file}}\" wurde angelegt, die {{count}} Titel liegen einzeln als TAF daneben.",
                 "serverEncoding": "Der Server kodiert: {{done}} von {{total}} Dateien",
                 "uploading": "Lade hoch: {{done}} von {{total}} Dateien"
-            }
+            },
+            "sortByTrackNumber": "Nach Titelnummer (aus den Tags)",
+            "noTrackNumbers": "Keine Titelnummern",
+            "noTrackNumbersDetails": "Die Dateien enthalten keine Titelnummern."
         },
         "errorFetchingSystemSounds": "Fehler beim Abrufen der System Sounds",
         "errorFetchingTonies": "Fehler beim Abrufen der Tonies",

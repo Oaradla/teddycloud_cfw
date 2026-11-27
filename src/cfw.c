@@ -253,6 +253,13 @@ bool cfw_tag_is_event(settings_t *settings, uint64_t ruid)
     return cfw_store_read_tag(ruid, file, &length) && file[4] == CFW_TBS_KIND_EVENT;
 }
 
+/* library content the remote control plays without a tag: no tag ends so (their UIDs start with E0) */
+bool cfw_is_virtual_ruid(const char *ruid)
+{
+    size_t len = osStrlen(ruid);
+    return len == 16 && !osStrcasecmp(&ruid[8], CFW_VIRTUAL_RUID_SUFFIX);
+}
+
 bool cfw_tag_is_event_ruid(settings_t *settings, const char *ruid)
 {
     uint64_t value;
@@ -1581,6 +1588,10 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
             {
                 known_forget(box, box->applyRuid);
             }
+            if (box->lastCommand == CFW_CMD_PLAY && box->lastResult == 0)
+            {
+                box->remoteRuid = box->playRuid;
+            }
             eventName = "cfw-result";
             osSnprintf(event, sizeof(event), "{\"box\":\"%s\",\"command\":%" PRIu32 ",\"result\":%" PRIu32 "}", box->id, box->lastCommand, box->lastResult);
         }
@@ -1594,6 +1605,12 @@ void cfw_rtnl_record(client_ctx_t *client_ctx, const TonieRtnlLog2 *log2)
             }
             box->statusValid = true;
             box->statusTime = time(NULL);
+            /* idle, or another figure: what command 71 started has ended */
+            uint64_t playing = cfw_ruid_from_words(box->status[1], box->status[2]);
+            if (box->status[0] < 2 || (playing != 0 && playing != box->remoteRuid))
+            {
+                box->remoteRuid = 0;
+            }
             osMemcpy(status, box->status, sizeof(status));
             statusReport = true;
             eventName = "cfw-status";
@@ -1855,6 +1872,10 @@ static size_t next_frame(cfw_box_t *box, settings_t *settings, bool received, ui
     {
         box->applyRuid = cfw_ruid_from_bytes(sent->args);
         known_set(box, box->applyRuid, cfw_tbs_timestamp(&sent->args[8]));
+    }
+    if (sent->command == CFW_CMD_PLAY)
+    {
+        box->playRuid = cfw_ruid_from_bytes(sent->args);
     }
     return build_frame(frame, sent->command, sent->args, sent->argsLength);
 }

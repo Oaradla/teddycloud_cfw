@@ -122,13 +122,14 @@ the support on.
 - **Charge** (`cfw_battery.c`, the model in `cfw_battery_model.c`, C-tested):
   every battery report goes through a model per box, kept in
   `config/cfw/battery/<box>.model.json` (learned from the box's battery log
-  when there is none yet). It reads the charge from a curve of idle voltage
-  (the play drop of the volume band added back while playing, the first
-  minute of a start corrected, five reports smoothed; none on the charger),
-  learns the base drop, the play drop per volume band, and the curve and the
-  capacity (in mV·s, the drops being the measure of the load) from each
-  discharge from near full to the low-battery range. `/api/cfw/boxes` gives
-  `percent`, `remainingMin` (at the volume of the report) and `learned`.
+  when there is none yet, or one of an older model). It counts the charge
+  by the time the box runs (the voltage of a running box sinks and recovers
+  too much to be read), corrects it with the voltage of each start after a
+  pause, lets it grow with the time on the charger, and learns the capacity
+  (running time from full to empty) and the curve from each discharge from
+  near full, best from one down to the critical voltage; between those the
+  capacity follows slowly when the starts keep disagreeing with the count. `/api/cfw/boxes`
+  gives `percent`, `remainingMin` (running time left) and `learned`.
 - **Images** (`cfw_firmware.c`): the library `<firmwaredir>/cfw/`, keyed by
   platform and build (`<build>.*` CC3200, `esp32-<build>.*` ESP32), filled
   by upload, by release zips (both images and `setup.htm`) or from GitHub
